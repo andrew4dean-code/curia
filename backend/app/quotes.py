@@ -1,40 +1,46 @@
-"""Delayed US quotes from Stooq — free CSV endpoint, no account, no API key.
+"""US quotes via Yahoo Finance's unofficial chart endpoint — free, no account,
+no API key. Requires a browser-like User-Agent (Yahoo rejects default clients).
+(Stooq was the original pick but now blocks non-browser clients.)
 
-URL shape: https://stooq.com/q/l/?s=aapl.us+msft.us&f=sd2t2ohlcv&h&e=csv
-CSV header: Symbol,Date,Time,Open,High,Low,Close,Volume. Close is the latest
-price; unknown symbols come back with "N/D" fields.
+GET https://query1.finance.yahoo.com/v8/finance/chart/{SYMBOL}?interval=1d&range=1d
+→ price at chart.result[0].meta.regularMarketPrice. Unknown symbols → HTTP 404.
 """
+from typing import Optional
+
 import httpx
 
-STOOQ_URL = "https://stooq.com/q/l/"
+CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+_UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
 
 
-def parse_stooq_csv(text: str) -> dict[str, float]:
-    out: dict[str, float] = {}
-    for line in text.strip().splitlines()[1:]:  # skip header
-        cols = line.split(",")
-        if len(cols) < 7 or cols[6] in ("N/D", ""):
-            continue
-        sym = cols[0].upper().removesuffix(".US")
-        try:
-            out[sym] = float(cols[6])
-        except ValueError:
-            continue
-    return out
+def price_from_chart(data: dict) -> Optional[float]:
+    try:
+        price = data["chart"]["result"][0]["meta"]["regularMarketPrice"]
+    except (KeyError, IndexError, TypeError):
+        return None
+    return float(price) if isinstance(price, (int, float)) else None
 
 
 def fetch_quotes(symbols: list[str]) -> dict[str, float]:
-    """{SYMBOL: price} for the symbols Stooq recognizes; {} on any failure."""
+    """{SYMBOL: price} for the symbols Yahoo recognizes; skips per-symbol
+    failures silently; {} on total failure. Never raises."""
+    out: dict[str, float] = {}
     if not symbols:
-        return {}
-    joined = "+".join(f"{s.lower()}.us" for s in symbols)
+        return out
     try:
-        resp = httpx.get(
-            STOOQ_URL,
-            params={"s": joined, "f": "sd2t2ohlcv", "h": "", "e": "csv"},
-            timeout=8.0,
-        )
-        resp.raise_for_status()
+        with httpx.Client(headers=_UA, timeout=8.0) as client:
+            for sym in symbols:
+                try:
+                    resp = client.get(
+                        CHART_URL.format(symbol=sym.upper()),
+                        params={"interval": "1d", "range": "1d"},
+                    )
+                    resp.raise_for_status()
+                    price = price_from_chart(resp.json())
+                    if price is not None:
+                        out[sym.upper()] = price
+                except Exception:
+                    continue
     except Exception:
-        return {}
-    return parse_stooq_csv(resp.text)
+        return out
+    return out

@@ -2,13 +2,11 @@ from app import quotes
 from tests.conftest import HEADERS
 
 
-def test_parse_stooq_csv_happy_and_unknown():
-    text = (
-        "Symbol,Date,Time,Open,High,Low,Close,Volume\n"
-        "AAPL.US,2026-07-24,21:00:00,100,101,99,100.5,123456\n"
-        "FAKE.US,N/D,N/D,N/D,N/D,N/D,N/D,N/D\n"
-    )
-    assert quotes.parse_stooq_csv(text) == {"AAPL": 100.5}
+def test_price_from_chart_happy_and_malformed():
+    payload = {"chart": {"result": [{"meta": {"regularMarketPrice": 100.5, "symbol": "AAPL"}}]}}
+    assert quotes.price_from_chart(payload) == 100.5
+    assert quotes.price_from_chart({"chart": {"result": []}}) is None
+    assert quotes.price_from_chart({}) is None
 
 
 def test_refresh_marks_only_touches_open_symbols(client, monkeypatch):
