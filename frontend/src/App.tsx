@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import './styles/app.css';
-import { cachedSnapshot, fetchSnapshot, getPasscode, refreshMarks } from './lib/api';
+import { ApiError, cachedSnapshot, clearPasscode, fetchSnapshot, getPasscode, refreshMarks } from './lib/api';
 import type { Snapshot } from './lib/api';
 import type { Trade } from './lib/types';
 import { PasscodeGate } from './components/PasscodeGate';
@@ -26,8 +26,13 @@ export default function App() {
       await refreshMarks().catch(() => undefined);
       setSnap(await fetchSnapshot());
       setOffline(false);
-    } catch {
-      setOffline(true);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        clearPasscode();
+        setUnlocked(false);
+      } else {
+        setOffline(true);
+      }
     }
   }, []);
 

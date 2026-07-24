@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { clearPasscode, fetchSnapshot, setPasscode } from '../lib/api';
+import { ApiError, clearPasscode, fetchSnapshot, setPasscode } from '../lib/api';
 import type { Snapshot } from '../lib/api';
 
 export function PasscodeGate({ onUnlocked }: { onUnlocked: (snap: Snapshot) => void }) {
@@ -15,9 +15,13 @@ export function PasscodeGate({ onUnlocked }: { onUnlocked: (snap: Snapshot) => v
     setPasscode(value);
     try {
       onUnlocked(await fetchSnapshot());
-    } catch {
-      clearPasscode();
-      setError('Wrong passcode — try again.');
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        clearPasscode();
+        setError('Wrong passcode — try again.');
+      } else {
+        setError("Can't reach Curia — check your connection and try again.");
+      }
     } finally {
       setBusy(false);
     }
