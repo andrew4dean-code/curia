@@ -20,7 +20,7 @@
 - Fees are excluded from average cost, included in realized P/L.
 - FIFO ordering key: (`executed_at`, `id`) ascending. Sells with no open lots (shorts) are silently skipped.
 - Auth: every `/api/*` route except `/api/health` requires header `X-Curia-Key`; server compares sha256 constant-time against env `CURIA_PASSCODE_SHA256`; wrong key → sleep `CURIA_AUTH_DELAY` seconds (default `1.0`) then 401.
-- Quotes: auto-prices come from Stooq (free CSV endpoint, NO account, NO API key). Marks carry `source`: exactly `auto` (from Stooq) or `manual` (user-set). Quote failures always degrade silently — existing marks stand, nothing errors to the user.
+- Quotes: auto-prices come from Yahoo Finance's unofficial chart endpoint (free, NO account, NO API key; requires a browser User-Agent header — Stooq was the original pick but now blocks non-browser clients). Marks carry `source`: exactly `auto` (from Yahoo) or `manual` (user-set). Quote failures always degrade silently — existing marks stand, nothing errors to the user.
 - Commit after every task (messages given per task). Never commit `node_modules`, `.venv`, `dist`, `*.db`.
 
 ---
@@ -833,7 +833,7 @@ cd ~/curia-app && git add frontend/src/lib && git commit -m "feat(math): open po
   - `GET /api/trades` → `[TradeOut]`; `POST /api/trades` (TradeIn) → TradeOut 201; `PUT /api/trades/{id}` → TradeOut; `DELETE /api/trades/{id}` → 204
   - `TradeIn = {symbol, side: "BUY"|"SELL", qty>0, price>=0, fees>=0, executed_at, note}`; `TradeOut = TradeIn + {id}`; symbols stored upper-cased/trimmed
   - `GET /api/marks` → `[{symbol, price, marked_at, source}]`; `PUT /api/marks/{symbol}` body `{"price": number}` → mark (upserts as `source: "manual"`, stamps `marked_at` now)
-  - `POST /api/marks/refresh` → derives symbols with net open qty > 0 from trades, fetches Stooq quotes for them, upserts as `source: "auto"` marks, returns the full marks list (same shape as `GET /api/marks`); Stooq failure returns the existing marks unchanged
+  - `POST /api/marks/refresh` → derives symbols with net open qty > 0 from trades, fetches Yahoo quotes for them, upserts as `source: "auto"` marks, returns the full marks list (same shape as `GET /api/marks`); quote-source failure returns the existing marks unchanged
   - `GET /api/export` → `{"version": 1, "trades": [TradeOut], "marks": [...]}`; `POST /api/import` body `{"confirm": true, "trades": [...], "marks": [...]}` → `{"trades": n, "marks": n}` (replaces everything; 400 without `confirm`)
   - All `/api/*` except health: 401 unless header `X-Curia-Key` matches.
 
@@ -937,46 +937,52 @@ class Mark(Base):
 
 `backend/app/quotes.py`:
 ```python
-"""Delayed US quotes from Stooq — free CSV endpoint, no account, no API key.
+"""US quotes via Yahoo Finance's unofficial chart endpoint — free, no account,
+no API key. Requires a browser-like User-Agent (Yahoo rejects default clients).
+(Stooq was the original pick but now blocks non-browser clients.)
 
-URL shape: https://stooq.com/q/l/?s=aapl.us+msft.us&f=sd2t2ohlcv&h&e=csv
-CSV header: Symbol,Date,Time,Open,High,Low,Close,Volume. Close is the latest
-price; unknown symbols come back with "N/D" fields.
+GET https://query1.finance.yahoo.com/v8/finance/chart/{SYMBOL}?interval=1d&range=1d
+→ price at chart.result[0].meta.regularMarketPrice. Unknown symbols → HTTP 404.
 """
+from typing import Optional
+
 import httpx
 
-STOOQ_URL = "https://stooq.com/q/l/"
+CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+_UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
 
 
-def parse_stooq_csv(text: str) -> dict[str, float]:
-    out: dict[str, float] = {}
-    for line in text.strip().splitlines()[1:]:  # skip header
-        cols = line.split(",")
-        if len(cols) < 7 or cols[6] in ("N/D", ""):
-            continue
-        sym = cols[0].upper().removesuffix(".US")
-        try:
-            out[sym] = float(cols[6])
-        except ValueError:
-            continue
-    return out
+def price_from_chart(data: dict) -> Optional[float]:
+    try:
+        price = data["chart"]["result"][0]["meta"]["regularMarketPrice"]
+    except (KeyError, IndexError, TypeError):
+        return None
+    return float(price) if isinstance(price, (int, float)) else None
 
 
 def fetch_quotes(symbols: list[str]) -> dict[str, float]:
-    """{SYMBOL: price} for the symbols Stooq recognizes; {} on any failure."""
+    """{SYMBOL: price} for the symbols Yahoo recognizes; skips per-symbol
+    failures silently; {} on total failure. Never raises."""
+    out: dict[str, float] = {}
     if not symbols:
-        return {}
-    joined = "+".join(f"{s.lower()}.us" for s in symbols)
+        return out
     try:
-        resp = httpx.get(
-            STOOQ_URL,
-            params={"s": joined, "f": "sd2t2ohlcv", "h": "", "e": "csv"},
-            timeout=8.0,
-        )
-        resp.raise_for_status()
+        with httpx.Client(headers=_UA, timeout=8.0) as client:
+            for sym in symbols:
+                try:
+                    resp = client.get(
+                        CHART_URL.format(symbol=sym.upper()),
+                        params={"interval": "1d", "range": "1d"},
+                    )
+                    resp.raise_for_status()
+                    price = price_from_chart(resp.json())
+                    if price is not None:
+                        out[sym.upper()] = price
+                except Exception:
+                    continue
     except Exception:
-        return {}
-    return parse_stooq_csv(resp.text)
+        return out
+    return out
 ```
 
 `backend/app/db.py`:
@@ -1302,13 +1308,11 @@ from app import quotes
 from tests.conftest import HEADERS
 
 
-def test_parse_stooq_csv_happy_and_unknown():
-    text = (
-        "Symbol,Date,Time,Open,High,Low,Close,Volume\n"
-        "AAPL.US,2026-07-24,21:00:00,100,101,99,100.5,123456\n"
-        "FAKE.US,N/D,N/D,N/D,N/D,N/D,N/D,N/D\n"
-    )
-    assert quotes.parse_stooq_csv(text) == {"AAPL": 100.5}
+def test_price_from_chart_happy_and_malformed():
+    payload = {"chart": {"result": [{"meta": {"regularMarketPrice": 100.5, "symbol": "AAPL"}}]}}
+    assert quotes.price_from_chart(payload) == 100.5
+    assert quotes.price_from_chart({"chart": {"result": []}}) is None
+    assert quotes.price_from_chart({}) is None
 
 
 def test_refresh_marks_only_touches_open_symbols(client, monkeypatch):
@@ -1645,7 +1649,7 @@ export default function App() {
   const refresh = useCallback(async () => {
     try {
       // best-effort quote pull first, so the snapshot below carries fresh auto-marks;
-      // a Stooq outage or offline phone must never block the snapshot itself
+      // a quote outage or offline phone must never block the snapshot itself
       await refreshMarks().catch(() => undefined);
       setSnap(await fetchSnapshot());
       setOffline(false);
@@ -2390,7 +2394,7 @@ Andrew, on the iPhone: open the Railway URL in Safari → unlock → Share → *
 - [ ] **Step 2: End-to-end checklist (Andrew on phone, Claude verifying via API)**
 
 - Add a real trade on the phone → `curl -s -H "X-Curia-Key: <passcode>" https://<domain>/api/trades` shows it.
-- Within seconds of adding it, the position shows a price automatically (Stooq, delayed ~15 min) — no tapping needed.
+- Within seconds of adding it, the position shows a price automatically (Yahoo, near-realtime) — no tapping needed.
 - Update a mark by tapping a position → Portfolio P/L updates, odometer rolls, row says "by you".
 - Ledger shows any closed trades + The Record stats.
 - Airplane mode → app still opens showing "Offline — showing data from today"; + button hidden.

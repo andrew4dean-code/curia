@@ -37,7 +37,7 @@ PHONE / MAC (PWA in browser)
    ▼
 RAILWAY (Andrew's existing account, one new service)
    ├─ FastAPI app: dumb trade store (CRUD + export/import) + serves the built PWA
-   │    └─ quote refresh ──► Stooq (free CSV quotes, no account, no API key)
+   │    └─ quote refresh ──► Yahoo Finance chart API (unofficial, free, no account, no API key)
    └─ Railway Postgres: trades + marks
 ```
 
@@ -62,10 +62,10 @@ Open positions, derived from entered trades:
 - One row per open position: symbol, shares held, average cost, mark price,
   unrealized P/L in dollars and percent. Values flash on change.
 - **Prices refresh themselves.** Opening (or refreshing) the app asks the backend
-  to pull current prices for every open position from Stooq — a free quote source
-  with no account and no API key, so nothing can expire or rot. Quotes are delayed
-  (typically ~15 min); each row still shows when its price was marked, and rows
-  keep working from the last stored price if Stooq is unreachable.
+  to pull current prices for every open position from Yahoo Finance — an unofficial
+  but free quote endpoint with no account and no API key, so nothing can expire.
+  Each row still shows when its price was marked, and rows keep working from the
+  last stored price if the quote source is unreachable.
 - **Manual override stays.** Tapping a position opens "update price" — enter a
   price yourself (marked "by you") any time you want to correct or front-run the
   delayed feed.
@@ -105,7 +105,7 @@ FastAPI (Python), deliberately dumb. Postgres via Railway's `DATABASE_URL`.
 
 - `trades`: `id`, `symbol`, `side` (buy|sell), `qty`, `price`, `fees`,
   `executed_at` (date), `note`, `created_at`, `updated_at`.
-- `marks`: `symbol` (pk), `price`, `marked_at`, `source` (`auto` from Stooq |
+- `marks`: `symbol` (pk), `price`, `marked_at`, `source` (`auto` from Yahoo |
   `manual` from the update-price sheet).
 
 ### API
@@ -114,9 +114,9 @@ All under `/api`, all requiring the passcode header:
 
 - `GET /trades` · `POST /trades` · `PUT /trades/{id}` · `DELETE /trades/{id}`
 - `GET /marks` · `PUT /marks/{symbol}` (manual override, `source: manual`)
-- `POST /marks/refresh` — fetches Stooq quotes (free CSV, no key) for every symbol
+- `POST /marks/refresh` — fetches Yahoo quotes (unofficial chart endpoint, no key) for every symbol
   with net open quantity > 0, upserts them as `source: auto` marks, returns the
-  full marks list. Stooq outages degrade silently: existing marks stand.
+  full marks list. Quote-source outages degrade silently: existing marks stand.
 - `GET /export` — the full dataset as one JSON file (the backup button)
 - `POST /import` — restore from a backup JSON (replaces all rows, guarded by a
   confirmation flag in the request)
