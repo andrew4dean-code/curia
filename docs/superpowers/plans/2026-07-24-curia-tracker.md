@@ -18,7 +18,7 @@
 - Trade sides are exactly `BUY` and `SELL` (uppercase) everywhere — DB, API, TS types.
 - Dates: `executed_at` is a plain `YYYY-MM-DD` string. Timestamps (`created_at`, `updated_at`, `marked_at`) are ISO-8601 UTC strings.
 - Fees are excluded from average cost, included in realized P/L.
-- FIFO ordering key: (`executed_at`, `id`) ascending. Sells with no open lots (shorts) are silently skipped.
+- FIFO ordering key: (`executed_at`, BUY-before-SELL, `id`) ascending. The same-day side rank was added after final review: with the plain (`executed_at`, `id`) key, a same-day sell entered before its buy silently unmatched and vanished from the ledger; ranking BUY first on equal dates rescues out-of-order entry and provably never changes the result for in-order entry. Sells with no open lots (shorts) are silently skipped.
 - Auth: every `/api/*` route except `/api/health` requires header `X-Curia-Key`; server compares sha256 constant-time against env `CURIA_PASSCODE_SHA256`; wrong key → sleep `CURIA_AUTH_DELAY` seconds (default `1.0`) then 401.
 - Quotes: auto-prices come from Yahoo Finance's unofficial chart endpoint (free, NO account, NO API key; requires a browser User-Agent header — Stooq was the original pick but now blocks non-browser clients). Marks carry `source`: exactly `auto` (from Yahoo) or `manual` (user-set). Quote failures always degrade silently — existing marks stand, nothing errors to the user.
 - Commit after every task (messages given per task). Never commit `node_modules`, `.venv`, `dist`, `*.db`.
