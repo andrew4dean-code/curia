@@ -24,7 +24,7 @@ The Curia name, look, and feel move to this new app.
 
 ## Non-goals
 
-- No broker integration of any kind. No automatic price feeds.
+- No broker integration of any kind.
 - No AI committee, doctrine engine, register, or push notifications.
 - No multi-user support, no accounts. One person, one passcode.
 - No offline *writes* (adding trades requires internet; viewing does not).
@@ -37,6 +37,7 @@ PHONE / MAC (PWA in browser)
    ▼
 RAILWAY (Andrew's existing account, one new service)
    ├─ FastAPI app: dumb trade store (CRUD + export/import) + serves the built PWA
+   │    └─ quote refresh ──► Stooq (free CSV quotes, no account, no API key)
    └─ Railway Postgres: trades + marks
 ```
 
@@ -60,9 +61,14 @@ Open positions, derived from entered trades:
   with total unrealized P/L beneath it.
 - One row per open position: symbol, shares held, average cost, mark price,
   unrealized P/L in dollars and percent. Values flash on change.
-- **Marks are manual.** Tapping a position opens "update price" — enter today's
-  price, done. Each row shows staleness plainly (e.g. "marked 3d ago") so a stale
-  mark never quietly lies.
+- **Prices refresh themselves.** Opening (or refreshing) the app asks the backend
+  to pull current prices for every open position from Stooq — a free quote source
+  with no account and no API key, so nothing can expire or rot. Quotes are delayed
+  (typically ~15 min); each row still shows when its price was marked, and rows
+  keep working from the last stored price if Stooq is unreachable.
+- **Manual override stays.** Tapping a position opens "update price" — enter a
+  price yourself (marked "by you") any time you want to correct or front-run the
+  delayed feed.
 - Floating **+** button → Add Trade sheet.
 
 ### Tab 2 — Ledger
@@ -99,14 +105,18 @@ FastAPI (Python), deliberately dumb. Postgres via Railway's `DATABASE_URL`.
 
 - `trades`: `id`, `symbol`, `side` (buy|sell), `qty`, `price`, `fees`,
   `executed_at` (date), `note`, `created_at`, `updated_at`.
-- `marks`: `symbol` (pk), `price`, `marked_at`.
+- `marks`: `symbol` (pk), `price`, `marked_at`, `source` (`auto` from Stooq |
+  `manual` from the update-price sheet).
 
 ### API
 
 All under `/api`, all requiring the passcode header:
 
 - `GET /trades` · `POST /trades` · `PUT /trades/{id}` · `DELETE /trades/{id}`
-- `GET /marks` · `PUT /marks/{symbol}`
+- `GET /marks` · `PUT /marks/{symbol}` (manual override, `source: manual`)
+- `POST /marks/refresh` — fetches Stooq quotes (free CSV, no key) for every symbol
+  with net open quantity > 0, upserts them as `source: auto` marks, returns the
+  full marks list. Stooq outages degrade silently: existing marks stand.
 - `GET /export` — the full dataset as one JSON file (the backup button)
 - `POST /import` — restore from a backup JSON (replaces all rows, guarded by a
   confirmation flag in the request)

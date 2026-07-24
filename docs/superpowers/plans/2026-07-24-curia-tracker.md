@@ -20,6 +20,7 @@
 - Fees are excluded from average cost, included in realized P/L.
 - FIFO ordering key: (`executed_at`, `id`) ascending. Sells with no open lots (shorts) are silently skipped.
 - Auth: every `/api/*` route except `/api/health` requires header `X-Curia-Key`; server compares sha256 constant-time against env `CURIA_PASSCODE_SHA256`; wrong key → sleep `CURIA_AUTH_DELAY` seconds (default `1.0`) then 401.
+- Quotes: auto-prices come from Stooq (free CSV endpoint, NO account, NO API key). Marks carry `source`: exactly `auto` (from Stooq) or `manual` (user-set). Quote failures always degrade silently — existing marks stand, nothing errors to the user.
 - Commit after every task (messages given per task). Never commit `node_modules`, `.venv`, `dist`, `*.db`.
 
 ---
@@ -390,6 +391,7 @@ export interface Mark {
   symbol: string;
   price: number;
   marked_at: string; // ISO timestamp
+  source: 'auto' | 'manual';
 }
 
 export interface ClosedTrade {
@@ -625,7 +627,7 @@ let nextId = 1;
 function t(p: Partial<Trade> & Pick<Trade, 'symbol' | 'side' | 'qty' | 'price' | 'executed_at'>): Trade {
   return { id: nextId++, fees: 0, note: '', ...p };
 }
-const mark = (symbol: string, price: number): Mark => ({ symbol, price, marked_at: '2026-07-24T12:00:00Z' });
+const mark = (symbol: string, price: number): Mark => ({ symbol, price, marked_at: '2026-07-24T12:00:00Z', source: 'auto' });
 
 describe('computeOpenPositions', () => {
   it('weighted average cost over remaining lots, fees excluded', () => {
@@ -821,8 +823,8 @@ cd ~/curia-app && git add frontend/src/lib && git commit -m "feat(math): open po
 ### Task 5: Backend — store, auth, export/import (test-first)
 
 **Files:**
-- Create: `backend/app/models.py`, `backend/app/db.py`, `backend/app/auth.py`, `backend/app/routes.py`, `backend/app/main.py`
-- Test: `backend/tests/conftest.py`, `backend/tests/test_auth.py`, `backend/tests/test_trades.py`, `backend/tests/test_export_import.py`
+- Create: `backend/app/models.py`, `backend/app/db.py`, `backend/app/auth.py`, `backend/app/quotes.py`, `backend/app/routes.py`, `backend/app/main.py`
+- Test: `backend/tests/conftest.py`, `backend/tests/test_auth.py`, `backend/tests/test_trades.py`, `backend/tests/test_export_import.py`, `backend/tests/test_quotes.py`
 
 **Interfaces:**
 - Consumes: nothing (independent of frontend).
@@ -830,7 +832,8 @@ cd ~/curia-app && git add frontend/src/lib && git commit -m "feat(math): open po
   - `GET /api/health` → `{"ok": true}` (no auth)
   - `GET /api/trades` → `[TradeOut]`; `POST /api/trades` (TradeIn) → TradeOut 201; `PUT /api/trades/{id}` → TradeOut; `DELETE /api/trades/{id}` → 204
   - `TradeIn = {symbol, side: "BUY"|"SELL", qty>0, price>=0, fees>=0, executed_at, note}`; `TradeOut = TradeIn + {id}`; symbols stored upper-cased/trimmed
-  - `GET /api/marks` → `[{symbol, price, marked_at}]`; `PUT /api/marks/{symbol}` body `{"price": number}` → mark (upserts, stamps `marked_at` now)
+  - `GET /api/marks` → `[{symbol, price, marked_at, source}]`; `PUT /api/marks/{symbol}` body `{"price": number}` → mark (upserts as `source: "manual"`, stamps `marked_at` now)
+  - `POST /api/marks/refresh` → derives symbols with net open qty > 0 from trades, fetches Stooq quotes for them, upserts as `source: "auto"` marks, returns the full marks list (same shape as `GET /api/marks`); Stooq failure returns the existing marks unchanged
   - `GET /api/export` → `{"version": 1, "trades": [TradeOut], "marks": [...]}`; `POST /api/import` body `{"confirm": true, "trades": [...], "marks": [...]}` → `{"trades": n, "marks": n}` (replaces everything; 400 without `confirm`)
   - All `/api/*` except health: 401 unless header `X-Curia-Key` matches.
 
@@ -929,6 +932,51 @@ class Mark(Base):
     symbol: Mapped[str] = mapped_column(primary_key=True)
     price: Mapped[float]
     marked_at: Mapped[str] = mapped_column(default=utcnow)
+    source: Mapped[str] = mapped_column(default="manual")  # auto | manual
+```
+
+`backend/app/quotes.py`:
+```python
+"""Delayed US quotes from Stooq — free CSV endpoint, no account, no API key.
+
+URL shape: https://stooq.com/q/l/?s=aapl.us+msft.us&f=sd2t2ohlcv&h&e=csv
+CSV header: Symbol,Date,Time,Open,High,Low,Close,Volume. Close is the latest
+price; unknown symbols come back with "N/D" fields.
+"""
+import httpx
+
+STOOQ_URL = "https://stooq.com/q/l/"
+
+
+def parse_stooq_csv(text: str) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for line in text.strip().splitlines()[1:]:  # skip header
+        cols = line.split(",")
+        if len(cols) < 7 or cols[6] in ("N/D", ""):
+            continue
+        sym = cols[0].upper().removesuffix(".US")
+        try:
+            out[sym] = float(cols[6])
+        except ValueError:
+            continue
+    return out
+
+
+def fetch_quotes(symbols: list[str]) -> dict[str, float]:
+    """{SYMBOL: price} for the symbols Stooq recognizes; {} on any failure."""
+    if not symbols:
+        return {}
+    joined = "+".join(f"{s.lower()}.us" for s in symbols)
+    try:
+        resp = httpx.get(
+            STOOQ_URL,
+            params={"s": joined, "f": "sd2t2ohlcv", "h": "", "e": "csv"},
+            timeout=8.0,
+        )
+        resp.raise_for_status()
+    except Exception:
+        return {}
+    return parse_stooq_csv(resp.text)
 ```
 
 `backend/app/db.py`:
@@ -987,6 +1035,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 
+from app import quotes
 from app.auth import require_key
 from app.db import SessionLocal
 from app.models import Mark, Trade, utcnow
@@ -1022,7 +1071,7 @@ def _trade_out(t: Trade) -> dict:
 
 
 def _mark_out(m: Mark) -> dict:
-    return {"symbol": m.symbol, "price": m.price, "marked_at": m.marked_at}
+    return {"symbol": m.symbol, "price": m.price, "marked_at": m.marked_at, "source": m.source}
 
 
 @router.get("/trades")
@@ -1077,13 +1126,33 @@ def put_mark(symbol: str, body: MarkIn) -> dict:
     with SessionLocal() as s:
         m = s.get(Mark, sym)
         if m is None:
-            m = Mark(symbol=sym, price=body.price, marked_at=utcnow())
+            m = Mark(symbol=sym, price=body.price, marked_at=utcnow(), source="manual")
             s.add(m)
         else:
             m.price = body.price
             m.marked_at = utcnow()
+            m.source = "manual"
         s.commit()
         return _mark_out(m)
+
+
+@router.post("/marks/refresh")
+def refresh_marks() -> list[dict]:
+    with SessionLocal() as s:
+        net: dict[str, float] = {}
+        for sym, side, qty in s.execute(select(Trade.symbol, Trade.side, Trade.qty)).all():
+            net[sym] = net.get(sym, 0.0) + (qty if side == "BUY" else -qty)
+        open_syms = sorted(sym for sym, q in net.items() if q > 1e-9)
+        for sym, price in quotes.fetch_quotes(open_syms).items():
+            m = s.get(Mark, sym)
+            if m is None:
+                s.add(Mark(symbol=sym, price=price, marked_at=utcnow(), source="auto"))
+            else:
+                m.price = price
+                m.marked_at = utcnow()
+                m.source = "auto"
+        s.commit()
+        return [_mark_out(m) for m in s.scalars(select(Mark).order_by(Mark.symbol)).all()]
 
 
 @router.get("/export")
@@ -1225,17 +1294,71 @@ def test_import_without_confirm_is_400(client):
     assert client.post("/api/import", json={"trades": []}, headers=HEADERS).status_code == 400
 ```
 
-- [ ] **Step 6: Run the full backend suite**
+- [ ] **Step 6: Quote tests**
+
+`backend/tests/test_quotes.py`:
+```python
+from app import quotes
+from tests.conftest import HEADERS
+
+
+def test_parse_stooq_csv_happy_and_unknown():
+    text = (
+        "Symbol,Date,Time,Open,High,Low,Close,Volume\n"
+        "AAPL.US,2026-07-24,21:00:00,100,101,99,100.5,123456\n"
+        "FAKE.US,N/D,N/D,N/D,N/D,N/D,N/D,N/D\n"
+    )
+    assert quotes.parse_stooq_csv(text) == {"AAPL": 100.5}
+
+
+def test_refresh_marks_only_touches_open_symbols(client, monkeypatch):
+    for body in [
+        {"symbol": "AAPL", "side": "BUY", "qty": 10, "price": 100, "fees": 0, "executed_at": "2026-07-01", "note": ""},
+        {"symbol": "TSLA", "side": "BUY", "qty": 5, "price": 200, "fees": 0, "executed_at": "2026-07-01", "note": ""},
+        {"symbol": "TSLA", "side": "SELL", "qty": 5, "price": 210, "fees": 0, "executed_at": "2026-07-02", "note": ""},
+    ]:
+        client.post("/api/trades", json=body, headers=HEADERS)
+
+    seen = {}
+
+    def fake_fetch(symbols):
+        seen["symbols"] = symbols
+        return {"AAPL": 123.45}
+
+    monkeypatch.setattr(quotes, "fetch_quotes", fake_fetch)
+    marks = client.post("/api/marks/refresh", headers=HEADERS).json()
+    assert seen["symbols"] == ["AAPL"]  # TSLA is fully closed — not fetched
+    assert len(marks) == 1
+    assert marks[0]["symbol"] == "AAPL"
+    assert marks[0]["price"] == 123.45
+    assert marks[0]["source"] == "auto"
+
+
+def test_stooq_failure_keeps_existing_marks(client, monkeypatch):
+    client.post("/api/trades", json={"symbol": "AAPL", "side": "BUY", "qty": 1, "price": 100, "fees": 0, "executed_at": "2026-07-01", "note": ""}, headers=HEADERS)
+    client.put("/api/marks/AAPL", json={"price": 111}, headers=HEADERS)
+    monkeypatch.setattr(quotes, "fetch_quotes", lambda syms: {})  # simulated outage
+    marks = client.post("/api/marks/refresh", headers=HEADERS).json()
+    assert marks[0]["price"] == 111
+    assert marks[0]["source"] == "manual"  # untouched
+
+
+def test_manual_put_sets_source_manual(client):
+    m = client.put("/api/marks/nvda", json={"price": 500}, headers=HEADERS).json()
+    assert m["source"] == "manual"
+```
+
+- [ ] **Step 7: Run the full backend suite**
 
 ```bash
 python -m pytest -q
 ```
-Expected: 10 passed. (If test_trades fails but auth passed, the bug is in routes.py, not auth.)
+Expected: 14 passed. (If test_trades fails but auth passed, the bug is in routes.py, not auth. `test_marks_upsert` in test_trades.py compares whole mark dicts — those now include `source`, which the responses carry automatically.)
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-cd ~/curia-app && git add backend && git commit -m "feat(backend): passcode-guarded trade/mark store with export-import, test-first"
+cd ~/curia-app && git add backend && git commit -m "feat(backend): passcode-guarded trade/mark store, Stooq auto-quotes, export-import, test-first"
 ```
 
 ---
@@ -1252,7 +1375,7 @@ cd ~/curia-app && git add backend && git commit -m "feat(backend): passcode-guar
 **Interfaces:**
 - Consumes: types (Task 3), backend API (Task 5).
 - Produces for Tasks 7–8:
-  - `api.ts`: `getPasscode(): string|null`, `setPasscode(p: string)`, `clearPasscode()`, `class ApiError extends Error { status: number }`, `interface Snapshot { trades: Trade[]; marks: Mark[]; fetchedAt: string }`, `fetchSnapshot(): Promise<Snapshot>` (also writes cache), `cachedSnapshot(): Snapshot|null`, `createTrade(t: Omit<Trade,'id'>)`, `updateTrade(t: Trade)`, `deleteTrade(id: number)`, `putMark(symbol: string, price: number)`, `exportBackup(): Promise<unknown>`, `importBackup(data: unknown)`.
+  - `api.ts`: `getPasscode(): string|null`, `setPasscode(p: string)`, `clearPasscode()`, `class ApiError extends Error { status: number }`, `interface Snapshot { trades: Trade[]; marks: Mark[]; fetchedAt: string }`, `fetchSnapshot(): Promise<Snapshot>` (also writes cache), `cachedSnapshot(): Snapshot|null`, `createTrade(t: Omit<Trade,'id'>)`, `updateTrade(t: Trade)`, `deleteTrade(id: number)`, `putMark(symbol: string, price: number)`, `refreshMarks(): Promise<Mark[]>` (POST /api/marks/refresh), `exportBackup(): Promise<unknown>`, `importBackup(data: unknown)`.
   - `time.ts`: `agoLabel(iso: string): string` → `"today"` or `"3d ago"`.
   - `App.tsx` renders `PortfolioTab`/`LedgerTab` with props `{ snap: Snapshot; onRefresh: () => Promise<void>; onEditTrade: (t: Trade|null) => void; onMark: (symbol: string) => void }` (Tabs are created as placeholder stubs here and filled in by Tasks 7–8).
 
@@ -1359,6 +1482,8 @@ export const putMark = (symbol: string, price: number) =>
     method: 'PUT',
     body: JSON.stringify({ price }),
   });
+export const refreshMarks = () =>
+  request<Mark[]>('/api/marks/refresh', { method: 'POST' });
 export const exportBackup = () => request<unknown>('/api/export');
 export const importBackup = (data: unknown) =>
   request<{ trades: number; marks: number }>('/api/import', {
@@ -1498,7 +1623,7 @@ Replace `frontend/src/App.tsx`:
 ```tsx
 import { useCallback, useEffect, useState } from 'react';
 import './styles/app.css';
-import { cachedSnapshot, fetchSnapshot, getPasscode } from './lib/api';
+import { cachedSnapshot, fetchSnapshot, getPasscode, refreshMarks } from './lib/api';
 import type { Snapshot } from './lib/api';
 import type { Trade } from './lib/types';
 import { PasscodeGate } from './components/PasscodeGate';
@@ -1519,6 +1644,9 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     try {
+      // best-effort quote pull first, so the snapshot below carries fresh auto-marks;
+      // a Stooq outage or offline phone must never block the snapshot itself
+      await refreshMarks().catch(() => undefined);
       setSnap(await fetchSnapshot());
       setOffline(false);
     } catch {
@@ -1663,7 +1791,7 @@ const snap: Snapshot = {
     { id: 1, symbol: 'AAPL', side: 'BUY', qty: 10, price: 100, fees: 0, executed_at: '2026-07-01', note: '' },
     { id: 2, symbol: 'NVDA', side: 'BUY', qty: 2, price: 500, fees: 0, executed_at: '2026-07-02', note: '' },
   ],
-  marks: [{ symbol: 'AAPL', price: 120, marked_at: new Date().toISOString() }],
+  marks: [{ symbol: 'AAPL', price: 120, marked_at: new Date().toISOString(), source: 'auto' as const }],
   fetchedAt: new Date().toISOString(),
 };
 
@@ -1751,7 +1879,9 @@ export function PortfolioTab({ snap, onMark }: TabProps) {
             <div className="row-sym">{p.symbol}</div>
             <div className="row-sub">
               {p.qty} sh · avg {formatMoney(p.avgCost)} ·{' '}
-              {p.mark ? `marked ${agoLabel(p.mark.marked_at)}` : 'no mark yet — tap to set price'}
+              {p.mark
+                ? `marked ${agoLabel(p.mark.marked_at)}${p.mark.source === 'manual' ? ' by you' : ''}`
+                : 'no mark yet — tap to set price'}
             </div>
           </div>
           <div className="row-right">
@@ -2260,7 +2390,8 @@ Andrew, on the iPhone: open the Railway URL in Safari → unlock → Share → *
 - [ ] **Step 2: End-to-end checklist (Andrew on phone, Claude verifying via API)**
 
 - Add a real trade on the phone → `curl -s -H "X-Curia-Key: <passcode>" https://<domain>/api/trades` shows it.
-- Update a mark by tapping a position → Portfolio P/L updates, odometer rolls.
+- Within seconds of adding it, the position shows a price automatically (Stooq, delayed ~15 min) — no tapping needed.
+- Update a mark by tapping a position → Portfolio P/L updates, odometer rolls, row says "by you".
 - Ledger shows any closed trades + The Record stats.
 - Airplane mode → app still opens showing "Offline — showing data from today"; + button hidden.
 - Export backup downloads a JSON file.
