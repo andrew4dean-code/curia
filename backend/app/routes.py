@@ -35,6 +35,7 @@ class MarkRow(BaseModel):
 
 class ImportBody(BaseModel):
     confirm: bool = False
+    version: int = 0
     trades: list[dict] = []
     marks: list[dict] = []
 
@@ -143,6 +144,8 @@ def export_all() -> dict:
 def import_all(body: ImportBody) -> dict:
     if not body.confirm:
         raise HTTPException(status_code=400, detail="set confirm=true to replace all data")
+    if body.version != 1:
+        raise HTTPException(status_code=400, detail="not a Curia backup (missing version)")
 
     trades: list[TradeIn] = []
     marks: list[MarkRow] = []

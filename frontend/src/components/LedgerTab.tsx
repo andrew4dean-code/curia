@@ -31,6 +31,10 @@ export function LedgerTab({ snap, onRefresh, onEditTrade }: TabProps) {
       setImportError("That file isn't a Curia backup (couldn't read it as JSON).");
       return;
     }
+    if ((parsed as { version?: unknown }).version !== 1 || !Array.isArray((parsed as { trades?: unknown }).trades)) {
+      setImportError("That file isn't a Curia backup.");
+      return;
+    }
     if (!window.confirm('Replace ALL current data with this backup?')) return;
     try {
       await importBackup({ ...parsed, confirm: true });

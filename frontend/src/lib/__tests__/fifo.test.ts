@@ -72,4 +72,12 @@ describe('computeClosedTrades', () => {
     ]);
     expect(closed[0].buyPrice).toBe(90);
   });
+
+  it('matches a same-day sell even when entered before its buy', () => {
+    const sellFirst = t({ symbol: 'INTC', side: 'SELL', qty: 5, price: 30, executed_at: '2026-05-01' });
+    const buyAfter = t({ symbol: 'INTC', side: 'BUY', qty: 5, price: 25, executed_at: '2026-05-01' });
+    const closed = computeClosedTrades([sellFirst, buyAfter]);
+    expect(closed).toHaveLength(1);
+    expect(closed[0].realizedPl).toBeCloseTo(25);
+  });
 });

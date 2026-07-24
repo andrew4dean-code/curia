@@ -4,9 +4,14 @@ interface Lot { qty: number; price: number; openedAt: string; origQty: number; f
 
 const EPS = 1e-9;
 
+const sideRank = (s: Trade['side']) => (s === 'BUY' ? 0 : 1);
+
 export function sortForFifo(trades: Trade[]): Trade[] {
   return [...trades].sort(
-    (a, b) => a.executed_at.localeCompare(b.executed_at) || a.id - b.id,
+    (a, b) =>
+      a.executed_at.localeCompare(b.executed_at) ||
+      sideRank(a.side) - sideRank(b.side) ||
+      a.id - b.id,
   );
 }
 

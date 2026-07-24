@@ -51,7 +51,13 @@ export async function fetchSnapshot(): Promise<Snapshot> {
 
 export function cachedSnapshot(): Snapshot | null {
   const raw = localStorage.getItem(CACHE_STORAGE);
-  return raw ? (JSON.parse(raw) as Snapshot) : null;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Snapshot;
+  } catch {
+    localStorage.removeItem(CACHE_STORAGE);
+    return null;
+  }
 }
 
 export const createTrade = (t: Omit<Trade, 'id'>) =>
