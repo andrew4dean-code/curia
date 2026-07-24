@@ -5,5 +5,7 @@ honest ledger. Frontend: React/Vite PWA (all money math client-side, tested).
 Backend: dumb FastAPI store + passcode, Railway Postgres. Spec + plan in
 `docs/superpowers/`.
 
+Live: https://curia-production-5f0c.up.railway.app (Railway project `curia`, service `curia` + Postgres; deployed via `railway up`).
+
 Dev: `cd frontend && npm run dev` (Node 20!) · `cd backend && uvicorn app.main:app --reload`
 Tests: `cd frontend && npx vitest run` · `cd backend && python -m pytest -q`
