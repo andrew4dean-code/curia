@@ -7,6 +7,7 @@ import { formatMoney, formatPct, formatSignedMoney, formatSignedPct, plColor } f
 
 export function LedgerTab({ snap, onRefresh, onEditTrade }: TabProps) {
   const [showEntries, setShowEntries] = useState(false);
+  const [importError, setImportError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const closed = computeClosedTrades(snap.trades);
   const stats = computeStats(closed);
@@ -22,10 +23,21 @@ export function LedgerTab({ snap, onRefresh, onEditTrade }: TabProps) {
   }
 
   async function doImport(file: File) {
-    const parsed = JSON.parse(await file.text()) as Record<string, unknown>;
+    setImportError('');
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(await file.text()) as Record<string, unknown>;
+    } catch {
+      setImportError("That file isn't a Curia backup (couldn't read it as JSON).");
+      return;
+    }
     if (!window.confirm('Replace ALL current data with this backup?')) return;
-    await importBackup({ ...parsed, confirm: true });
-    await onRefresh();
+    try {
+      await importBackup({ ...parsed, confirm: true });
+      await onRefresh();
+    } catch {
+      setImportError('Restore failed — the server rejected that backup. Nothing was changed.');
+    }
   }
 
   return (
@@ -82,11 +94,22 @@ export function LedgerTab({ snap, onRefresh, onEditTrade }: TabProps) {
               </div>
             </div>
           ))}
+          {importError && <div style={{ color: 'var(--pl-red)', textAlign: 'center', fontSize: 13, marginBottom: 12 }}>{importError}</div>}
           <div className="link-row">
             <button onClick={doExport}>Export backup</button>
             {' · '}
             <button onClick={() => fileRef.current?.click()}>Restore from backup</button>
-            <input ref={fileRef} type="file" accept="application/json" hidden onChange={(e) => e.target.files?.[0] && void doImport(e.target.files[0])} />
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                if (f) void doImport(f);
+              }}
+            />
           </div>
         </>
       )}
