@@ -24,3 +24,23 @@ def test_export_import_round_trip(client):
 
 def test_import_without_confirm_is_400(client):
     assert client.post("/api/import", json={"trades": []}, headers=HEADERS).status_code == 400
+
+
+def test_import_preserves_auto_source(client):
+    body = {"confirm": True, "trades": [], "marks": [
+        {"symbol": "AAPL", "price": 100.0, "marked_at": "2026-07-24T12:00:00+00:00", "source": "auto"},
+    ]}
+    client.post("/api/import", json=body, headers=HEADERS)
+    marks = client.get("/api/marks", headers=HEADERS).json()
+    assert marks[0]["source"] == "auto"
+    assert marks[0]["marked_at"] == "2026-07-24T12:00:00+00:00"
+
+
+def test_import_bad_rows_are_400_and_nothing_is_wiped(client):
+    client.post("/api/trades", json={"symbol": "NVDA", "side": "BUY", "qty": 1, "price": 500,
+                                     "fees": 0, "executed_at": "2026-07-01", "note": ""}, headers=HEADERS)
+    bad_trade = {"confirm": True, "trades": [{"symbol": "AAPL"}], "marks": []}
+    assert client.post("/api/import", json=bad_trade, headers=HEADERS).status_code == 400
+    bad_mark = {"confirm": True, "trades": [], "marks": [{"symbol": "AAPL"}]}
+    assert client.post("/api/import", json=bad_mark, headers=HEADERS).status_code == 400
+    assert client.get("/api/trades", headers=HEADERS).json()[0]["symbol"] == "NVDA"

@@ -1,5 +1,7 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import delete, select
 
 from app import quotes
@@ -22,6 +24,13 @@ class TradeIn(BaseModel):
 
 class MarkIn(BaseModel):
     price: float = Field(ge=0)
+
+
+class MarkRow(BaseModel):
+    symbol: str = Field(min_length=1, max_length=12)
+    price: float = Field(ge=0)
+    marked_at: Optional[str] = None
+    source: str = Field(default="manual", pattern="^(auto|manual)$")
 
 
 class ImportBody(BaseModel):
@@ -134,17 +143,28 @@ def export_all() -> dict:
 def import_all(body: ImportBody) -> dict:
     if not body.confirm:
         raise HTTPException(status_code=400, detail="set confirm=true to replace all data")
+
+    trades: list[TradeIn] = []
+    marks: list[MarkRow] = []
+    try:
+        for row in body.trades:
+            trades.append(TradeIn(**{k: row[k] for k in
+                                     ("symbol", "side", "qty", "price", "fees", "executed_at", "note")
+                                     if k in row}))
+        for row in body.marks:
+            marks.append(MarkRow(**row))
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=f"invalid import data: {e}")
+
     with SessionLocal() as s:
         s.execute(delete(Trade))
         s.execute(delete(Mark))
-        for row in body.trades:
-            data = TradeIn(**{k: row[k] for k in
-                              ("symbol", "side", "qty", "price", "fees", "executed_at", "note")
-                              if k in row})
+        for data in trades:
             s.add(Trade(**{**data.model_dump(), "symbol": data.symbol.strip().upper()}))
-        for row in body.marks:
-            s.add(Mark(symbol=str(row["symbol"]).strip().upper(),
-                       price=float(row["price"]),
-                       marked_at=str(row.get("marked_at") or utcnow())))
+        for row in marks:
+            s.add(Mark(symbol=row.symbol.strip().upper(),
+                       price=row.price,
+                       marked_at=row.marked_at or utcnow(),
+                       source=row.source))
         s.commit()
-        return {"trades": len(body.trades), "marks": len(body.marks)}
+        return {"trades": len(trades), "marks": len(marks)}
