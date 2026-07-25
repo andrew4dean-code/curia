@@ -55,7 +55,10 @@ stock trade; ceremony plays for every trade type).
     client always sends its local date explicitly).
 - Export payload gains `"options": [...]` (version stays 1; `options` is optional on import so
   pre-options backups restore unchanged). Import validates every row through a pydantic model,
-  pre-validate-then-replace like trades/marks. `assigned_trade_id` survives export/import as-is.
+  pre-validate-then-replace like trades/marks. `assigned_trade_id` is **remapped** during
+  restore: re-inserted trades receive new row ids, so import builds an old-id→new-id map from
+  the backup's trade ids and rewrites each option's link (unknown/missing references become
+  null rather than dangling).
 
 ## Frontend
 
