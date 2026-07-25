@@ -40,7 +40,8 @@ describe('OptionsTab board', () => {
       base,
     ];
     render(<OptionsTab snap={snapWith(rows)} {...cbs} onSellWeek={vi.fn()} />);
-    expect(screen.getByText(/\$294\.70 collected/)).toBeInTheDocument();
+    expect(screen.getByText('$294.70')).toBeInTheDocument();
+    expect(screen.getByText(/collected this month/)).toBeInTheDocument();
   });
 
   it('open option renders as a seal chip that opens the settle sheet', () => {

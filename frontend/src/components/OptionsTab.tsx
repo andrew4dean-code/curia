@@ -44,40 +44,46 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek }: TabProps) {
         <h1>{MONTHS[month - 1]}</h1>
         <button aria-label="Next month" onClick={() => shift(1)}>›</button>
       </header>
-      <div className="board-score">{formatMoney(score)} collected this month</div>
-      <div className="board-rail">
+      <div className="board-score">
+        <span className="board-score-amount">{formatMoney(score)}</span> collected this month
+      </div>
+      <div className="board-weeks">
         {fridays.map((friday, i) => {
           const rows = byWeek.get(friday) ?? [];
           const isPast = friday < today;
           const isLive = friday === liveFriday;
+          const liveNote = isLive
+            ? expiryLabel(friday) === 'today'
+              ? 'expires today'
+              : `${expiryLabel(friday)} left`
+            : '';
           return (
             <div key={friday} className={`wk${isPast ? ' past' : ''}${isLive ? ' live' : ''}`}>
+              <span className="wk-num" aria-hidden="true">{i + 1}</span>
               <div className="wk-label">
-                WK {i + 1} · Fri {fmtShort(friday)}
-                {isLive ? ` · ${expiryLabel(friday)} left` : ''}
+                Week {i + 1} · Fri {fmtShort(friday)}
+                {isLive ? ` · ${liveNote}` : ''}
               </div>
-              {rows.length > 0 && (
-                <div className="wk-line">
-                  {rows.map((o) =>
-                    o.status === 'OPEN' ? (
-                      <button key={o.id} className="wk-chip" onClick={() => onSettleOption(o)}>
-                        <span className="wk-seal">C</span>
-                        {o.symbol} ${o.strike} {o.opt_type} · {o.contracts}x · {formatMoney(premiumCollected(o))}
-                      </button>
-                    ) : (
-                      <div key={o.id} className="wk-settled" style={{ color: (optionRealizedPl(o) ?? 0) >= 0 ? 'var(--pl-up)' : 'var(--pl-down)' }}>
-                        ✓ {o.symbol} ${o.strike} {o.opt_type} — {(optionRealizedPl(o) ?? 0) >= 0 ? 'kept' : 'gave back'} {formatSignedMoney(optionRealizedPl(o) ?? 0)}
-                      </div>
-                    ),
-                  )}
-                </div>
+              <div className="wk-rule" />
+              {rows.map((o) =>
+                o.status === 'OPEN' ? (
+                  <button key={o.id} className="wk-chip" onClick={() => onSettleOption(o)}>
+                    <span className="wk-seal">C</span>
+                    <span className="wk-chip-text">
+                      {o.symbol} ${o.strike} {o.opt_type} · {o.contracts}x · {formatMoney(premiumCollected(o))}
+                    </span>
+                  </button>
+                ) : (
+                  <div key={o.id} className="wk-settled" style={{ color: (optionRealizedPl(o) ?? 0) >= 0 ? 'var(--pl-up)' : 'var(--pl-down)' }}>
+                    ✓ {o.symbol} ${o.strike} {o.opt_type} — {(optionRealizedPl(o) ?? 0) >= 0 ? 'kept' : 'gave back'} {formatSignedMoney(optionRealizedPl(o) ?? 0)}
+                  </div>
+                ),
               )}
               {!isPast && onSellWeek && (
                 <button className="wk-sell" aria-label={`sell the week of ${fmtShort(friday)}`} onClick={() => onSellWeek(friday)}>
-                  {rows.length > 0 ? '＋ sell another this week' : '＋ tap the line to sell this week'}
+                  {rows.length > 0 ? '＋ sell another this week' : '＋ tap to sell this week'}
                 </button>
               )}
-              {rows.length === 0 && isPast && <div className="wk-line" />}
             </div>
           );
         })}

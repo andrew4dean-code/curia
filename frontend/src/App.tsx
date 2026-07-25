@@ -105,10 +105,12 @@ export default function App() {
   return (
     <div className={landing ? 'shell roll-slow' : 'shell'}>
       {offline && <OfflineBanner fetchedAt={snap.fetchedAt} />}
-      {tab === 'portfolio' && <PortfolioTab {...tabProps} />}
-      {tab === 'options' && <OptionsTab {...tabProps} />}
-      {tab === 'ledger' && <LedgerTab {...tabProps} />}
-      {tab === 'settings' && <SettingsTab {...tabProps} />}
+      <div className="tab-fade" key={tab}>
+        {tab === 'portfolio' && <PortfolioTab {...tabProps} />}
+        {tab === 'options' && <OptionsTab {...tabProps} />}
+        {tab === 'ledger' && <LedgerTab {...tabProps} />}
+        {tab === 'settings' && <SettingsTab {...tabProps} />}
+      </div>
       {!offline && (tab === 'portfolio' || tab === 'ledger') && (
         <button className="fab" aria-label="Add trade" onClick={() => setSheet({ kind: 'trade', trade: null })}>
           +
