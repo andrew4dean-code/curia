@@ -1113,13 +1113,15 @@ Expected: 50 pytest, ~125 Vitest, zero failures.
 
 - [ ] **Step 2: Audit for stored non-zero fees**
 
-The fee inputs are gone, so any non-zero fee already recorded would keep moving totals with no way left to see or edit it. Ask Andrew for the passcode, then:
+The fee inputs are gone, so any non-zero fee already recorded would keep moving totals with no way left to see or edit it.
+
+**Andrew runs this himself** — it needs his passcode, which he should not hand over. Give him the command and wait for the output:
 
 ```bash
-curl -s -H "X-Curia-Key: $CURIA_PASSCODE" https://curia-production-5f0c.up.railway.app/api/export | python3 -c "import json,sys; d=json.load(sys.stdin); print([(t['id'],t['fees']) for t in d['trades'] if t['fees']], [(o['id'],o['fees'],o['close_fees']) for o in d['options'] if o['fees'] or o['close_fees']])"
+read -rs -p "Curia passcode: " P && curl -s -H "X-Curia-Key: $P" https://curia-production-5f0c.up.railway.app/api/export | python3 -c "import json,sys; d=json.load(sys.stdin); print('trades:', [(t['id'],t['fees']) for t in d['trades'] if t['fees']]); print('options:', [(o['id'],o['fees'],o['close_fees']) for o in d['options'] if o['fees'] or o['close_fees']])" && unset P
 ```
 
-Expected `[] []`. If anything prints, stop and show Andrew before shipping — do not silently hide it.
+Expected: two empty lists. If anything prints, stop and show Andrew before shipping — do not silently hide it.
 
 - [ ] **Step 3: Verify in the browser**
 
