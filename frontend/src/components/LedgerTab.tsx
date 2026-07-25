@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { TabProps } from './PortfolioTab';
 import { computeClosedTrades } from '../lib/fifo';
 import { computeStats } from '../lib/stats';
+import { computeOptionStats, optionRealizedPl } from '../lib/optionsMath';
 import { exportBackup, importBackup } from '../lib/api';
 import { formatMoney, formatPct, formatSignedMoney, formatSignedPct, plColor } from '../lib/format';
 
@@ -11,6 +12,10 @@ export function LedgerTab({ snap, onRefresh, onEditTrade }: TabProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const closed = computeClosedTrades(snap.trades);
   const stats = computeStats(closed);
+  const settledOptions = [...snap.options]
+    .filter((o) => o.status !== 'OPEN')
+    .sort((a, b) => (b.closed_at ?? '').localeCompare(a.closed_at ?? '') || b.id - a.id);
+  const oStats = computeOptionStats(snap.options);
 
   async function doExport() {
     const data = await exportBackup();
@@ -73,6 +78,37 @@ export function LedgerTab({ snap, onRefresh, onEditTrade }: TabProps) {
             <div className="stat"><div className="label">Avg loss</div><div className="value">{formatSignedMoney(stats.avgLoss)}</div></div>
             <div className="stat"><div className="label">Expectancy</div><div className="value" style={{ color: plColor(stats.expectancy) }}>{formatSignedMoney(stats.expectancy)}</div></div>
             <div className="stat"><div className="label">Closed</div><div className="value">{stats.wins}W · {stats.losses}L</div></div>
+          </div>
+        </>
+      )}
+
+      {settledOptions.length > 0 && (
+        <>
+          <h2 className="section-title">Premium Record</h2>
+          {settledOptions.map((o) => (
+            <div className="row" key={`opt-${o.id}`}>
+              <div className="row-main">
+                <div className="row-sym">
+                  {o.symbol} ${o.strike} {o.opt_type}{' '}
+                  <span className="chip">{o.status.replace('_', ' ')}</span>
+                </div>
+                <div className="row-sub">
+                  {o.contracts}x · {o.opened_at} → {o.closed_at}
+                  {o.status === 'ASSIGNED' ? ' · shares booked' : ''}
+                </div>
+              </div>
+              <div className="row-right">
+                <div style={{ color: plColor(optionRealizedPl(o) ?? 0) }}>
+                  {formatSignedMoney(optionRealizedPl(o) ?? 0)}
+                </div>
+              </div>
+            </div>
+          ))}
+          <div className="stats-grid">
+            <div className="stat"><div className="label">Premium kept</div><div className="value" style={{ color: plColor(oStats.totalKept) }}>{formatSignedMoney(oStats.totalKept)}</div></div>
+            <div className="stat"><div className="label">Win rate</div><div className="value">{formatPct(oStats.winRate)}</div></div>
+            <div className="stat"><div className="label">Outcomes</div><div className="value">{oStats.expiredCount}E · {oStats.boughtBackCount}B · {oStats.assignedCount}A</div></div>
+            <div className="stat"><div className="label">Avg take</div><div className="value">{formatSignedMoney(oStats.avgTake)}</div></div>
           </div>
         </>
       )}

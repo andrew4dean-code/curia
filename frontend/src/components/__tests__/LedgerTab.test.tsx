@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { LedgerTab } from '../LedgerTab';
 import type { Snapshot } from '../../lib/api';
+import type { OptionPosition } from '../../lib/types';
 
 const snap: Snapshot = {
   trades: [
@@ -14,9 +15,23 @@ const snap: Snapshot = {
   fetchedAt: new Date().toISOString(),
 };
 
+const cbs = {
+  onRefresh: vi.fn(),
+  onEditTrade: vi.fn(),
+  onMark: vi.fn(),
+  onSettleOption: vi.fn(),
+  onEditOption: vi.fn(),
+};
+
+const settledPut: OptionPosition = {
+  id: 11, symbol: 'TQQQ', opt_type: 'PUT', strike: 62, expiration: '2026-07-18',
+  contracts: 2, premium: 0.74, fees: 1.3, opened_at: '2026-07-14', note: '',
+  status: 'EXPIRED', closed_at: '2026-07-18', buyback_price: 0, close_fees: 0, assigned_trade_id: null,
+};
+
 describe('LedgerTab', () => {
   it('shows closed trades and stats', () => {
-    render(<LedgerTab snap={snap} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()} onSettleOption={vi.fn()} onEditOption={vi.fn()} />);
+    render(<LedgerTab snap={snap} {...cbs} />);
     // +$100.00 appears in the trade row AND several stat tiles → getAllByText
     expect(screen.getAllByText(/\+\$100\.00/).length).toBeGreaterThan(0);
     expect(screen.getByText('Win rate')).toBeInTheDocument();
@@ -25,7 +40,7 @@ describe('LedgerTab', () => {
 
   it('all-entries view lists raw trades and edit fires onEditTrade', () => {
     const onEdit = vi.fn();
-    render(<LedgerTab snap={snap} onRefresh={vi.fn()} onEditTrade={onEdit} onMark={vi.fn()} onSettleOption={vi.fn()} onEditOption={vi.fn()} />);
+    render(<LedgerTab snap={snap} {...cbs} onEditTrade={onEdit} />);
     fireEvent.click(screen.getByText(/All entries/));
     // the still-open NVDA buy only exists in the raw entries list
     expect(screen.getByText(/NVDA/)).toBeInTheDocument();
@@ -35,17 +50,30 @@ describe('LedgerTab', () => {
 
   it('empty ledger shows the honest empty state', () => {
     render(
-      <LedgerTab snap={{ trades: [], marks: [], options: [], fetchedAt: snap.fetchedAt }} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()} onSettleOption={vi.fn()} onEditOption={vi.fn()} />,
+      <LedgerTab snap={{ trades: [], marks: [], options: [], fetchedAt: snap.fetchedAt }} {...cbs} />,
     );
     expect(screen.getByText(/No closed trades yet/)).toBeInTheDocument();
   });
 
   it('shows an error instead of failing silently on a bad backup file', async () => {
-    render(<LedgerTab snap={snap} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()} onSettleOption={vi.fn()} onEditOption={vi.fn()} />);
+    render(<LedgerTab snap={snap} {...cbs} />);
     fireEvent.click(screen.getByText(/All entries/));
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     const bad = new File(['not json {'], 'backup.json', { type: 'application/json' });
     fireEvent.change(input, { target: { files: [bad] } });
     await waitFor(() => expect(screen.getByText(/isn't a Curia backup/)).toBeInTheDocument());
+  });
+
+  it('shows the premium record with outcome tag and P/L', () => {
+    render(<LedgerTab snap={{ ...snap, options: [settledPut] }} {...cbs} />);
+    expect(screen.getByText('Premium Record')).toBeInTheDocument();
+    expect(screen.getByText('EXPIRED')).toBeInTheDocument();
+    expect(screen.getAllByText(/\+\$146\.70/).length).toBeGreaterThan(0);
+    expect(screen.getByText('Premium kept')).toBeInTheDocument();
+  });
+
+  it('open options do not appear in the premium record', () => {
+    render(<LedgerTab snap={{ ...snap, options: [{ ...settledPut, id: 12, status: 'OPEN', closed_at: null }] }} {...cbs} />);
+    expect(screen.queryByText('Premium Record')).not.toBeInTheDocument();
   });
 });
