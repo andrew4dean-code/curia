@@ -17,7 +17,7 @@ def test_export_import_round_trip(client):
     assert client.get("/api/trades", headers=HEADERS).json() == []
 
     result = client.post("/api/import", json={"confirm": True, **backup}, headers=HEADERS)
-    assert result.json() == {"trades": 1, "marks": 1}
+    assert result.json() == {"trades": 1, "marks": 1, "options": 0}
     assert client.get("/api/trades", headers=HEADERS).json()[0]["symbol"] == "AAPL"
     assert client.get("/api/marks", headers=HEADERS).json()[0]["price"] == 120
 
@@ -52,3 +52,32 @@ def test_import_rejects_non_curia_json(client):
     resp = client.post("/api/import", json={"confirm": True, "settings": {"theme": "dark"}}, headers=HEADERS)
     assert resp.status_code == 400
     assert client.get("/api/trades", headers=HEADERS).json()[0]["symbol"] == "NVDA"
+
+
+CSP_OPT = {"symbol": "TQQQ", "opt_type": "PUT", "strike": 62.0, "expiration": "2026-07-31",
+           "contracts": 2, "premium": 0.74, "fees": 1.3, "opened_at": "2026-07-24", "note": ""}
+
+
+def test_export_import_round_trip_with_options(client):
+    o = client.post("/api/options", json=CSP_OPT, headers=HEADERS).json()
+    client.post(f"/api/options/{o['id']}/settle",
+                json={"outcome": "ASSIGNED", "closed_at": "2026-07-31"}, headers=HEADERS)
+    backup = client.get("/api/export", headers=HEADERS).json()
+    assert len(backup["options"]) == 1 and len(backup["trades"]) == 1
+
+    client.post("/api/import", json={"confirm": True, "version": 1}, headers=HEADERS)
+    result = client.post("/api/import", json={"confirm": True, **backup}, headers=HEADERS)
+    assert result.json() == {"trades": 1, "marks": 0, "options": 1}
+    restored = client.get("/api/options", headers=HEADERS).json()[0]
+    assert restored["status"] == "ASSIGNED"
+    assert restored["buyback_price"] == 0.0
+    assert restored["assigned_trade_id"] is not None
+
+
+def test_pre_options_backup_still_imports(client):
+    body = {"confirm": True, "version": 1,
+            "trades": [{"symbol": "AAPL", "side": "BUY", "qty": 1, "price": 100,
+                        "fees": 0, "executed_at": "2026-07-01", "note": ""}],
+            "marks": []}
+    assert client.post("/api/import", json=body, headers=HEADERS).status_code == 200
+    assert client.get("/api/options", headers=HEADERS).json() == []

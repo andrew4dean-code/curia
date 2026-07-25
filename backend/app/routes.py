@@ -7,7 +7,7 @@ from sqlalchemy import delete, select
 from app import quotes
 from app.auth import require_key
 from app.db import SessionLocal
-from app.models import Mark, Trade, utcnow
+from app.models import Mark, Option, Trade, utcnow
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_key)])
 
@@ -33,11 +33,48 @@ class MarkRow(BaseModel):
     source: str = Field(default="manual", pattern="^(auto|manual)$")
 
 
+class OptionIn(BaseModel):
+    symbol: str = Field(min_length=1, max_length=12)
+    opt_type: str = Field(pattern="^(CALL|PUT)$")
+    strike: float = Field(ge=0)
+    expiration: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    contracts: int = Field(ge=1)
+    premium: float = Field(ge=0)
+    fees: float = Field(default=0.0, ge=0)
+    opened_at: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    note: str = ""
+
+
+class SettleIn(BaseModel):
+    outcome: str = Field(pattern="^(EXPIRED|BOUGHT_BACK|ASSIGNED)$")
+    closed_at: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    buyback_price: Optional[float] = Field(default=None, ge=0)
+    close_fees: float = Field(default=0.0, ge=0)
+
+
+class OptionRow(BaseModel):
+    symbol: str = Field(min_length=1, max_length=12)
+    opt_type: str = Field(pattern="^(CALL|PUT)$")
+    strike: float = Field(ge=0)
+    expiration: str
+    contracts: int = Field(ge=1)
+    premium: float = Field(ge=0)
+    fees: float = Field(default=0.0, ge=0)
+    opened_at: str
+    note: str = ""
+    status: str = Field(default="OPEN", pattern="^(OPEN|EXPIRED|BOUGHT_BACK|ASSIGNED)$")
+    closed_at: Optional[str] = None
+    buyback_price: float = Field(default=0.0, ge=0)
+    close_fees: float = Field(default=0.0, ge=0)
+    assigned_trade_id: Optional[int] = None
+
+
 class ImportBody(BaseModel):
     confirm: bool = False
     version: int = 0
     trades: list[dict] = []
     marks: list[dict] = []
+    options: list[dict] = []
 
 
 def _trade_out(t: Trade) -> dict:
@@ -49,6 +86,16 @@ def _trade_out(t: Trade) -> dict:
 
 def _mark_out(m: Mark) -> dict:
     return {"symbol": m.symbol, "price": m.price, "marked_at": m.marked_at, "source": m.source}
+
+
+def _option_out(o: Option) -> dict:
+    return {
+        "id": o.id, "symbol": o.symbol, "opt_type": o.opt_type, "strike": o.strike,
+        "expiration": o.expiration, "contracts": o.contracts, "premium": o.premium,
+        "fees": o.fees, "opened_at": o.opened_at, "note": o.note, "status": o.status,
+        "closed_at": o.closed_at, "buyback_price": o.buyback_price,
+        "close_fees": o.close_fees, "assigned_trade_id": o.assigned_trade_id,
+    }
 
 
 @router.get("/trades")
@@ -132,12 +179,88 @@ def refresh_marks() -> list[dict]:
         return [_mark_out(m) for m in s.scalars(select(Mark).order_by(Mark.symbol)).all()]
 
 
+@router.get("/options")
+def list_options() -> list:
+    with SessionLocal() as s:
+        rows = s.scalars(select(Option).order_by(Option.expiration, Option.id)).all()
+        return [_option_out(o) for o in rows]
+
+
+@router.post("/options", status_code=201)
+def create_option(body: OptionIn) -> dict:
+    with SessionLocal() as s:
+        o = Option(**{**body.model_dump(), "symbol": body.symbol.strip().upper()})
+        s.add(o)
+        s.commit()
+        return _option_out(o)
+
+
+@router.put("/options/{option_id}")
+def update_option(option_id: int, body: OptionIn) -> dict:
+    with SessionLocal() as s:
+        o = s.get(Option, option_id)
+        if o is None:
+            raise HTTPException(status_code=404, detail="no such option")
+        if o.status != "OPEN":
+            raise HTTPException(status_code=409, detail="already settled")
+        for k, v in body.model_dump().items():
+            setattr(o, k, v)
+        o.symbol = body.symbol.strip().upper()
+        o.updated_at = utcnow()
+        s.commit()
+        return _option_out(o)
+
+
+@router.delete("/options/{option_id}", status_code=204)
+def delete_option(option_id: int) -> None:
+    with SessionLocal() as s:
+        o = s.get(Option, option_id)
+        if o is None:
+            raise HTTPException(status_code=404, detail="no such option")
+        s.delete(o)
+        s.commit()
+
+
+@router.post("/options/{option_id}/settle")
+def settle_option(option_id: int, body: SettleIn) -> dict:
+    if body.outcome == "BOUGHT_BACK" and body.buyback_price is None:
+        raise HTTPException(status_code=400, detail="bought back needs buyback_price")
+    with SessionLocal() as s:
+        o = s.get(Option, option_id)
+        if o is None:
+            raise HTTPException(status_code=404, detail="no such option")
+        if o.status != "OPEN":
+            raise HTTPException(status_code=409, detail="already settled")
+        closed = body.closed_at or utcnow()[:10]
+        if body.outcome == "ASSIGNED":
+            t = Trade(
+                symbol=o.symbol,
+                side="BUY" if o.opt_type == "PUT" else "SELL",
+                qty=o.contracts * 100.0,
+                price=o.strike,
+                fees=0.0,
+                executed_at=closed,
+                note=f"assigned: {o.symbol} ${o.strike:g} {o.opt_type} exp {o.expiration}",
+            )
+            s.add(t)
+            s.flush()  # id now, still inside the one transaction
+            o.assigned_trade_id = t.id
+        o.status = body.outcome
+        o.closed_at = closed
+        o.buyback_price = body.buyback_price if body.outcome == "BOUGHT_BACK" else 0.0
+        o.close_fees = body.close_fees
+        o.updated_at = utcnow()
+        s.commit()
+        return _option_out(o)
+
+
 @router.get("/export")
 def export_all() -> dict:
     with SessionLocal() as s:
         trades = [_trade_out(t) for t in s.scalars(select(Trade).order_by(Trade.id)).all()]
         marks = [_mark_out(m) for m in s.scalars(select(Mark)).all()]
-        return {"version": 1, "trades": trades, "marks": marks}
+        options = [_option_out(o) for o in s.scalars(select(Option).order_by(Option.id)).all()]
+        return {"version": 1, "trades": trades, "marks": marks, "options": options}
 
 
 @router.post("/import")
@@ -149,6 +272,7 @@ def import_all(body: ImportBody) -> dict:
 
     trades: list[TradeIn] = []
     marks: list[MarkRow] = []
+    option_rows: list[OptionRow] = []
     try:
         for row in body.trades:
             trades.append(TradeIn(**{k: row[k] for k in
@@ -156,12 +280,15 @@ def import_all(body: ImportBody) -> dict:
                                      if k in row}))
         for row in body.marks:
             marks.append(MarkRow(**row))
+        for row in body.options:
+            option_rows.append(OptionRow(**row))
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=f"invalid import data: {e}")
 
     with SessionLocal() as s:
         s.execute(delete(Trade))
         s.execute(delete(Mark))
+        s.execute(delete(Option))
         for data in trades:
             s.add(Trade(**{**data.model_dump(), "symbol": data.symbol.strip().upper()}))
         for row in marks:
@@ -169,5 +296,7 @@ def import_all(body: ImportBody) -> dict:
                        price=row.price,
                        marked_at=row.marked_at or utcnow(),
                        source=row.source))
+        for row in option_rows:
+            s.add(Option(**{**row.model_dump(), "symbol": row.symbol.strip().upper()}))
         s.commit()
-        return {"trades": len(trades), "marks": len(marks)}
+        return {"trades": len(trades), "marks": len(marks), "options": len(option_rows)}
