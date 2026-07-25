@@ -17,6 +17,8 @@ loop you can actually finish:
 4. **Saying how an old trade ended defaults to the day it expired**, not today.
 5. **A heads-up when a backdated record falls outside its wheel**, so premium doesn't silently
    go uncounted.
+6. **The app stops asking for fees.** Andrew doesn't track them; the boxes just add a field to
+   skip past on every entry.
 
 ## Why each piece exists
 
@@ -43,6 +45,9 @@ other trades in that week.
 (`opened_at ≤ record date ≤ closed_at`). Backfill an option dated before its wheel's start and
 the premium simply doesn't count, with nothing on screen saying so.
 
+**(6)** is friction removal, and it compounds with (1): the whole point of this build is making a
+missed week fast to catch up on, and every entry currently carries a field Andrew has no use for.
+
 ## Non-goals
 
 - No separate "backfill mode" or dedicated past-trade screen — past weeks behave like the live
@@ -53,6 +58,8 @@ the premium simply doesn't count, with nothing on screen saying so.
 - No change to how wheel membership itself works — (5) reports the mismatch, it does not
   silently widen a wheel's window.
 - No new date field on the option sell sheet; expiration still comes from the tapped line.
+- Fees are removed from the **forms only** — no schema migration, no removal of `fees` from the
+  API, backups, or the P/L math.
 
 ## Data model — `quiet_weeks` table (backend)
 
@@ -129,6 +136,21 @@ start date. Saving is never prevented; the wheel's start date remains editable w
 is. This applies to **both** `OptionSellSheet` and `AddTradeSheet` — the trap is identical for
 backfilled assigned shares, and it is one helper serving both.
 
+### Fees come off the forms
+
+The three fee inputs are removed: `AddTradeSheet` (`fees`), `OptionSellSheet` (`fees`), and
+`SettleSheet`'s bought-back `close_fees`. Each submits `0` in place of the removed field.
+
+**The `fees` columns and API fields stay.** Removing them would mean a migration, would break
+restore of every existing backup, and would touch `realizedPl`, `premiumCollected`, and
+`optionRealizedPl` — all for a value that is now constant `0` and changes no total. The forms are
+the thing Andrew asked to be rid of; the storage is inert.
+
+One check during implementation: if any stored record already carries a non-zero fee, it would
+keep affecting totals with no way left to see or edit it. Query the existing rows before shipping —
+if any are non-zero, surface them to Andrew rather than silently hiding them. If all are zero
+(expected — he has never tracked fees), nothing more is needed.
+
 ## Testing
 
 Test-first, matching the existing suites.
@@ -148,6 +170,8 @@ import round-trip.
   one stays silent while a date outside both warns.
 - board still buckets a backdated option into the correct week and month score (guards the
   `weekFridayFor` rule the recent fix established).
+- each sheet submits `fees: 0` (and `close_fees: 0`) with no fee input present, and the existing
+  P/L assertions still hold at zero fees.
 
 ## Risks
 
