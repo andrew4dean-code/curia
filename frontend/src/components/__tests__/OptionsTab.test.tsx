@@ -69,4 +69,13 @@ describe('OptionsTab board', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
     expect(screen.getByText('September')).toBeInTheDocument();
   });
+
+  it('does not fake a live week when browsing other months', () => {
+    render(<OptionsTab snap={snapWith([])} {...cbs} onSellWeek={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
+    expect(screen.getByText('September')).toBeInTheDocument();
+    expect(screen.queryByText(/left/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
+    expect(screen.getByText(/left/)).toBeInTheDocument(); // current month's real live week returns
+  });
 });

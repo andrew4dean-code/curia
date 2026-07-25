@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { TabProps } from './PortfolioTab';
 import { fridaysOfMonth, monthScore, weekFridayFor } from '../lib/board';
 import { optionRealizedPl, premiumCollected } from '../lib/optionsMath';
-import { expiryLabel } from '../lib/time';
+import { expiryLabel, nextFriday } from '../lib/time';
 import { formatMoney, formatSignedMoney } from '../lib/format';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -29,7 +29,8 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek }: TabProps) {
     const wk = weekFridayFor(o.expiration);
     byWeek.set(wk, [...(byWeek.get(wk) ?? []), o]);
   }
-  const liveFriday = fridays.find((f) => f >= today);
+  const realLive = nextFriday();
+  const liveFriday = fridays.includes(realLive) ? realLive : undefined;
 
   function shift(delta: number) {
     const d = new Date(year, month - 1 + delta, 1);
