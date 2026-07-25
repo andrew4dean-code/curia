@@ -17,7 +17,7 @@ def test_export_import_round_trip(client):
     assert client.get("/api/trades", headers=HEADERS).json() == []
 
     result = client.post("/api/import", json={"confirm": True, **backup}, headers=HEADERS)
-    assert result.json() == {"trades": 1, "marks": 1, "options": 0}
+    assert result.json() == {"trades": 1, "marks": 1, "options": 0, "wheels": 0}
     assert client.get("/api/trades", headers=HEADERS).json()[0]["symbol"] == "AAPL"
     assert client.get("/api/marks", headers=HEADERS).json()[0]["price"] == 120
 
@@ -67,7 +67,7 @@ def test_export_import_round_trip_with_options(client):
 
     client.post("/api/import", json={"confirm": True, "version": 1}, headers=HEADERS)
     result = client.post("/api/import", json={"confirm": True, **backup}, headers=HEADERS)
-    assert result.json() == {"trades": 1, "marks": 0, "options": 1}
+    assert result.json() == {"trades": 1, "marks": 0, "options": 1, "wheels": 0}
     restored = client.get("/api/options", headers=HEADERS).json()[0]
     assert restored["status"] == "ASSIGNED"
     assert restored["buyback_price"] == 0.0
@@ -117,3 +117,21 @@ def test_import_unknown_assigned_link_becomes_null(client):
                          "assigned_trade_id": 999}]}
     client.post("/api/import", json=body, headers=HEADERS)
     assert client.get("/api/options", headers=HEADERS).json()[0]["assigned_trade_id"] is None
+
+
+def test_export_import_round_trip_with_wheels(client):
+    w = client.post("/api/wheels", json={"symbol": "TQQQ", "opened_at": "2026-07-06"}, headers=HEADERS).json()
+    client.post(f"/api/wheels/{w['id']}/close", json={"closed_at": "2026-07-20"}, headers=HEADERS)
+    backup = client.get("/api/export", headers=HEADERS).json()
+    assert len(backup["wheels"]) == 1
+    client.post("/api/import", json={"confirm": True, "version": 1}, headers=HEADERS)
+    result = client.post("/api/import", json={"confirm": True, **backup}, headers=HEADERS)
+    assert result.json()["wheels"] == 1
+    restored = client.get("/api/wheels", headers=HEADERS).json()[0]
+    assert (restored["symbol"], restored["no"], restored["closed_at"]) == ("TQQQ", 1, "2026-07-20")
+
+
+def test_pre_wheels_backup_still_imports(client):
+    body = {"confirm": True, "version": 1, "trades": [], "marks": [], "options": []}
+    assert client.post("/api/import", json=body, headers=HEADERS).status_code == 200
+    assert client.get("/api/wheels", headers=HEADERS).json() == []

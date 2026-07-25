@@ -53,3 +53,14 @@ class Option(Base):
     assigned_trade_id: Mapped[Optional[int]] = mapped_column(default=None)
     created_at: Mapped[str] = mapped_column(default=utcnow)
     updated_at: Mapped[str] = mapped_column(default=utcnow)
+
+
+class Wheel(Base):
+    __tablename__ = "wheels"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    symbol: Mapped[str]
+    no: Mapped[int]
+    opened_at: Mapped[str]  # YYYY-MM-DD
+    closed_at: Mapped[Optional[str]] = mapped_column(default=None)
+    created_at: Mapped[str] = mapped_column(default=utcnow)
+    updated_at: Mapped[str] = mapped_column(default=utcnow)

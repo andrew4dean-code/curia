@@ -7,7 +7,7 @@ from sqlalchemy import delete, select
 from app import quotes
 from app.auth import require_key
 from app.db import SessionLocal
-from app.models import Mark, Option, Trade, utcnow
+from app.models import Mark, Option, Trade, Wheel, utcnow
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_key)])
 
@@ -69,12 +69,29 @@ class OptionRow(BaseModel):
     assigned_trade_id: Optional[int] = None
 
 
+class WheelIn(BaseModel):
+    symbol: str = Field(min_length=1, max_length=12)
+    opened_at: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
+class WheelCloseIn(BaseModel):
+    closed_at: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
+class WheelRow(BaseModel):
+    symbol: str = Field(min_length=1, max_length=12)
+    no: int = Field(ge=1)
+    opened_at: str
+    closed_at: Optional[str] = None
+
+
 class ImportBody(BaseModel):
     confirm: bool = False
     version: int = 0
     trades: list[dict] = []
     marks: list[dict] = []
     options: list[dict] = []
+    wheels: list[dict] = []
 
 
 def _trade_out(t: Trade) -> dict:
@@ -96,6 +113,11 @@ def _option_out(o: Option) -> dict:
         "closed_at": o.closed_at, "buyback_price": o.buyback_price,
         "close_fees": o.close_fees, "assigned_trade_id": o.assigned_trade_id,
     }
+
+
+def _wheel_out(w: Wheel) -> dict:
+    return {"id": w.id, "symbol": w.symbol, "no": w.no,
+            "opened_at": w.opened_at, "closed_at": w.closed_at}
 
 
 @router.get("/trades")
@@ -254,13 +276,58 @@ def settle_option(option_id: int, body: SettleIn) -> dict:
         return _option_out(o)
 
 
+@router.get("/wheels")
+def list_wheels() -> list:
+    with SessionLocal() as s:
+        return [_wheel_out(w) for w in s.scalars(select(Wheel).order_by(Wheel.symbol, Wheel.no)).all()]
+
+
+@router.post("/wheels", status_code=201)
+def open_wheel(body: WheelIn) -> dict:
+    sym = body.symbol.strip().upper()
+    with SessionLocal() as s:
+        existing = s.scalars(select(Wheel).where(Wheel.symbol == sym)).all()
+        if any(w.closed_at is None for w in existing):
+            raise HTTPException(status_code=409, detail="this symbol already has an open wheel")
+        w = Wheel(symbol=sym, no=len(existing) + 1,
+                  opened_at=body.opened_at or utcnow()[:10])
+        s.add(w)
+        s.commit()
+        return _wheel_out(w)
+
+
+@router.post("/wheels/{wheel_id}/close")
+def close_wheel(wheel_id: int, body: WheelCloseIn) -> dict:
+    with SessionLocal() as s:
+        w = s.get(Wheel, wheel_id)
+        if w is None:
+            raise HTTPException(status_code=404, detail="no such wheel")
+        if w.closed_at is not None:
+            raise HTTPException(status_code=409, detail="already completed")
+        w.closed_at = body.closed_at or utcnow()[:10]
+        w.updated_at = utcnow()
+        s.commit()
+        return _wheel_out(w)
+
+
+@router.delete("/wheels/{wheel_id}", status_code=204)
+def delete_wheel(wheel_id: int) -> None:
+    with SessionLocal() as s:
+        w = s.get(Wheel, wheel_id)
+        if w is None:
+            raise HTTPException(status_code=404, detail="no such wheel")
+        s.delete(w)
+        s.commit()
+
+
 @router.get("/export")
 def export_all() -> dict:
     with SessionLocal() as s:
         trades = [_trade_out(t) for t in s.scalars(select(Trade).order_by(Trade.id)).all()]
         marks = [_mark_out(m) for m in s.scalars(select(Mark)).all()]
         options = [_option_out(o) for o in s.scalars(select(Option).order_by(Option.id)).all()]
-        return {"version": 1, "trades": trades, "marks": marks, "options": options}
+        wheels = [_wheel_out(w) for w in s.scalars(select(Wheel).order_by(Wheel.id)).all()]
+        return {"version": 1, "trades": trades, "marks": marks, "options": options, "wheels": wheels}
 
 
 @router.post("/import")
@@ -273,6 +340,7 @@ def import_all(body: ImportBody) -> dict:
     trades: list[TradeIn] = []
     marks: list[MarkRow] = []
     option_rows: list[OptionRow] = []
+    wheel_rows: list[WheelRow] = []
     old_ids = [row.get("id") for row in body.trades]
     try:
         for row in body.trades:
@@ -283,6 +351,8 @@ def import_all(body: ImportBody) -> dict:
             marks.append(MarkRow(**row))
         for row in body.options:
             option_rows.append(OptionRow(**row))
+        for row in body.wheels:
+            wheel_rows.append(WheelRow(**row))
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=f"invalid import data: {e}")
 
@@ -290,6 +360,7 @@ def import_all(body: ImportBody) -> dict:
         s.execute(delete(Trade))
         s.execute(delete(Mark))
         s.execute(delete(Option))
+        s.execute(delete(Wheel))
         id_map: dict = {}
         for old_id, data in zip(old_ids, trades):
             t = Trade(**{**data.model_dump(), "symbol": data.symbol.strip().upper()})
@@ -306,5 +377,10 @@ def import_all(body: ImportBody) -> dict:
             assigned = id_map.get(row.assigned_trade_id) if row.assigned_trade_id is not None else None
             s.add(Option(**{**row.model_dump(), "symbol": row.symbol.strip().upper(),
                             "assigned_trade_id": assigned}))
+        for row in wheel_rows:
+            s.add(Wheel(symbol=row.symbol.strip().upper(),
+                       no=row.no,
+                       opened_at=row.opened_at,
+                       closed_at=row.closed_at))
         s.commit()
-        return {"trades": len(trades), "marks": len(marks), "options": len(option_rows)}
+        return {"trades": len(trades), "marks": len(marks), "options": len(option_rows), "wheels": len(wheel_rows)}
