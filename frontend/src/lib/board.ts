@@ -38,3 +38,9 @@ export function monthScore(options: OptionPosition[], year: number, month1: numb
   }
   return score;
 }
+
+// A week can be marked quiet once it has begun: this week, or any earlier one.
+// Future weeks haven't had the chance to be quiet yet.
+export function canMarkQuiet(friday: string, today: string): boolean {
+  return friday <= weekFridayFor(today);
+}

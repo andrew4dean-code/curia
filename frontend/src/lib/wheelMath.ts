@@ -111,3 +111,26 @@ export function summarizeWheel(
     weeks,
   };
 }
+
+// Backfilling a record dated outside its wheel's window means the premium or
+// shares silently never count toward it. Report the mismatch; never widen a
+// wheel's window automatically — the window is Andrew's declaration, not ours.
+export function wheelWindowNote(symbol: string, date: string, wheels: Wheel[]): string | null {
+  const sym = symbol.trim().toUpperCase();
+  const mine = wheels.filter((w) => w.symbol === sym);
+  if (mine.length === 0) return null;
+  if (mine.some((w) => inWindow(w, date))) return null;
+
+  const before = mine
+    .filter((w) => date < w.opened_at)
+    .sort((a, b) => a.opened_at.localeCompare(b.opened_at))[0];
+  if (before) {
+    return `This is before your ${sym} wheel started (${before.opened_at}) — it won't count toward it.`;
+  }
+  const after = mine
+    .filter((w) => w.closed_at !== null && w.closed_at < date)
+    .sort((a, b) => (b.closed_at ?? '').localeCompare(a.closed_at ?? ''))[0];
+  return after
+    ? `This is after your ${sym} wheel completed (${after.closed_at}) — it won't count toward it.`
+    : null;
+}

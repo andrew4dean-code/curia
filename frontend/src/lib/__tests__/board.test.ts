@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fridaysOfMonth, monthScore, weekFridayFor } from '../board';
+import { canMarkQuiet, fridaysOfMonth, monthScore, weekFridayFor } from '../board';
 import type { OptionPosition } from '../types';
 
 let nextId = 1;
@@ -67,5 +67,23 @@ describe('monthScore', () => {
     ];
     expect(monthScore(rows, 2026, 7)).toBeCloseTo(146.7);
     expect(monthScore(rows, 2026, 6)).toBe(0);
+  });
+});
+
+describe('canMarkQuiet', () => {
+  // Thu Jul 23 2026 sits in the week of Fri Jul 24.
+  it('allows this week and every week before it', () => {
+    expect(canMarkQuiet('2026-07-24', '2026-07-23')).toBe(true); // this week
+    expect(canMarkQuiet('2026-07-17', '2026-07-23')).toBe(true); // last week
+    expect(canMarkQuiet('2026-06-26', '2026-07-23')).toBe(true); // a month back
+  });
+
+  it('refuses weeks that have not started', () => {
+    expect(canMarkQuiet('2026-07-31', '2026-07-23')).toBe(false);
+    expect(canMarkQuiet('2026-08-07', '2026-07-23')).toBe(false);
+  });
+
+  it('still allows this week when today is its Friday', () => {
+    expect(canMarkQuiet('2026-07-24', '2026-07-24')).toBe(true);
   });
 });

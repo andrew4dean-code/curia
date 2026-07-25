@@ -37,3 +37,10 @@ export function computeOptionStats(options: OptionPosition[]): OptionStats {
     avgTake: totalKept / settled.length,
   };
 }
+
+// An option still OPEN past its expiration is unfinished bookkeeping — the world
+// knows how it ended, this app doesn't yet. Left unsettled it also drags wheel
+// stage, since deriveStage reads any open PUT as SELL_PUT however old it is.
+export function needsSettling(o: OptionPosition, today: string): boolean {
+  return o.status === 'OPEN' && o.expiration < today;
+}

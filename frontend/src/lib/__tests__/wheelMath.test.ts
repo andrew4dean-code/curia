@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { memberOptions, memberTrades, summarizeWheel } from '../wheelMath';
+import { memberOptions, memberTrades, summarizeWheel, wheelWindowNote } from '../wheelMath';
 import type { Mark, OptionPosition, Trade, Wheel } from '../types';
 
 let nextTradeId = 1;
@@ -235,5 +235,46 @@ describe('stage', () => {
     const s = summarizeWheel(fresh, [preWheelTrade], [], []);
     expect(s.sharesHeld).toBe(0);
     expect(s.stage).toBe('SELL_PUT');
+  });
+});
+
+describe('wheelWindowNote', () => {
+  const open = { id: 1, symbol: 'TQQQ', no: 1, opened_at: '2026-07-20', closed_at: null };
+  const done = { id: 2, symbol: 'TQQQ', no: 2, opened_at: '2026-05-01', closed_at: '2026-05-29' };
+
+  it('says nothing when the symbol has no wheel at all', () => {
+    expect(wheelWindowNote('NVDA', '2026-07-18', [open])).toBeNull();
+  });
+
+  it('says nothing when the date sits inside the wheel', () => {
+    expect(wheelWindowNote('TQQQ', '2026-07-22', [open])).toBeNull();
+  });
+
+  it('warns, naming the start date, when the date is before the wheel began', () => {
+    expect(wheelWindowNote('TQQQ', '2026-07-18', [open])).toBe(
+      "This is before your TQQQ wheel started (2026-07-20) — it won't count toward it.",
+    );
+  });
+
+  it('warns, naming the end date, when the date is after a completed wheel', () => {
+    expect(wheelWindowNote('TQQQ', '2026-06-05', [done])).toBe(
+      "This is after your TQQQ wheel completed (2026-05-29) — it won't count toward it.",
+    );
+  });
+
+  it('stays silent when the date is inside any one of several wheels', () => {
+    expect(wheelWindowNote('TQQQ', '2026-05-10', [open, done])).toBeNull();
+  });
+
+  it('warns when the date falls outside every wheel for the symbol', () => {
+    expect(wheelWindowNote('TQQQ', '2026-06-15', [open, done])).toBe(
+      "This is before your TQQQ wheel started (2026-07-20) — it won't count toward it.",
+    );
+  });
+
+  it('matches the symbol case-insensitively so it works mid-typing', () => {
+    expect(wheelWindowNote('tqqq', '2026-07-18', [open])).toBe(
+      "This is before your TQQQ wheel started (2026-07-20) — it won't count toward it.",
+    );
   });
 });

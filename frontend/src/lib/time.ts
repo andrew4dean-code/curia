@@ -28,3 +28,14 @@ export function nextFriday(): string {
   d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7)); // 0 when already Friday
   return localDateString(d);
 }
+
+export function todayIso(): string {
+  return localDateString(new Date());
+}
+
+// An already-expired option almost always ended on its expiration day — expired
+// worthless, or assigned at expiry. Defaulting to today would misdate the stock
+// the backend books on ASSIGNED, and reorder FIFO lots against that week.
+export function settleDateDefault(expiration: string, today: string): string {
+  return expiration < today ? expiration : today;
+}
