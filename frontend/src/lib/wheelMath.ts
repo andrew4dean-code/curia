@@ -1,4 +1,4 @@
-import { computeClosedTrades, sortForFifo } from './fifo';
+import { computeClosedTrades, openLots } from './fifo';
 import { optionRealizedPl, premiumCollected } from './optionsMath';
 import type { Mark, OptionPosition, Trade, Wheel, WheelStage, WheelSummary } from './types';
 
@@ -19,27 +19,6 @@ export function memberOptions(w: Wheel, options: OptionPosition[]): OptionPositi
   return options.filter((o) => o.symbol === w.symbol && inWindow(w, o.opened_at));
 }
 
-interface Lot { qty: number; price: number }
-
-// FIFO over a single symbol's trades, returning whatever lots remain open.
-// Only qty/price are tracked (fees are excluded from basis by design).
-function remainingLots(trades: Trade[]): Lot[] {
-  const lots: Lot[] = [];
-  for (const t of sortForFifo(trades)) {
-    if (t.side === 'BUY') {
-      lots.push({ qty: t.qty, price: t.price });
-      continue;
-    }
-    let q = t.qty;
-    while (q > EPS && lots.length) {
-      const m = Math.min(q, lots[0].qty);
-      q -= m;
-      if (m >= lots[0].qty - EPS) lots.shift();
-      else lots[0].qty -= m;
-    }
-  }
-  return lots;
-}
 
 function sumPremiumBanked(options: OptionPosition[]): number {
   let sum = 0;
@@ -75,7 +54,7 @@ export function summarizeWheel(
   const members = memberTrades(w, trades);
   const memberOpts = memberOptions(w, options);
 
-  const lots = remainingLots(members);
+  const lots = openLots(members);
   const sharesHeld = lots.reduce((s, l) => s + l.qty, 0);
   const rawBasis = sharesHeld > EPS
     ? lots.reduce((s, l) => s + l.qty * l.price, 0) / sharesHeld

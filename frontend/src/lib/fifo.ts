@@ -67,3 +67,28 @@ export function computeClosedTrades(trades: Trade[]): ClosedTrade[] {
   closed.sort((a, b) => a.closedAt.localeCompare(b.closedAt));
   return closed;
 }
+
+export interface OpenLot {
+  qty: number;
+  price: number;
+}
+
+/** FIFO over one symbol's trades: the lots still open after all sells consume
+    from the front. Fees are excluded from lot prices by design (basis rule). */
+export function openLots(trades: Trade[]): OpenLot[] {
+  const lots: OpenLot[] = [];
+  for (const t of sortForFifo(trades)) {
+    if (t.side === 'BUY') {
+      lots.push({ qty: t.qty, price: t.price });
+      continue;
+    }
+    let q = t.qty;
+    while (q > EPS && lots.length) {
+      const m = Math.min(q, lots[0].qty);
+      q -= m;
+      if (m >= lots[0].qty - EPS) lots.shift();
+      else lots[0].qty -= m;
+    }
+  }
+  return lots;
+}
