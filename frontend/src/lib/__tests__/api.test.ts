@@ -5,8 +5,8 @@ describe('cachedSnapshot', () => {
   afterEach(() => localStorage.clear());
 
   it('returns null and clears the entry when the cache is corrupted', () => {
-    localStorage.setItem('curia-cache-v1', '{not json');
+    localStorage.setItem('curia-cache-v2', '{not json');
     expect(cachedSnapshot()).toBeNull();
-    expect(localStorage.getItem('curia-cache-v1')).toBeNull();
+    expect(localStorage.getItem('curia-cache-v2')).toBeNull();
   });
 });

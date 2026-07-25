@@ -53,3 +53,39 @@ export interface Stats {
   worstTradePl: number;
   closedCount: number;
 }
+
+export type OptionType = 'CALL' | 'PUT';
+export type OptionStatus = 'OPEN' | 'EXPIRED' | 'BOUGHT_BACK' | 'ASSIGNED';
+
+export interface OptionPosition {
+  id: number;
+  symbol: string;
+  opt_type: OptionType;
+  strike: number;
+  expiration: string; // YYYY-MM-DD
+  contracts: number;
+  premium: number; // per share
+  fees: number;
+  opened_at: string;
+  note: string;
+  status: OptionStatus;
+  closed_at: string | null;
+  buyback_price: number;
+  close_fees: number;
+  assigned_trade_id: number | null;
+}
+
+export type OptionDraft = Omit<
+  OptionPosition,
+  'id' | 'status' | 'closed_at' | 'buyback_price' | 'close_fees' | 'assigned_trade_id'
+>;
+
+export interface OptionStats {
+  totalKept: number;
+  winRate: number; // percent
+  expiredCount: number;
+  boughtBackCount: number;
+  assignedCount: number;
+  settledCount: number;
+  avgTake: number;
+}

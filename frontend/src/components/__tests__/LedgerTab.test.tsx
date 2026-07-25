@@ -10,6 +10,7 @@ const snap: Snapshot = {
     { id: 3, symbol: 'NVDA', side: 'BUY', qty: 1, price: 500, fees: 0, executed_at: '2026-07-02', note: '' },
   ],
   marks: [],
+  options: [],
   fetchedAt: new Date().toISOString(),
 };
 
@@ -34,7 +35,7 @@ describe('LedgerTab', () => {
 
   it('empty ledger shows the honest empty state', () => {
     render(
-      <LedgerTab snap={{ trades: [], marks: [], fetchedAt: snap.fetchedAt }} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()} />,
+      <LedgerTab snap={{ trades: [], marks: [], options: [], fetchedAt: snap.fetchedAt }} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()} />,
     );
     expect(screen.getByText(/No closed trades yet/)).toBeInTheDocument();
   });
