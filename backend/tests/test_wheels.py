@@ -41,3 +41,13 @@ def test_close_defaults_today(client):
     w = _open(client)
     closed = client.post(f"/api/wheels/{w['id']}/close", json={}, headers=HEADERS).json()
     assert closed["closed_at"] is not None
+
+
+def test_sequence_survives_deleting_an_old_wheel(client):
+    w1 = _open(client)
+    client.post(f"/api/wheels/{w1['id']}/close", json={"closed_at": "2026-07-10"}, headers=HEADERS)
+    w2 = _open(client, opened_at="2026-07-11")
+    client.post(f"/api/wheels/{w2['id']}/close", json={"closed_at": "2026-07-18"}, headers=HEADERS)
+    client.delete(f"/api/wheels/{w1['id']}", headers=HEADERS)
+    w3 = _open(client, opened_at="2026-07-21")
+    assert w3["no"] == 3  # numbering never reuses a surviving wheel's number

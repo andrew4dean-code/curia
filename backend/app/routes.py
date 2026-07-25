@@ -289,7 +289,7 @@ def open_wheel(body: WheelIn) -> dict:
         existing = s.scalars(select(Wheel).where(Wheel.symbol == sym)).all()
         if any(w.closed_at is None for w in existing):
             raise HTTPException(status_code=409, detail="this symbol already has an open wheel")
-        w = Wheel(symbol=sym, no=len(existing) + 1,
+        w = Wheel(symbol=sym, no=max((w.no for w in existing), default=0) + 1,
                   opened_at=body.opened_at or utcnow()[:10])
         s.add(w)
         s.commit()
