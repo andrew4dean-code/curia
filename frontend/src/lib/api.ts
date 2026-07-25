@@ -1,7 +1,7 @@
-import type { Mark, Trade, OptionDraft, OptionPosition, OptionStatus } from './types';
+import type { Mark, Trade, OptionDraft, OptionPosition, OptionStatus, Wheel } from './types';
 
 const KEY_STORAGE = 'curia-passcode';
-const CACHE_STORAGE = 'curia-cache-v2';
+const CACHE_STORAGE = 'curia-cache-v3';
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
@@ -37,16 +37,18 @@ export interface Snapshot {
   trades: Trade[];
   marks: Mark[];
   options: OptionPosition[];
+  wheels: Wheel[];
   fetchedAt: string;
 }
 
 export async function fetchSnapshot(): Promise<Snapshot> {
-  const [trades, marks, options] = await Promise.all([
+  const [trades, marks, options, wheels] = await Promise.all([
     request<Trade[]>('/api/trades'),
     request<Mark[]>('/api/marks'),
     request<OptionPosition[]>('/api/options'),
+    request<Wheel[]>('/api/wheels'),
   ]);
-  const snap: Snapshot = { trades, marks, options, fetchedAt: new Date().toISOString() };
+  const snap: Snapshot = { trades, marks, options, wheels, fetchedAt: new Date().toISOString() };
   localStorage.setItem(CACHE_STORAGE, JSON.stringify(snap));
   return snap;
 }
@@ -91,3 +93,12 @@ export const settleOption = (
   id: number,
   body: { outcome: Exclude<OptionStatus, 'OPEN'>; closed_at?: string; buyback_price?: number; close_fees?: number },
 ) => request<OptionPosition>(`/api/options/${id}/settle`, { method: 'POST', body: JSON.stringify(body) });
+export const openWheel = (symbol: string, opened_at?: string) =>
+  request<Wheel>('/api/wheels', { method: 'POST', body: JSON.stringify({ symbol, ...(opened_at ? { opened_at } : {}) }) });
+export const closeWheel = (id: number, closed_at?: string) =>
+  request<Wheel>(`/api/wheels/${id}/close`, {
+    method: 'POST',
+    body: JSON.stringify(closed_at ? { closed_at } : {}),
+  });
+export const deleteWheel = (id: number) =>
+  request<void>(`/api/wheels/${id}`, { method: 'DELETE' });

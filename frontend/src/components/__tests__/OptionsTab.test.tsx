@@ -11,7 +11,7 @@ const base: OptionPosition = {
 };
 
 function snapWith(options: OptionPosition[]): Snapshot {
-  return { trades: [], marks: [], options, fetchedAt: new Date().toISOString() };
+  return { trades: [], marks: [], options, wheels: [], fetchedAt: new Date().toISOString() };
 }
 
 const cbs = {

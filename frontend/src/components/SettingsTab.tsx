@@ -19,7 +19,7 @@ export function SettingsTab({ onRefresh }: TabProps) {
     }
     setUpdateError('');
     setBusy(true);
-    localStorage.removeItem('curia-cache-v2');
+    localStorage.removeItem('curia-cache-v3');
     try {
       if ('serviceWorker' in navigator) {
         const regs = await navigator.serviceWorker.getRegistrations();

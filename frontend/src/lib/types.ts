@@ -89,3 +89,26 @@ export interface OptionStats {
   settledCount: number;
   avgTake: number;
 }
+
+export interface Wheel {
+  id: number;
+  symbol: string;
+  no: number;
+  opened_at: string; // YYYY-MM-DD
+  closed_at: string | null; // YYYY-MM-DD
+}
+
+export type WheelStage = 'SELL_PUT' | 'ASSIGNED' | 'SELLING_CALLS' | 'CALLED_AWAY' | 'COMPLETED';
+
+export interface WheelSummary {
+  wheel: Wheel;
+  stage: WheelStage;
+  sharesHeld: number;
+  rawBasis: number | null;
+  premiumBanked: number;
+  trueBasis: number | null;
+  closeToday: number;
+  markMissing: boolean;
+  callsSold: number;
+  weeks: number;
+}

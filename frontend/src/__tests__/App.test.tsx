@@ -18,14 +18,14 @@ describe('App re-lock', () => {
 });
 
 describe('App landing timer race', () => {
-  const emptySnapshot = { trades: [], marks: [], options: [], fetchedAt: '2026-01-01T00:00:00.000Z' };
+  const emptySnapshot = { trades: [], marks: [], options: [], wheels: [], fetchedAt: '2026-01-01T00:00:00.000Z' };
 
   function stubApi() {
     let nextId = 1;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString();
       const method = init?.method ?? 'GET';
-      if (method === 'GET' && (url === '/api/trades' || url === '/api/marks' || url === '/api/options')) {
+      if (method === 'GET' && (url === '/api/trades' || url === '/api/marks' || url === '/api/options' || url === '/api/wheels')) {
         return new Response('[]', { status: 200 });
       }
       if (method === 'POST' && url === '/api/marks/refresh') {
@@ -66,7 +66,7 @@ describe('App landing timer race', () => {
 
   beforeEach(() => {
     localStorage.setItem('curia-passcode', 'test-key');
-    localStorage.setItem('curia-cache-v2', JSON.stringify(emptySnapshot));
+    localStorage.setItem('curia-cache-v3', JSON.stringify(emptySnapshot));
   });
 
   afterEach(() => {
