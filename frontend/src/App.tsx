@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import './styles/app.css';
 import { ApiError, cachedSnapshot, clearPasscode, fetchSnapshot, getPasscode, refreshMarks } from './lib/api';
 import type { Snapshot } from './lib/api';
@@ -31,6 +31,16 @@ export default function App() {
   const [ceremony, setCeremony] = useState<TicketData | null>(null);
   const [justAdded, setJustAdded] = useState<{ kind: 'trade' | 'option'; id: number; symbol: string } | null>(null);
   const [landing, setLanding] = useState(false);
+  const landingTimer = useRef<number | null>(null);
+
+  const clearLandingTimer = useCallback(() => {
+    if (landingTimer.current !== null) {
+      window.clearTimeout(landingTimer.current);
+      landingTimer.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearLandingTimer, [clearLandingTimer]);
 
   const refresh = useCallback(async () => {
     try {
@@ -78,6 +88,11 @@ export default function App() {
   const onTicket = async (ticket: TicketData) => {
     setSheet(null);
     setJustAdded({ kind: ticket.title === 'OPTION TICKET' ? 'option' : 'trade', id: ticket.no, symbol: ticket.symbol });
+    // A new ceremony is starting: any pending landing-reset timer from a prior
+    // ceremony is now stale (it would clear this ceremony's landing/justAdded
+    // mid-animation), so drop it and start the new landing clean.
+    clearLandingTimer();
+    setLanding(false);
     setCeremony(ticket);
   };
   const onDeleted = async () => { setSheet(null); await refresh(); };
@@ -110,7 +125,8 @@ export default function App() {
             setCeremony(null);
             setLanding(true);
             void refresh().then(() => {
-              window.setTimeout(() => {
+              landingTimer.current = window.setTimeout(() => {
+                landingTimer.current = null;
                 setLanding(false);
                 setJustAdded(null);
               }, 3000);

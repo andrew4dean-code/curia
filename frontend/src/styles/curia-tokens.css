@@ -40,13 +40,6 @@
 .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--pl-green); animation: pulse 1.5s ease-in-out infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(.65); } }
 
-@media (prefers-reduced-motion: reduce) {
-  .odo-strip { transition: none; }
-  .ticker-track { animation: none; }
-  .live-dot { animation: none; }
-  .flash-up, .flash-dn { animation: none; }
-}
-
 .doctrine { padding: 16px; background: var(--parchment); color: var(--ink); min-height: 100%; }
 .doctrine h2 { font-family: var(--font-display); color: var(--ink); margin: 0 0 12px; }
 .doctrine h3 { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .08em;
