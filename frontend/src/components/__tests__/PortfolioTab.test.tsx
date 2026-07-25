@@ -11,6 +11,7 @@ const snap: Snapshot = {
   marks: [{ symbol: 'AAPL', price: 120, marked_at: new Date().toISOString(), source: 'auto' as const }],
   options: [],
   wheels: [],
+  quietWeeks: [],
   fetchedAt: new Date().toISOString(),
 };
 
@@ -31,7 +32,7 @@ describe('PortfolioTab', () => {
 
   it('empty state invites the first trade', () => {
     render(
-      <PortfolioTab snap={{ trades: [], marks: [], options: [], wheels: [], fetchedAt: snap.fetchedAt }} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()}
+      <PortfolioTab snap={{ trades: [], marks: [], options: [], wheels: [], quietWeeks: [], fetchedAt: snap.fetchedAt }} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()}
                      onSettleOption={vi.fn()} onEditOption={vi.fn()} />,
     );
     expect(screen.getByText(/No open positions/)).toBeInTheDocument();
