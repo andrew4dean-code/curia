@@ -48,8 +48,9 @@ with `opened_at ≤ option.opened_at (≤ closed_at)`. Derived, for active wheel
 - `callsSold`: count of member CALL options. `weeks`: whole weeks since `opened_at` (≥ 1).
 - `stage` for the dial: no shares & an open member PUT → `SELL_PUT`; shares > 0 & no open member
   CALL → `ASSIGNED` (holding); shares > 0 & open member CALL → `SELLING_CALLS`; no shares & no
-  open options & wheel still open → `CALLED_AWAY` (awaiting completion); closed wheel →
-  `COMPLETED`.
+  open options & wheel still open → `CALLED_AWAY` **only when the wheel has member history** —
+  a freshly opened wheel with zero member trades and options sits at `SELL_PUT` (the start of
+  the cycle, discovered in visual testing); closed wheel → `COMPLETED`.
 - Completed wheel total: realized share P/L from member closed trades (fee-inclusive FIFO)
   + `premiumBanked` (all member options are settled by then; open ones count collected).
 

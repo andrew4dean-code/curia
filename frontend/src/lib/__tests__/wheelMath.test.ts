@@ -227,4 +227,13 @@ describe('stage', () => {
     expect(s.closeToday).toBeCloseTo(676);
     expect(s.markMissing).toBe(false);
   });
+
+  it('a fresh wheel with no member records starts at SELL_PUT, not CALLED_AWAY', () => {
+    const fresh = { id: 40, symbol: 'NVDA', no: 1, opened_at: '2026-07-25', closed_at: null };
+    // shares bought BEFORE the wheel opened are not members; nothing else exists
+    const preWheelTrade = t({ symbol: 'NVDA', side: 'BUY', qty: 10, price: 180, executed_at: '2026-07-01' });
+    const s = summarizeWheel(fresh, [preWheelTrade], [], []);
+    expect(s.sharesHeld).toBe(0);
+    expect(s.stage).toBe('SELL_PUT');
+  });
 });

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import './styles/app.css';
 import { ApiError, cachedSnapshot, clearPasscode, fetchSnapshot, getPasscode, refreshMarks } from './lib/api';
 import type { Snapshot } from './lib/api';
-import type { OptionPosition, Trade } from './lib/types';
+import type { OptionPosition, Trade, Wheel, WheelSummary } from './lib/types';
 import { PasscodeGate } from './components/PasscodeGate';
 import { TabBar } from './components/TabBar';
 import type { TabId } from './components/TabBar';
@@ -16,6 +16,11 @@ import { OptionSellSheet } from './components/OptionSellSheet';
 import { MarkSheet } from './components/MarkSheet';
 import { SettleSheet } from './components/SettleSheet';
 import { OptionRecordSheet } from './components/OptionRecordSheet';
+import { CompleteWheelSheet, FreshWheelSheet, WheelRecordSheet } from './components/WheelSheets';
+import { WheelCeremony } from './components/WheelCeremony';
+import type { WheelCeremonyData } from './components/WheelCeremony';
+import { summarizeWheel } from './lib/wheelMath';
+import { deleteWheel } from './lib/api';
 import { TradeCeremony } from './components/TradeCeremony';
 import type { TicketData } from './components/TradeCeremony';
 
@@ -26,6 +31,9 @@ type Sheet =
   | { kind: 'mark'; symbol: string }
   | { kind: 'settle'; option: OptionPosition }
   | { kind: 'record'; option: OptionPosition }
+  | { kind: 'freshWheel' }
+  | { kind: 'completeWheel'; summary: WheelSummary }
+  | { kind: 'wheelRecord'; wheel: Wheel }
   | null;
 
 export default function App() {
@@ -35,6 +43,7 @@ export default function App() {
   const [tab, setTab] = useState<TabId>('portfolio');
   const [sheet, setSheet] = useState<Sheet>(null);
   const [ceremony, setCeremony] = useState<TicketData | null>(null);
+  const [wheelCeremony, setWheelCeremony] = useState<WheelCeremonyData | null>(null);
   const [justAdded, setJustAdded] = useState<{ kind: 'trade' | 'option'; id: number; symbol: string } | null>(null);
   const [landing, setLanding] = useState(false);
   const landingTimer = useRef<number | null>(null);
@@ -90,6 +99,14 @@ export default function App() {
     onEditOption: (option: OptionPosition) => setSheet({ kind: 'optionEdit', option }),
     onSellWeek: (expiration: string) => setSheet({ kind: 'sellOption', expiration }),
     onViewRecord: (option: OptionPosition) => setSheet({ kind: 'record', option }),
+    onFreshWheel: () => setSheet({ kind: 'freshWheel' }),
+    onCompleteWheel: (summary: WheelSummary) => setSheet({ kind: 'completeWheel', summary }),
+    onAbandonWheel: (wheel: Wheel) => {
+      if (window.confirm(`Abandon ${wheel.symbol} Wheel Nº ${wheel.no}? Trades and options stay.`)) {
+        void deleteWheel(wheel.id).then(() => refresh());
+      }
+    },
+    onViewWheelRecord: (wheel: Wheel) => setSheet({ kind: 'wheelRecord', wheel }),
     justAdded,
   };
 
@@ -127,6 +144,43 @@ export default function App() {
       )}
       {sheet?.kind === 'record' && (
         <OptionRecordSheet option={sheet.option} onDone={async () => { setSheet(null); await refresh(); }} onCancel={() => setSheet(null)} />
+      )}
+      {sheet?.kind === 'freshWheel' && (
+        <FreshWheelSheet
+          suggestions={[...new Set([...snap!.trades.map((t) => t.symbol), ...snap!.options.map((o) => o.symbol)])]
+            .filter((sym) => !snap!.wheels.some((w) => w.symbol === sym && w.closed_at === null))
+            .slice(0, 3)}
+          onDone={async (c) => { setSheet(null); setWheelCeremony(c); }}
+          onCancel={() => setSheet(null)}
+        />
+      )}
+      {sheet?.kind === 'completeWheel' && (
+        <CompleteWheelSheet
+          summary={sheet.summary}
+          onDone={async (c) => { setSheet(null); setWheelCeremony(c); }}
+          onCancel={() => setSheet(null)}
+        />
+      )}
+      {sheet?.kind === 'wheelRecord' && (() => {
+        const ws = summarizeWheel(sheet.wheel, snap!.trades, snap!.options, snap!.marks);
+        return (
+          <WheelRecordSheet
+            wheel={sheet.wheel}
+            finalTotal={ws.closeToday}
+            detailLine={`${sheet.wheel.opened_at} → ${sheet.wheel.closed_at ?? ''} · ${ws.weeks}w · ${ws.callsSold} calls sold`}
+            onDone={async () => { setSheet(null); await refresh(); }}
+            onCancel={() => setSheet(null)}
+          />
+        );
+      })()}
+      {wheelCeremony && (
+        <WheelCeremony
+          data={wheelCeremony}
+          onDone={() => {
+            setWheelCeremony(null);
+            void refresh();
+          }}
+        />
       )}
       {sheet?.kind === 'sellOption' && (
         <OptionSellSheet expiration={sheet.expiration} onDone={onTicket} onCancel={() => setSheet(null)} />

@@ -37,11 +37,22 @@ function weeksSince(openedAt: string, today: Date): number {
   return Math.max(1, Math.ceil(days / 7));
 }
 
-function deriveStage(w: Wheel, sharesHeld: number, memberOpts: OptionPosition[]): WheelStage {
+function deriveStage(
+  w: Wheel,
+  sharesHeld: number,
+  memberTradeCount: number,
+  memberOpts: OptionPosition[],
+): WheelStage {
   if (w.closed_at !== null) return 'COMPLETED';
   const hasOpenPut = memberOpts.some((o) => o.opt_type === 'PUT' && o.status === 'OPEN');
   const hasOpenCall = memberOpts.some((o) => o.opt_type === 'CALL' && o.status === 'OPEN');
-  if (sharesHeld <= EPS) return hasOpenPut ? 'SELL_PUT' : 'CALLED_AWAY';
+  if (sharesHeld <= EPS) {
+    if (hasOpenPut) return 'SELL_PUT';
+    // A wheel with no member history hasn't ridden the cycle — it's at the start,
+    // not called away. Called-away means the campaign actually happened.
+    if (memberTradeCount === 0 && memberOpts.length === 0) return 'SELL_PUT';
+    return 'CALLED_AWAY';
+  }
   return hasOpenCall ? 'SELLING_CALLS' : 'ASSIGNED';
 }
 
@@ -67,7 +78,7 @@ export function summarizeWheel(
 
   const callsSold = memberOpts.filter((o) => o.opt_type === 'CALL').length;
   const weeks = weeksSince(w.opened_at, new Date());
-  const stage = deriveStage(w, sharesHeld, memberOpts);
+  const stage = deriveStage(w, sharesHeld, members.length, memberOpts);
 
   let closeToday: number;
   let markMissing = false;
