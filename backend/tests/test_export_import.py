@@ -84,24 +84,31 @@ def test_pre_options_backup_still_imports(client):
 
 
 def test_import_remaps_assigned_trade_id(client):
-    # burn a trade id so original ids don't start at 1
+    # Burn a trade id, but keep it ALIVE while the option settles so the booked
+    # trade lands on id 2 (not 1). Only delete the burn trade after settlement,
+    # so on restore the sole re-inserted trade lands on id 1. This keeps old != new
+    # even under SQLite's rowid-reuse-on-empty-table behavior (deleting-then-emptying
+    # the table before the assignment would let both ids coincidentally land on 1).
     burn = client.post("/api/trades", json={"symbol": "ZZZ", "side": "BUY", "qty": 1, "price": 1,
                                             "fees": 0, "executed_at": "2026-07-01", "note": ""},
                        headers=HEADERS).json()
-    client.delete(f"/api/trades/{burn['id']}", headers=HEADERS)
 
     o = client.post("/api/options", json=CSP_OPT, headers=HEADERS).json()
     client.post(f"/api/options/{o['id']}/settle",
                 json={"outcome": "ASSIGNED", "closed_at": "2026-07-31"}, headers=HEADERS)
+
+    client.delete(f"/api/trades/{burn['id']}", headers=HEADERS)
+
     backup = client.get("/api/export", headers=HEADERS).json()
     old_link = backup["options"][0]["assigned_trade_id"]
-    assert old_link == backup["trades"][0]["id"]
+    assert old_link == backup["trades"][0]["id"] == 2  # booked trade landed on id 2
 
     client.post("/api/import", json={"confirm": True, "version": 1}, headers=HEADERS)
     client.post("/api/import", json={"confirm": True, **backup}, headers=HEADERS)
     new_trade = client.get("/api/trades", headers=HEADERS).json()[0]
+    assert new_trade["id"] == 1  # sole restored trade lands on id 1, not 2
     new_opt = client.get("/api/options", headers=HEADERS).json()[0]
-    assert new_opt["assigned_trade_id"] == new_trade["id"]  # remapped, not copied
+    assert new_opt["assigned_trade_id"] == new_trade["id"]  # remapped, not copied verbatim
 
 
 def test_import_unknown_assigned_link_becomes_null(client):
