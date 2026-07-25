@@ -1,7 +1,7 @@
 # Curia (v2)
 
 Manual trade tracker PWA. You enter trades; Curia shows open positions and an
-honest ledger. Frontend: React/Vite PWA (all money math client-side, tested).
+honest ledger — plus weekly sold-options tracking (premium, expire/buyback/assign with auto-booked shares) and a letterpress trade ceremony on every submit. Frontend: React/Vite PWA (all money math client-side, tested).
 Backend: dumb FastAPI store + passcode, Railway Postgres. Spec + plan in
 `docs/superpowers/`.
 
