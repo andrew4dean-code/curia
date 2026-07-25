@@ -1,20 +1,25 @@
 import type { Snapshot } from '../lib/api';
-import type { Trade } from '../lib/types';
+import type { OptionPosition, Trade } from '../lib/types';
 import { computeOpenPositions } from '../lib/positions';
 import { Odometer } from './Odometer';
 import { TickerTape } from './TickerTape';
 import { useFlash } from '../hooks/useFlash';
 import { formatMoney, formatSignedMoney, formatSignedPct, plColor } from '../lib/format';
-import { agoLabel } from '../lib/time';
+import { agoLabel, daysUntil, expiryLabel } from '../lib/time';
+import { premiumCollected } from '../lib/optionsMath';
 
 export interface TabProps {
   snap: Snapshot;
   onRefresh: () => Promise<void>;
   onEditTrade: (t: Trade | null) => void;
   onMark: (symbol: string) => void;
+  onSettleOption: (o: OptionPosition) => void;
+  onEditOption: (o: OptionPosition) => void;
 }
 
-export function PortfolioTab({ snap, onMark }: TabProps) {
+const rowButtonStyle = { width: '100%', background: 'none', border: 'none', borderBottom: '1px solid var(--rule)', textAlign: 'left', font: 'inherit', color: 'inherit' } as const;
+
+export function PortfolioTab({ snap, onMark, onSettleOption }: TabProps) {
   const positions = computeOpenPositions(snap.trades, snap.marks);
   const bookValue = positions.reduce(
     (s, p) => s + (p.marketValue ?? p.qty * p.avgCost),
@@ -22,6 +27,7 @@ export function PortfolioTab({ snap, onMark }: TabProps) {
   );
   const unrealized = positions.reduce((s, p) => s + (p.unrealizedPl ?? 0), 0);
   const flash = useFlash(bookValue);
+  const openOptions = snap.options.filter((o) => o.status === 'OPEN');
 
   return (
     <div>
@@ -48,7 +54,7 @@ export function PortfolioTab({ snap, onMark }: TabProps) {
         <button
           key={p.symbol}
           className="row"
-          style={{ width: '100%', background: 'none', border: 'none', borderBottom: '1px solid var(--rule)', textAlign: 'left', font: 'inherit', color: 'inherit' }}
+          style={rowButtonStyle}
           onClick={() => onMark(p.symbol)}
         >
           <div className="row-main">
@@ -70,6 +76,25 @@ export function PortfolioTab({ snap, onMark }: TabProps) {
           </div>
         </button>
       ))}
+      {openOptions.length > 0 && (
+        <>
+          <h2 className="section-title">Open Options</h2>
+          {openOptions.map((o) => (
+            <button key={o.id} className="row" style={rowButtonStyle} onClick={() => onSettleOption(o)}>
+              <div className="row-main">
+                <div className="row-sym">
+                  {o.symbol} ${o.strike} {o.opt_type}
+                </div>
+                <div className="row-sub">
+                  {o.contracts}x · exp{' '}
+                  <span className={`chip${daysUntil(o.expiration) <= 1 ? ' hot' : ''}`}>{expiryLabel(o.expiration)}</span>
+                  {' '}· {formatMoney(premiumCollected(o))} collected
+                </div>
+              </div>
+            </button>
+          ))}
+        </>
+      )}
     </div>
   );
 }

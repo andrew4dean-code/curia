@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import './styles/app.css';
 import { ApiError, cachedSnapshot, clearPasscode, fetchSnapshot, getPasscode, refreshMarks } from './lib/api';
 import type { Snapshot } from './lib/api';
-import type { Trade } from './lib/types';
+import type { OptionPosition, Trade } from './lib/types';
 import { PasscodeGate } from './components/PasscodeGate';
 import { TabBar } from './components/TabBar';
 import type { TabId } from './components/TabBar';
@@ -11,13 +11,21 @@ import { PortfolioTab } from './components/PortfolioTab';
 import { LedgerTab } from './components/LedgerTab';
 import { AddTradeSheet } from './components/AddTradeSheet';
 import { MarkSheet } from './components/MarkSheet';
+import { SettleSheet } from './components/SettleSheet';
+
+type Sheet =
+  | { kind: 'trade'; trade: Trade | null }
+  | { kind: 'optionEdit'; option: OptionPosition }
+  | { kind: 'mark'; symbol: string }
+  | { kind: 'settle'; option: OptionPosition }
+  | null;
 
 export default function App() {
   const [snap, setSnap] = useState<Snapshot | null>(() => (getPasscode() ? cachedSnapshot() : null));
   const [unlocked, setUnlocked] = useState(() => !!getPasscode());
   const [offline, setOffline] = useState(false);
   const [tab, setTab] = useState<TabId>('portfolio');
-  const [sheet, setSheet] = useState<{ kind: 'trade'; trade: Trade | null } | { kind: 'mark'; symbol: string } | null>(null);
+  const [sheet, setSheet] = useState<Sheet>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -57,6 +65,8 @@ export default function App() {
     onRefresh: refresh,
     onEditTrade: (trade: Trade | null) => setSheet({ kind: 'trade', trade }),
     onMark: (symbol: string) => setSheet({ kind: 'mark', symbol }),
+    onSettleOption: (option: OptionPosition) => setSheet({ kind: 'settle', option }),
+    onEditOption: (option: OptionPosition) => setSheet({ kind: 'optionEdit', option }),
   };
 
   return (
@@ -71,8 +81,14 @@ export default function App() {
       {sheet?.kind === 'trade' && (
         <AddTradeSheet trade={sheet.trade} onDone={async () => { setSheet(null); await refresh(); }} onCancel={() => setSheet(null)} />
       )}
+      {sheet?.kind === 'optionEdit' && (
+        <AddTradeSheet trade={null} option={sheet.option} onDone={async () => { setSheet(null); await refresh(); }} onCancel={() => setSheet(null)} />
+      )}
       {sheet?.kind === 'mark' && (
         <MarkSheet symbol={sheet.symbol} onDone={async () => { setSheet(null); await refresh(); }} onCancel={() => setSheet(null)} />
+      )}
+      {sheet?.kind === 'settle' && (
+        <SettleSheet option={sheet.option} onDone={async () => { setSheet(null); await refresh(); }} onEdit={() => setSheet({ kind: 'optionEdit', option: sheet.option })} onCancel={() => setSheet(null)} />
       )}
       <TabBar active={tab} onChange={setTab} />
     </div>

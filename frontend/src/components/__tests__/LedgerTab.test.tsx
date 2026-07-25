@@ -16,7 +16,7 @@ const snap: Snapshot = {
 
 describe('LedgerTab', () => {
   it('shows closed trades and stats', () => {
-    render(<LedgerTab snap={snap} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()} />);
+    render(<LedgerTab snap={snap} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()} onSettleOption={vi.fn()} onEditOption={vi.fn()} />);
     // +$100.00 appears in the trade row AND several stat tiles → getAllByText
     expect(screen.getAllByText(/\+\$100\.00/).length).toBeGreaterThan(0);
     expect(screen.getByText('Win rate')).toBeInTheDocument();
@@ -25,7 +25,7 @@ describe('LedgerTab', () => {
 
   it('all-entries view lists raw trades and edit fires onEditTrade', () => {
     const onEdit = vi.fn();
-    render(<LedgerTab snap={snap} onRefresh={vi.fn()} onEditTrade={onEdit} onMark={vi.fn()} />);
+    render(<LedgerTab snap={snap} onRefresh={vi.fn()} onEditTrade={onEdit} onMark={vi.fn()} onSettleOption={vi.fn()} onEditOption={vi.fn()} />);
     fireEvent.click(screen.getByText(/All entries/));
     // the still-open NVDA buy only exists in the raw entries list
     expect(screen.getByText(/NVDA/)).toBeInTheDocument();
@@ -35,13 +35,13 @@ describe('LedgerTab', () => {
 
   it('empty ledger shows the honest empty state', () => {
     render(
-      <LedgerTab snap={{ trades: [], marks: [], options: [], fetchedAt: snap.fetchedAt }} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()} />,
+      <LedgerTab snap={{ trades: [], marks: [], options: [], fetchedAt: snap.fetchedAt }} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()} onSettleOption={vi.fn()} onEditOption={vi.fn()} />,
     );
     expect(screen.getByText(/No closed trades yet/)).toBeInTheDocument();
   });
 
   it('shows an error instead of failing silently on a bad backup file', async () => {
-    render(<LedgerTab snap={snap} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()} />);
+    render(<LedgerTab snap={snap} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()} onSettleOption={vi.fn()} onEditOption={vi.fn()} />);
     fireEvent.click(screen.getByText(/All entries/));
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     const bad = new File(['not json {'], 'backup.json', { type: 'application/json' });

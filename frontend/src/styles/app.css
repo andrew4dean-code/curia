@@ -33,3 +33,12 @@
 .link-row { text-align: center; margin: 18px 0; }
 .link-row button { background: none; border: none; color: var(--maroon); text-decoration: underline; font-family: var(--font-mono); font-size: 13px; }
 .empty { text-align: center; color: var(--ink-soft); padding: 40px 0; font-style: italic; }
+.segmented { display: flex; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+.segmented button { flex: 1; padding: 10px; background: var(--parchment); border: none; font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--ink-soft); }
+.segmented button.active { background: var(--maroon); color: var(--parchment); }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--rule); font-size: 11px; }
+.chip.hot { border-color: var(--maroon); color: var(--maroon); font-weight: 700; }
+.outcomes { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.outcomes button { text-align: left; padding: 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--parchment); font-family: var(--font-mono); font-size: 14px; color: var(--ink); }
+.outcomes button.active { border-color: var(--maroon); box-shadow: inset 0 0 0 1px var(--maroon); }
+.books-preview { text-align: center; color: var(--gold-label); font-size: 13px; margin: 8px 0; }
