@@ -1,13 +1,13 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import delete, select
 
 from app import quotes
 from app.auth import require_key
 from app.db import SessionLocal
-from app.models import Mark, Option, Trade, Wheel, utcnow
+from app.models import Mark, Option, QuietWeek, Trade, Wheel, utcnow
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_key)])
 
@@ -85,6 +85,10 @@ class WheelRow(BaseModel):
     closed_at: Optional[str] = None
 
 
+class QuietWeekIn(BaseModel):
+    friday: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
 class ImportBody(BaseModel):
     confirm: bool = False
     version: int = 0
@@ -92,6 +96,7 @@ class ImportBody(BaseModel):
     marks: list[dict] = []
     options: list[dict] = []
     wheels: list[dict] = []
+    quiet_weeks: list[str] = []
 
 
 def _trade_out(t: Trade) -> dict:
@@ -320,6 +325,33 @@ def delete_wheel(wheel_id: int) -> None:
         s.commit()
 
 
+@router.get("/quiet-weeks")
+def list_quiet_weeks() -> list:
+    with SessionLocal() as s:
+        return [q.friday for q in s.scalars(select(QuietWeek).order_by(QuietWeek.friday)).all()]
+
+
+@router.post("/quiet-weeks")
+def mark_quiet_week(body: QuietWeekIn, response: Response) -> dict:
+    with SessionLocal() as s:
+        if s.get(QuietWeek, body.friday) is not None:
+            return {"friday": body.friday}  # already marked; re-marking is not an error
+        s.add(QuietWeek(friday=body.friday))
+        s.commit()
+    response.status_code = 201
+    return {"friday": body.friday}
+
+
+@router.delete("/quiet-weeks/{friday}", status_code=204)
+def clear_quiet_week(friday: str) -> None:
+    with SessionLocal() as s:
+        q = s.get(QuietWeek, friday)
+        if q is None:
+            raise HTTPException(status_code=404, detail="week is not marked")
+        s.delete(q)
+        s.commit()
+
+
 @router.get("/export")
 def export_all() -> dict:
     with SessionLocal() as s:
@@ -327,7 +359,9 @@ def export_all() -> dict:
         marks = [_mark_out(m) for m in s.scalars(select(Mark)).all()]
         options = [_option_out(o) for o in s.scalars(select(Option).order_by(Option.id)).all()]
         wheels = [_wheel_out(w) for w in s.scalars(select(Wheel).order_by(Wheel.id)).all()]
-        return {"version": 1, "trades": trades, "marks": marks, "options": options, "wheels": wheels}
+        quiet = [q.friday for q in s.scalars(select(QuietWeek).order_by(QuietWeek.friday)).all()]
+        return {"version": 1, "trades": trades, "marks": marks, "options": options,
+                "wheels": wheels, "quiet_weeks": quiet}
 
 
 @router.post("/import")
@@ -341,6 +375,7 @@ def import_all(body: ImportBody) -> dict:
     marks: list[MarkRow] = []
     option_rows: list[OptionRow] = []
     wheel_rows: list[WheelRow] = []
+    quiet_rows: list = []
     old_ids = [row.get("id") for row in body.trades]
     try:
         for row in body.trades:
@@ -353,6 +388,8 @@ def import_all(body: ImportBody) -> dict:
             option_rows.append(OptionRow(**row))
         for row in body.wheels:
             wheel_rows.append(WheelRow(**row))
+        for row in body.quiet_weeks:
+            quiet_rows.append(QuietWeekIn(friday=row).friday)
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=f"invalid import data: {e}")
 
@@ -361,6 +398,7 @@ def import_all(body: ImportBody) -> dict:
         s.execute(delete(Mark))
         s.execute(delete(Option))
         s.execute(delete(Wheel))
+        s.execute(delete(QuietWeek))
         id_map: dict = {}
         for old_id, data in zip(old_ids, trades):
             t = Trade(**{**data.model_dump(), "symbol": data.symbol.strip().upper()})
@@ -382,5 +420,8 @@ def import_all(body: ImportBody) -> dict:
                        no=row.no,
                        opened_at=row.opened_at,
                        closed_at=row.closed_at))
+        for friday in quiet_rows:
+            s.add(QuietWeek(friday=friday))
         s.commit()
-        return {"trades": len(trades), "marks": len(marks), "options": len(option_rows), "wheels": len(wheel_rows)}
+        return {"trades": len(trades), "marks": len(marks), "options": len(option_rows),
+                "wheels": len(wheel_rows), "quiet_weeks": len(quiet_rows)}
