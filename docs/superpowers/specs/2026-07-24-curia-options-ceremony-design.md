@@ -103,11 +103,14 @@ keyframes (no dependencies), used for stock and option submissions alike:
 3. **envelope** (~0.8s): an envelope wraps it, flap closes, seal presses onto the flap.
 4. **ship** (~0.9s): lifts, tilts ~8°, sails off the top edge with a soft shadow shrink.
 5. **stamp-in**: overlay unmounts, data refreshes, and the new row appears with a letterpress
-   stamp-in (scale 1.06 → 1, ink-dark → normal) plus the existing amber flash; odometer rolls.
+   stamp-in (scale 1.06 → 1, ink-dark → normal) plus the existing amber flash — and the
+   **numbers roll slowly** as they adjust: for ~3s after landing, the odometers run at a
+   stretched "ceremony roll" duration (~2.2s hero / ~2.6s detail, same easing) so the book
+   value luxuriously winds to its new total, then durations return to normal.
 
-Rules: total ≈ 4.2s · **tap anywhere skips** straight to stamp-in · `prefers-reduced-motion`
-skips the overlay entirely · failures still surface in the sheet (ceremony only plays after the
-server accepted the trade).
+Rules: total ≈ 4.2s · **tap anywhere skips** straight to stamp-in · no reduced-motion bypass —
+animation is the point (per Andrew, explicitly) · failures still surface in the sheet
+(ceremony only plays after the server accepted the trade).
 
 ## Testing (~15 new)
 
@@ -118,7 +121,7 @@ server accepted the trade).
   export/import round-trip with options; a pre-options backup (no `options` key) imports clean.
 - **Components:** Add sheet option mode; Open Options section + countdown; Settle sheet
   outcomes (assigned shows the booking preview); Premium Record + stats; ceremony state
-  machine — advances through stages, tap skips, reduced-motion bypass (matchMedia mock).
+  machine — advances through stages, tap skips, slow-roll class applied on landing then removed.
 
 ## Build order
 
