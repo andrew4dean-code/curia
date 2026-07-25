@@ -273,6 +273,7 @@ def import_all(body: ImportBody) -> dict:
     trades: list[TradeIn] = []
     marks: list[MarkRow] = []
     option_rows: list[OptionRow] = []
+    old_ids = [row.get("id") for row in body.trades]
     try:
         for row in body.trades:
             trades.append(TradeIn(**{k: row[k] for k in
@@ -289,14 +290,21 @@ def import_all(body: ImportBody) -> dict:
         s.execute(delete(Trade))
         s.execute(delete(Mark))
         s.execute(delete(Option))
-        for data in trades:
-            s.add(Trade(**{**data.model_dump(), "symbol": data.symbol.strip().upper()}))
+        id_map: dict = {}
+        for old_id, data in zip(old_ids, trades):
+            t = Trade(**{**data.model_dump(), "symbol": data.symbol.strip().upper()})
+            s.add(t)
+            s.flush()  # id now, still inside the one transaction
+            if old_id is not None:
+                id_map[old_id] = t.id
         for row in marks:
             s.add(Mark(symbol=row.symbol.strip().upper(),
                        price=row.price,
                        marked_at=row.marked_at or utcnow(),
                        source=row.source))
         for row in option_rows:
-            s.add(Option(**{**row.model_dump(), "symbol": row.symbol.strip().upper()}))
+            assigned = id_map.get(row.assigned_trade_id) if row.assigned_trade_id is not None else None
+            s.add(Option(**{**row.model_dump(), "symbol": row.symbol.strip().upper(),
+                            "assigned_trade_id": assigned}))
         s.commit()
         return {"trades": len(trades), "marks": len(marks), "options": len(option_rows)}
