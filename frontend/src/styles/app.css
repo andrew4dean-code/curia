@@ -69,10 +69,12 @@
 .wk-chip:active .wk-seal { transform: scale(.92); }
 .wk-chip-text { min-width: 0; }
 .wk-seal { background: var(--maroon); color: var(--parchment); border-radius: 50%; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 16px; flex: none; box-shadow: 0 0 0 3px rgba(140, 43, 38, .16), 0 1px 3px rgba(0, 0, 0, .25); transition: transform .12s ease-out; }
-.wk-settled { font-size: 14px; padding: 6px 0 2px; }
+.wk-settled { display: block; width: 100%; text-align: left; background: none; border: none; font-family: var(--font-mono); font-size: 14px; padding: 6px 0 2px; }
 .toggle-row { display: flex; gap: 8px; margin-bottom: 12px; }
 .toggle-row button { flex: 1; text-align: center; padding: 12px 0; border-radius: 8px; font-family: var(--font-mono); font-size: 14px; border: 1px solid var(--rule); background: var(--parchment); color: var(--ink-soft); }
 .toggle-row button.on { background: var(--maroon); color: var(--parchment); border-color: var(--maroon); }
 
 .tab-fade { animation: tab-in .25s ease-out both; }
 @keyframes tab-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.row-tap { background: none; border: none; border-bottom: 1px solid var(--rule); font: inherit; color: inherit; text-align: left; width: 100%; }
+.row-action { background: none; border: none; color: var(--maroon); text-decoration: underline; font-family: var(--font-mono); font-size: 13px; padding: 2px 0 2px 12px; }

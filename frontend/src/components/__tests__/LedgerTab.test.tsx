@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { LedgerTab } from '../LedgerTab';
 import type { Snapshot } from '../../lib/api';
@@ -66,5 +66,27 @@ describe('LedgerTab', () => {
   it('open options do not appear in the premium record', () => {
     render(<LedgerTab snap={{ ...snap, options: [{ ...settledPut, id: 12, status: 'OPEN', closed_at: null }] }} {...cbs} />);
     expect(screen.queryByText('Premium Record')).not.toBeInTheDocument();
+  });
+
+  it('a premium record row opens its record sheet', () => {
+    const onViewRecord = vi.fn();
+    render(<LedgerTab snap={{ ...snap, options: [settledPut] }} {...cbs} onViewRecord={onViewRecord} />);
+    fireEvent.click(screen.getByText(/TQQQ \$62 PUT/));
+    expect(onViewRecord).toHaveBeenCalledWith(settledPut);
+  });
+
+  it('all-entries rows offer a confirmed delete', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+    render(<LedgerTab snap={snap} {...cbs} onRefresh={onRefresh} />);
+    fireEvent.click(screen.getByText(/All entries/));
+    fireEvent.click(screen.getAllByText('delete')[0]);
+    await waitFor(() => expect(onRefresh).toHaveBeenCalledOnce());
+    expect(fetchMock.mock.calls[0][0]).toMatch(/\/api\/trades\/\d+/);
+    expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe('DELETE');
+    confirmSpy.mockRestore();
+    vi.unstubAllGlobals();
   });
 });

@@ -15,6 +15,7 @@ import { AddTradeSheet } from './components/AddTradeSheet';
 import { OptionSellSheet } from './components/OptionSellSheet';
 import { MarkSheet } from './components/MarkSheet';
 import { SettleSheet } from './components/SettleSheet';
+import { OptionRecordSheet } from './components/OptionRecordSheet';
 import { TradeCeremony } from './components/TradeCeremony';
 import type { TicketData } from './components/TradeCeremony';
 
@@ -24,6 +25,7 @@ type Sheet =
   | { kind: 'sellOption'; expiration: string }
   | { kind: 'mark'; symbol: string }
   | { kind: 'settle'; option: OptionPosition }
+  | { kind: 'record'; option: OptionPosition }
   | null;
 
 export default function App() {
@@ -87,6 +89,7 @@ export default function App() {
     onSettleOption: (option: OptionPosition) => setSheet({ kind: 'settle', option }),
     onEditOption: (option: OptionPosition) => setSheet({ kind: 'optionEdit', option }),
     onSellWeek: (expiration: string) => setSheet({ kind: 'sellOption', expiration }),
+    onViewRecord: (option: OptionPosition) => setSheet({ kind: 'record', option }),
     justAdded,
   };
 
@@ -121,6 +124,9 @@ export default function App() {
       )}
       {sheet?.kind === 'optionEdit' && (
         <OptionSellSheet option={sheet.option} expiration={sheet.option.expiration} onDone={onTicket} onCancel={() => setSheet(null)} />
+      )}
+      {sheet?.kind === 'record' && (
+        <OptionRecordSheet option={sheet.option} onDone={async () => { setSheet(null); await refresh(); }} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'sellOption' && (
         <OptionSellSheet expiration={sheet.expiration} onDone={onTicket} onCancel={() => setSheet(null)} />

@@ -17,7 +17,7 @@ function localTodayIso(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export function OptionsTab({ snap, onSettleOption, onSellWeek }: TabProps) {
+export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord }: TabProps) {
   const now = new Date();
   const [ym, setYm] = useState<[number, number]>([now.getFullYear(), now.getMonth() + 1]);
   const [year, month] = ym;
@@ -74,9 +74,9 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek }: TabProps) {
                     </span>
                   </button>
                 ) : (
-                  <div key={o.id} className="wk-settled" style={{ color: (optionRealizedPl(o) ?? 0) >= 0 ? 'var(--pl-up)' : 'var(--pl-down)' }}>
+                  <button key={o.id} type="button" className="wk-settled" style={{ color: (optionRealizedPl(o) ?? 0) >= 0 ? 'var(--pl-up)' : 'var(--pl-down)' }} onClick={() => onViewRecord?.(o)}>
                     ✓ {o.symbol} ${o.strike} {o.opt_type} — {(optionRealizedPl(o) ?? 0) >= 0 ? 'kept' : 'gave back'} {formatSignedMoney(optionRealizedPl(o) ?? 0)}
-                  </div>
+                  </button>
                 ),
               )}
               {!isPast && onSellWeek && (

@@ -15,6 +15,7 @@ export interface TabProps {
   onSettleOption: (o: OptionPosition) => void;
   onEditOption: (o: OptionPosition) => void;
   onSellWeek?: (expiration: string) => void;
+  onViewRecord?: (o: OptionPosition) => void;
   justAdded?: { kind: 'trade' | 'option'; id: number; symbol: string } | null;
 }
 

@@ -51,10 +51,12 @@ describe('OptionsTab board', () => {
     expect(onSettle).toHaveBeenCalledWith(base);
   });
 
-  it('settled option prints kept amount on its line', () => {
+  it('settled option prints kept amount and opens its record on tap', () => {
     const settled = { ...base, id: 3, status: 'EXPIRED' as const, closed_at: '2026-08-07', expiration: '2026-08-07' };
-    render(<OptionsTab snap={snapWith([settled])} {...cbs} onSellWeek={vi.fn()} />);
-    expect(screen.getByText(/kept \+\$146\.70/)).toBeInTheDocument();
+    const onViewRecord = vi.fn();
+    render(<OptionsTab snap={snapWith([settled])} {...cbs} onSellWeek={vi.fn()} onViewRecord={onViewRecord} />);
+    fireEvent.click(screen.getByText(/kept \+\$146\.70/));
+    expect(onViewRecord).toHaveBeenCalledWith(settled);
   });
 
   it('tapping an empty future week sells into that Friday; past weeks are inert', () => {

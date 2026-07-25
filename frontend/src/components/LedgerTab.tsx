@@ -1,11 +1,12 @@
 import { useState } from 'react';
+import { deleteTrade } from '../lib/api';
 import type { TabProps } from './PortfolioTab';
 import { computeClosedTrades } from '../lib/fifo';
 import { computeStats } from '../lib/stats';
 import { computeOptionStats, optionRealizedPl } from '../lib/optionsMath';
 import { formatMoney, formatPct, formatSignedMoney, formatSignedPct, plColor } from '../lib/format';
 
-export function LedgerTab({ snap, onEditTrade }: TabProps) {
+export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord }: TabProps) {
   const [showEntries, setShowEntries] = useState(false);
   const closed = computeClosedTrades(snap.trades);
   const stats = computeStats(closed);
@@ -51,7 +52,7 @@ export function LedgerTab({ snap, onEditTrade }: TabProps) {
         <>
           <h2 className="section-title">Premium Record</h2>
           {settledOptions.map((o) => (
-            <div className="row" key={`opt-${o.id}`}>
+            <button type="button" className="row row-tap" key={`opt-${o.id}`} onClick={() => onViewRecord?.(o)}>
               <div className="row-main">
                 <div className="row-sym">
                   {o.symbol} ${o.strike} {o.opt_type}{' '}
@@ -67,7 +68,7 @@ export function LedgerTab({ snap, onEditTrade }: TabProps) {
                   {formatSignedMoney(optionRealizedPl(o) ?? 0)}
                 </div>
               </div>
-            </div>
+            </button>
           ))}
           <div className="stats-grid">
             <div className="stat"><div className="label">Premium kept</div><div className="value" style={{ color: plColor(oStats.totalKept) }}>{formatSignedMoney(oStats.totalKept)}</div></div>
@@ -93,8 +94,18 @@ export function LedgerTab({ snap, onEditTrade }: TabProps) {
                 <div className="row-sub">{t.qty} sh @ {formatMoney(t.price)} · {t.executed_at}{t.note ? ` · ${t.note}` : ''}</div>
               </div>
               <div className="row-right">
-                <button className="link-row" style={{ background: 'none', border: 'none', color: 'var(--maroon)', textDecoration: 'underline', font: 'inherit', fontSize: 13 }} onClick={() => onEditTrade(t)}>
+                <button className="row-action" onClick={() => onEditTrade(t)}>
                   edit
+                </button>
+                <button
+                  className="row-action"
+                  onClick={() => {
+                    if (window.confirm(`Delete this ${t.symbol} ${t.side.toLowerCase()}? This can't be undone.`)) {
+                      void deleteTrade(t.id).then(() => onRefresh());
+                    }
+                  }}
+                >
+                  delete
                 </button>
               </div>
             </div>

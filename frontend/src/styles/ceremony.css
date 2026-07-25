@@ -5,7 +5,9 @@
 /* ---- the ticket ---- */
 .ticket { position: relative; background: var(--parchment-card); border-radius: 4px; padding: 22px 20px 30px; box-shadow: 0 12px 30px rgba(0,0,0,.35); border-top: 2px dashed var(--rule); border-bottom: 2px dashed var(--rule); transform-origin: 50% 0%; will-change: transform, opacity; }
 .ticket-head { font-family: var(--font-display); font-weight: 800; font-size: 15px; letter-spacing: .06em; text-align: center; border-bottom: 1px solid var(--rule); padding-bottom: 8px; margin-bottom: 10px; }
-.ticket-line { font-family: var(--font-mono); font-size: 14px; text-align: center; padding: 3px 0; }
+.ticket-line { font-family: var(--font-mono); font-size: 14px; text-align: center; padding: 3px 0; min-height: 1.45em; }
+.type-caret { display: inline-block; width: 2px; height: 1em; background: var(--ink); margin-left: 2px; vertical-align: -0.15em; animation: caret-blink 0.5s step-end infinite; }
+@keyframes caret-blink { 50% { opacity: 0; } }
 .ticket-seal { position: absolute; right: 14px; bottom: -18px; width: 44px; height: 44px; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-family: var(--font-display); font-weight: 800; font-size: 22px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,.35); opacity: 0; }
 
 /* ---- the envelope ---- */
@@ -16,8 +18,8 @@
 .envelope-seal { position: absolute; left: 50%; top: 74px; transform: translateX(-50%) scale(0); width: 40px; height: 40px; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-family: var(--font-display); font-weight: 800; font-size: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,.3); }
 
 /* ---- stage: print — rise off the press with a settle, then the seal stamps ---- */
-.ceremony[data-stage='print'] .ticket { animation: ticket-rise 1.25s cubic-bezier(.22, .9, .28, 1) both; }
-.ceremony[data-stage='print'] .ticket-seal { animation: seal-stamp 0.4s 1.2s cubic-bezier(.3, 1.4, .5, 1) both; }
+.ceremony[data-stage='print'] .ticket { animation: ticket-rise 1.0s cubic-bezier(.22, .9, .28, 1) both; }
+.ceremony[data-stage='print'] .ticket-seal { animation: seal-stamp 0.4s 2.0s cubic-bezier(.3, 1.4, .5, 1) both; }
 @keyframes ticket-rise {
   0% { transform: translateY(110vh); }
   82% { transform: translateY(-10px); }
