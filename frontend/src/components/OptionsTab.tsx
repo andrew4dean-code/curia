@@ -72,9 +72,9 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek }: TabProps) {
                   )}
                 </div>
               )}
-              {rows.length === 0 && !isPast && onSellWeek && (
+              {!isPast && onSellWeek && (
                 <button className="wk-sell" aria-label={`sell the week of ${fmtShort(friday)}`} onClick={() => onSellWeek(friday)}>
-                  ＋ tap the line to sell this week
+                  {rows.length > 0 ? '＋ sell another this week' : '＋ tap the line to sell this week'}
                 </button>
               )}
               {rows.length === 0 && isPast && <div className="wk-line" />}

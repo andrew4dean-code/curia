@@ -9,9 +9,15 @@ function fmtStamp(iso: string): string {
 export function SettingsTab({ onRefresh }: TabProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [importError, setImportError] = useState('');
+  const [updateError, setUpdateError] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function updateNow() {
+    if (!navigator.onLine) {
+      setUpdateError("You're offline — updating needs a connection. Nothing was changed.");
+      return;
+    }
+    setUpdateError('');
     setBusy(true);
     localStorage.removeItem('curia-cache-v2');
     try {
@@ -70,6 +76,7 @@ export function SettingsTab({ onRefresh }: TabProps) {
       <div className="row-sub" style={{ padding: '8px 0 0' }}>
         Fetches the newest Curia and clears cached data. Your trades live on the server — nothing is lost.
       </div>
+      {updateError && <div style={{ color: 'var(--pl-red)', textAlign: 'center', fontSize: 13 }}>{updateError}</div>}
       <h2 className="section-title">Backup</h2>
       <div className="link-row">
         <button onClick={() => void doExport()}>Export backup</button>

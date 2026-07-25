@@ -64,6 +64,13 @@ describe('OptionsTab board', () => {
     expect(screen.queryByRole('button', { name: /sell the week of Aug 7/i })).toBeNull();
   });
 
+  it('an occupied week still offers selling another option', () => {
+    const onSellWeek = vi.fn();
+    render(<OptionsTab snap={snapWith([base])} {...cbs} onSellWeek={onSellWeek} />);
+    fireEvent.click(screen.getByRole('button', { name: /sell the week of Aug 14/i }));
+    expect(onSellWeek).toHaveBeenCalledWith('2026-08-14');
+  });
+
   it('chevrons browse months', () => {
     render(<OptionsTab snap={snapWith([])} {...cbs} onSellWeek={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
