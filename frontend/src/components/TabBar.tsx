@@ -1,8 +1,10 @@
-export type TabId = 'portfolio' | 'ledger';
+export type TabId = 'portfolio' | 'options' | 'ledger' | 'settings';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'portfolio', label: 'Portfolio' },
+  { id: 'options', label: 'Options' },
   { id: 'ledger', label: 'Ledger' },
+  { id: 'settings', label: 'Settings' },
 ];
 
 export function TabBar({ active, onChange }: { active: TabId; onChange: (t: TabId) => void }) {

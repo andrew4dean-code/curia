@@ -8,7 +8,9 @@ import { TabBar } from './components/TabBar';
 import type { TabId } from './components/TabBar';
 import { OfflineBanner } from './components/OfflineBanner';
 import { PortfolioTab } from './components/PortfolioTab';
+import { OptionsTab } from './components/OptionsTab';
 import { LedgerTab } from './components/LedgerTab';
+import { SettingsTab } from './components/SettingsTab';
 import { AddTradeSheet } from './components/AddTradeSheet';
 import { MarkSheet } from './components/MarkSheet';
 import { SettleSheet } from './components/SettleSheet';
@@ -100,8 +102,11 @@ export default function App() {
   return (
     <div className={landing ? 'shell roll-slow' : 'shell'}>
       {offline && <OfflineBanner fetchedAt={snap.fetchedAt} />}
-      {tab === 'portfolio' ? <PortfolioTab {...tabProps} /> : <LedgerTab {...tabProps} />}
-      {!offline && (
+      {tab === 'portfolio' && <PortfolioTab {...tabProps} />}
+      {tab === 'options' && <OptionsTab {...tabProps} />}
+      {tab === 'ledger' && <LedgerTab {...tabProps} />}
+      {tab === 'settings' && <SettingsTab {...tabProps} />}
+      {!offline && (tab === 'portfolio' || tab === 'ledger') && (
         <button className="fab" aria-label="Add trade" onClick={() => setSheet({ kind: 'trade', trade: null })}>
           +
         </button>
