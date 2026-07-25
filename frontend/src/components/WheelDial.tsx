@@ -44,11 +44,21 @@ export function WheelDial({
     >
       <circle cx="105" cy="105" r="96" fill="none" stroke="var(--rule)" strokeWidth="2" />
       <circle cx="105" cy="105" r="78" fill="none" stroke="var(--rule)" strokeWidth="1" />
+      {/* Ticks sit on the diagonals, between the four stations, so they never
+          run through a station label. */}
       <g stroke="var(--rule)" strokeWidth="1">
-        <line x1="105" y1="9" x2="105" y2="27" />
-        <line x1="201" y1="105" x2="183" y2="105" />
-        <line x1="105" y1="201" x2="105" y2="183" />
-        <line x1="9" y1="105" x2="27" y2="105" />
+        {[45, 135, 225, 315].map((deg) => {
+          const a = (deg * Math.PI) / 180;
+          return (
+            <line
+              key={deg}
+              x1={105 + 78 * Math.sin(a)}
+              y1={105 - 78 * Math.cos(a)}
+              x2={105 + 96 * Math.sin(a)}
+              y2={105 - 96 * Math.cos(a)}
+            />
+          );
+        })}
       </g>
       <g stroke="var(--gold)" strokeWidth="2" opacity="0.85">
         {Array.from({ length: spokes }, (_, i) => {
@@ -57,15 +67,26 @@ export function WheelDial({
             <line
               key={i}
               data-testid="dial-spoke"
-              x1={105 + 28 * Math.sin(a)}
-              y1={105 - 28 * Math.cos(a)}
-              x2={105 + 70 * Math.sin(a)}
-              y2={105 - 70 * Math.cos(a)}
+              x1={105 + 32 * Math.sin(a)}
+              y1={105 - 32 * Math.cos(a)}
+              x2={105 + 58 * Math.sin(a)}
+              y2={105 - 58 * Math.cos(a)}
             />
           );
         })}
       </g>
-      <g fontFamily="var(--font-mono)" fontSize="9" textAnchor="middle" letterSpacing="0.08em">
+      {/* paintOrder stroke-then-fill knocks a halo out of the rings behind each
+          label, so a label that crosses a ring reads as engraved, not overlaid. */}
+      <g
+        fontFamily="var(--font-mono)"
+        fontSize="9"
+        textAnchor="middle"
+        letterSpacing="0.08em"
+        stroke="var(--parchment-card)"
+        strokeWidth="4"
+        strokeLinejoin="round"
+        paintOrder="stroke fill"
+      >
         {STATIONS.map((s, i) => {
           const passed = i < idx;
           const current = i === idx;
@@ -91,9 +112,9 @@ export function WheelDial({
         x1="105"
         y1="105"
         x2="105"
-        y2="168"
+        y2="174"
         stroke="var(--maroon)"
-        strokeWidth="4"
+        strokeWidth="5"
         strokeLinecap="round"
         style={{
           transform: `rotate(${HAND_ANGLE[stage] - 360}deg)`,

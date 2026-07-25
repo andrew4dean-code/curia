@@ -42,14 +42,30 @@ describe('weekFridayFor', () => {
 });
 
 describe('monthScore', () => {
-  it('sums settled-in-month P/L plus open-in-month collected, ignoring other months', () => {
+  it('sums settled P/L plus open collected for the weeks the month renders', () => {
+    // Sat Aug 1 belongs to the week ending Fri Jul 31, so the JULY board is what
+    // renders it and July is what counts it.
+    expect(weekFridayFor('2026-08-01')).toBe('2026-07-31');
     const rows = [
-      opt({ status: 'EXPIRED', closed_at: '2026-08-01', expiration: '2026-08-01', premium: 0.74, fees: 1.3 }), // +146.7
+      opt({ status: 'EXPIRED', closed_at: '2026-08-01', expiration: '2026-08-01', premium: 0.74, fees: 1.3 }), // +146.7, July week
       opt({ status: 'OPEN', expiration: '2026-08-14' }),                                                       // +148 collected
-      opt({ status: 'EXPIRED', closed_at: '2026-07-25', expiration: '2026-07-25' }),                           // other month
+      opt({ status: 'EXPIRED', closed_at: '2026-07-25', expiration: '2026-07-25' }),                           // +146.7, July week
       opt({ status: 'OPEN', expiration: '2026-09-04' }),                                                       // next month
     ];
-    expect(monthScore(rows, 2026, 8)).toBeCloseTo(294.7);
+    expect(monthScore(rows, 2026, 8)).toBeCloseTo(148);
+    expect(monthScore(rows, 2026, 7)).toBeCloseTo(146.7 * 2);
     expect(monthScore([], 2026, 8)).toBe(0);
+  });
+
+  it('counts an option in the month whose board actually renders it', () => {
+    // Jun 30 2026 is a Tuesday, so its week's Friday is Jul 3 and the JULY board
+    // is what shows this row. The July total must therefore include it, and June
+    // — which never renders it — must not.
+    expect(weekFridayFor('2026-06-30')).toBe('2026-07-03');
+    const rows = [
+      opt({ status: 'EXPIRED', closed_at: '2026-06-30', expiration: '2026-06-30', premium: 0.74, fees: 1.3 }),
+    ];
+    expect(monthScore(rows, 2026, 7)).toBeCloseTo(146.7);
+    expect(monthScore(rows, 2026, 6)).toBe(0);
   });
 });

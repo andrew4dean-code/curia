@@ -24,7 +24,8 @@ export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord }: TabPro
           <div className="row-main">
             <div className="row-sym">{t.symbol}</div>
             <div className="row-sub">
-              {t.qty} sh · {formatMoney(t.buyPrice)} → {formatMoney(t.sellPrice)} · {t.openedAt} → {t.closedAt}
+              {t.qty} sh · {formatMoney(t.buyPrice)} → {formatMoney(t.sellPrice)} ·{' '}
+              <span className="nb">{t.openedAt}</span> → <span className="nb">{t.closedAt}</span>
             </div>
           </div>
           <div className="row-right">
@@ -59,7 +60,8 @@ export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord }: TabPro
                   <span className="chip">{o.status.replace('_', ' ')}</span>
                 </div>
                 <div className="row-sub">
-                  {o.contracts}x · {o.opened_at} → {o.closed_at}
+                  {o.contracts}x · <span className="nb">{o.opened_at}</span> →{' '}
+                  <span className="nb">{o.closed_at}</span>
                   {o.status === 'ASSIGNED' ? ' · shares booked' : ''}
                 </div>
               </div>
@@ -72,8 +74,8 @@ export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord }: TabPro
           ))}
           <div className="stats-grid">
             <div className="stat"><div className="label">Premium kept</div><div className="value" style={{ color: plColor(oStats.totalKept) }}>{formatSignedMoney(oStats.totalKept)}</div></div>
-            <div className="stat"><div className="label">Win rate</div><div className="value">{formatPct(oStats.winRate)}</div></div>
-            <div className="stat"><div className="label">Outcomes</div><div className="value">{oStats.expiredCount}E · {oStats.boughtBackCount}B · {oStats.assignedCount}A</div></div>
+            <div className="stat"><div className="label">Premium win rate</div><div className="value">{formatPct(oStats.winRate)}</div></div>
+            <div className="stat"><div className="label">Expired · bought back · assigned</div><div className="value">{oStats.expiredCount} · {oStats.boughtBackCount} · {oStats.assignedCount}</div></div>
             <div className="stat"><div className="label">Avg take</div><div className="value">{formatSignedMoney(oStats.avgTake)}</div></div>
           </div>
         </>

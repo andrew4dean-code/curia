@@ -25,15 +25,16 @@ export function weekFridayFor(dateStr: string): string {
   return iso(d);
 }
 
+// The board buckets every option into the Friday of its expiration week, so the
+// month total has to use that same rule. Scoring settled rows by `closed_at`
+// instead let a row render on one month's board while counting toward another —
+// e.g. a Tue Jun 30 expiry shows under Fri Jul 3 but scored to June.
 export function monthScore(options: OptionPosition[], year: number, month1: number): number {
   const prefix = `${year}-${String(month1).padStart(2, '0')}-`;
   let score = 0;
   for (const o of options) {
-    if (o.status !== 'OPEN' && o.closed_at && o.closed_at.startsWith(prefix)) {
-      score += optionRealizedPl(o) ?? 0;
-    } else if (o.status === 'OPEN' && o.expiration.startsWith(prefix)) {
-      score += premiumCollected(o);
-    }
+    if (!weekFridayFor(o.expiration).startsWith(prefix)) continue;
+    score += o.status === 'OPEN' ? premiumCollected(o) : (optionRealizedPl(o) ?? 0);
   }
   return score;
 }

@@ -76,9 +76,19 @@ export function WheelCard({
             {mark && <div className="walkbar-needle" style={{ left: `${pct(mark.price)}%` }} />}
           </div>
           <div className="walkbar-labels">
-            <span>{mark ? `price ${formatMoney(mark.price)}` : 'no price yet'}</span>
-            <span>true {formatMoney(trueBasis)}</span>
-            <span>raw {formatMoney(rawBasis)}</span>
+            {/* Ordered by value so each label sits on the same side as the marker
+                it names — a fixed order reads backwards whenever price is above
+                basis, which is the usual case on a winning wheel. */}
+            {[
+              ...(mark ? [{ key: 'price', text: `price ${formatMoney(mark.price)}`, at: mark.price }] : []),
+              { key: 'true', text: `true ${formatMoney(trueBasis)}`, at: trueBasis },
+              { key: 'raw', text: `raw ${formatMoney(rawBasis)}`, at: rawBasis },
+            ]
+              .sort((a, b) => a.at - b.at)
+              .map((l) => (
+                <span key={l.key}>{l.text}</span>
+              ))}
+            {!mark && <span>no price yet</span>}
           </div>
         </div>
       )}

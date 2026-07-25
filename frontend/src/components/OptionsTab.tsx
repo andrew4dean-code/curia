@@ -68,7 +68,7 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord }: T
               {rows.map((o) =>
                 o.status === 'OPEN' ? (
                   <button key={o.id} className="wk-chip" onClick={() => onSettleOption(o)}>
-                    <span className="wk-seal">C</span>
+                    <span className="wk-seal">{o.opt_type === 'PUT' ? 'P' : 'C'}</span>
                     <span className="wk-chip-text">
                       {o.symbol} ${o.strike} {o.opt_type} · {o.contracts}x · {formatMoney(premiumCollected(o))}
                     </span>

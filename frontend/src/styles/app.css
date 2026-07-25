@@ -1,21 +1,22 @@
-.shell { max-width: 640px; margin: 0 auto; padding: 16px 16px 112px; }
+.shell { max-width: 640px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px 112px; }
 .hero { text-align: center; padding: 24px 0 8px; }
 .hero .odo { font-family: var(--font-display); font-size: 44px; font-weight: 800; }
 .hero-sub { color: var(--ink-soft); margin-top: 4px; font-size: 13px; }
 .section-title { font-family: var(--font-display); font-size: 20px; font-weight: 700; margin: 20px 0 8px; border-bottom: 1px solid var(--rule); padding-bottom: 6px; }
-.row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--rule); }
-.row-main { min-width: 0; }
-.row-sym { font-family: var(--font-display); font-weight: 700; font-size: 16px; }
-.row-sub { color: var(--ink-soft); font-size: 12px; margin-top: 2px; }
-.row-right { text-align: right; white-space: nowrap; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "sym right" "sub sub"; column-gap: 12px; align-items: baseline; padding: 10px 0; border-bottom: 1px solid var(--rule); }
+.row-main { display: contents; }
+.row-sym { grid-area: sym; min-width: 0; font-family: var(--font-display); font-weight: 700; font-size: 16px; }
+.row-sub { grid-area: sub; color: var(--ink-soft); font-size: 12px; margin-top: 2px; }
+.row-right { grid-area: right; text-align: right; white-space: nowrap; }
+.nb { white-space: nowrap; }
 .row-pl { font-size: 12px; margin-top: 2px; }
-.tabbar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: var(--parchment-card); border-top: 1px solid var(--rule); box-shadow: 0 -3px 12px rgba(31, 27, 18, 0.08); padding-bottom: env(safe-area-inset-bottom); }
-.tabbar button { flex: 1; padding: 18px 0 16px; background: none; border: none; border-top: 3px solid transparent; margin-top: -1px; font-family: var(--font-display); font-size: 18px; font-weight: 700; letter-spacing: 0.02em; color: var(--ink-soft); }
+.tabbar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: var(--parchment-card); border-top: 1px solid var(--rule); box-shadow: 0 -3px 12px rgba(31, 27, 18, 0.08); padding-bottom: max(env(safe-area-inset-bottom), 10px); }
+.tabbar button { flex: 1; padding: 16px 0 14px; background: none; border: none; border-top: 3px solid transparent; margin-top: -1px; font-family: var(--font-display); font-size: 18px; font-weight: 700; letter-spacing: 0.02em; color: var(--ink-soft); }
 .tabbar button.active { color: var(--maroon); border-top-color: var(--maroon); }
-.fab { position: fixed; right: 20px; bottom: calc(92px + env(safe-area-inset-bottom)); width: 56px; height: 56px; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-size: 30px; line-height: 1; border: none; box-shadow: 0 3px 10px rgba(0,0,0,.25); }
+.fab { position: fixed; right: 20px; bottom: calc(92px + max(env(safe-area-inset-bottom), 10px)); width: 56px; height: 56px; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-size: 30px; line-height: 1; border: none; box-shadow: 0 3px 10px rgba(0,0,0,.25); }
 .sheet-backdrop { position: fixed; inset: 0; background: rgba(31,27,18,.45); display: flex; align-items: flex-end; z-index: 20; animation: backdrop-in .22s ease-out both; }
 @keyframes backdrop-in { from { background: rgba(31,27,18,0); } to { background: rgba(31,27,18,.45); } }
-.sheet { background: var(--parchment-card); width: 100%; max-width: 640px; margin: 0 auto; border-radius: 14px 14px 0 0; padding: 20px 20px calc(20px + env(safe-area-inset-bottom)); animation: sheet-up .32s var(--roll-ease) both; }
+.sheet { background: var(--parchment-card); width: 100%; max-width: 640px; margin: 0 auto; border-radius: 14px 14px 0 0; padding: 20px 20px calc(20px + env(safe-area-inset-bottom)); animation: sheet-up .32s var(--roll-ease) both; max-height: calc(100dvh - 24px); overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 @keyframes sheet-up { from { transform: translateY(64px); opacity: .5; } to { transform: translateY(0); opacity: 1; } }
 .sheet h2 { font-family: var(--font-display); margin-bottom: 12px; }
 .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
@@ -33,7 +34,7 @@
 .stat .label { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--gold-label); }
 .stat .value { font-family: var(--font-display); font-size: 20px; font-weight: 700; margin-top: 2px; }
 .link-row { text-align: center; margin: 18px 0; }
-.link-row button { background: none; border: none; color: var(--maroon); text-decoration: underline; font-family: var(--font-mono); font-size: 13px; }
+.link-row button { min-height: 44px; padding: 0 12px; background: none; border: none; color: var(--maroon); text-decoration: underline; font-family: var(--font-mono); font-size: 13px; }
 .empty { text-align: center; color: var(--ink-soft); padding: 40px 0; font-style: italic; }
 .segmented { display: flex; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
 .segmented button { flex: 1; padding: 10px; background: var(--parchment); border: none; font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--ink-soft); }
@@ -46,7 +47,7 @@
 .books-preview { text-align: center; color: var(--gold-label); font-size: 13px; margin: 8px 0; }
 .board-head { display: flex; align-items: center; justify-content: center; gap: 18px; margin-top: 10px; }
 .board-head h1 { font-family: var(--font-display); font-size: 34px; font-weight: 800; letter-spacing: .01em; }
-.board-head button { background: none; border: none; color: var(--maroon); font-size: 26px; padding: 6px 14px; }
+.board-head button { min-width: 44px; min-height: 44px; background: none; border: none; color: var(--maroon); font-size: 26px; padding: 6px 14px; }
 .board-score { text-align: center; font-size: 13px; color: var(--gold-label); margin: 2px 0 20px; }
 .board-score-amount { font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
 .board-weeks { display: flex; flex-direction: column; gap: 14px; }
@@ -61,15 +62,18 @@
   0%, 100% { box-shadow: inset 0 0 0 1px var(--maroon); }
   50% { box-shadow: inset 0 0 0 1px var(--maroon), 0 0 16px rgba(140, 43, 38, .28); }
 }
-.wk.past { opacity: .5; }
+/* Past weeks recede via a sunken background, NOT opacity: the ink and the
+   settled-green both sit near 4.9:1, so any fade drops them under AA. */
+.wk.past { background: var(--parchment); border-style: dashed; }
 .wk.past .wk-num { opacity: .05; }
-.wk-sell { display: block; width: 100%; text-align: left; background: none; border: none; border-top: 2px dashed var(--rule); margin-top: 6px; padding: 10px 0 2px; font-family: var(--font-mono); font-size: 13px; color: var(--gold-label); }
+.wk.past .wk-rule { opacity: .55; }
+.wk-sell { display: block; width: 100%; min-height: 44px; text-align: left; background: none; border: none; border-top: 2px dashed var(--rule); margin-top: 6px; padding: 14px 0 8px; font-family: var(--font-mono); font-size: 13px; color: var(--gold-label); }
 .wk:not(.past) .wk-sell:active { color: var(--maroon); }
 .wk-chip { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: none; padding: 8px 0; font-family: var(--font-mono); font-size: 15px; color: var(--ink); text-align: left; }
 .wk-chip:active .wk-seal { transform: scale(.92); }
 .wk-chip-text { min-width: 0; }
 .wk-seal { background: var(--maroon); color: var(--parchment); border-radius: 50%; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 16px; flex: none; box-shadow: 0 0 0 3px rgba(140, 43, 38, .16), 0 1px 3px rgba(0, 0, 0, .25); transition: transform .12s ease-out; }
-.wk-settled { display: block; width: 100%; text-align: left; background: none; border: none; font-family: var(--font-mono); font-size: 14px; padding: 6px 0 2px; }
+.wk-settled { display: block; width: 100%; min-height: 44px; text-align: left; background: none; border: none; font-family: var(--font-mono); font-size: 14px; padding: 12px 0 10px; }
 .toggle-row { display: flex; gap: 8px; margin-bottom: 12px; }
 .toggle-row button { flex: 1; text-align: center; padding: 12px 0; border-radius: 8px; font-family: var(--font-mono); font-size: 14px; border: 1px solid var(--rule); background: var(--parchment); color: var(--ink-soft); }
 .toggle-row button.on { background: var(--maroon); color: var(--parchment); border-color: var(--maroon); }
@@ -81,13 +85,13 @@
 .wheel-card { background: var(--parchment-card); border: 1px solid var(--maroon); border-radius: 12px; padding: 16px 14px 14px; margin: 10px 0 14px; }
 .wheel-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .wheel-card-title { font-family: var(--font-display); font-size: 20px; font-weight: 800; }
-.wheel-card-sh { font-family: var(--font-mono); font-size: 13px; font-weight: 400; color: var(--ink-soft); }
+.wheel-card-sh { font-family: var(--font-mono); font-size: 13px; font-weight: 400; color: var(--ink-soft); white-space: nowrap; }
 .wheel-card-tag { font-size: 10px; letter-spacing: .08em; color: var(--gold-label); text-transform: uppercase; white-space: nowrap; }
 .wheel-card-sub { font-size: 11px; letter-spacing: .07em; color: var(--ink-soft); text-transform: uppercase; margin-top: 2px; }
 .wheel-dial-wrap { display: flex; justify-content: center; margin: 10px 0 2px; }
 .wheel-tiles { display: flex; gap: 8px; margin: 10px 0; }
-.wheel-tile { flex: 1; background: var(--parchment); border: 1px solid var(--rule); border-radius: 8px; padding: 8px; }
-.wheel-tile b { display: block; font-size: 9px; letter-spacing: .08em; color: var(--gold-label); text-transform: uppercase; font-weight: 400; }
+.wheel-tile { flex: 1; display: flex; flex-direction: column; justify-content: space-between; background: var(--parchment); border: 1px solid var(--rule); border-radius: 8px; padding: 8px; }
+.wheel-tile b { display: block; min-height: 2.4em; font-size: 9px; letter-spacing: .08em; color: var(--gold-label); text-transform: uppercase; font-weight: 400; }
 .wheel-tile span { font-family: var(--font-display); font-size: 16px; font-weight: 700; }
 .walkbar { margin: 12px 0 4px; }
 .walkbar-track { position: relative; height: 14px; background: var(--parchment); border: 1px solid var(--rule); border-radius: 999px; }

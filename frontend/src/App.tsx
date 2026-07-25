@@ -207,7 +207,15 @@ export default function App() {
           }}
         />
       )}
-      <TabBar active={tab} onChange={setTab} />
+      <TabBar
+        active={tab}
+        onChange={(next) => {
+          setTab(next);
+          // A new tab always starts at its own top, never inheriting the last
+          // tab's scroll offset.
+          window.scrollTo({ top: 0 });
+        }}
+      />
     </div>
   );
 }
