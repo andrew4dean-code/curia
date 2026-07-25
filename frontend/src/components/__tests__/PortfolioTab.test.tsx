@@ -3,14 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { PortfolioTab } from '../PortfolioTab';
 import type { Snapshot } from '../../lib/api';
 
-// local calendar date (not toISOString, which is UTC and can roll to the next
-// day while it's still "today" in local time — daysUntil()/expiryLabel() in
-// lib/time.ts compare against the local calendar day).
-const localToday = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
-
 const snap: Snapshot = {
   trades: [
     { id: 1, symbol: 'AAPL', side: 'BUY', qty: 10, price: 100, fees: 0, executed_at: '2026-07-01', note: '' },
@@ -42,23 +34,5 @@ describe('PortfolioTab', () => {
                      onSettleOption={vi.fn()} onEditOption={vi.fn()} />,
     );
     expect(screen.getByText(/No open positions/)).toBeInTheDocument();
-  });
-
-  it('lists open options with countdown and premium collected', () => {
-    const withOpt: Snapshot = {
-      ...snap,
-      options: [{
-        id: 1, symbol: 'TQQQ', opt_type: 'PUT', strike: 62, expiration: localToday(),
-        contracts: 2, premium: 0.74, fees: 0, opened_at: '2026-07-20', note: '',
-        status: 'OPEN', closed_at: null, buyback_price: 0, close_fees: 0, assigned_trade_id: null,
-      }],
-    };
-    render(<PortfolioTab snap={withOpt} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()}
-                         onSettleOption={vi.fn()} onEditOption={vi.fn()} />);
-    expect(screen.getByText('Open Options')).toBeInTheDocument();
-    expect(screen.getByText(/TQQQ \$62 PUT/)).toBeInTheDocument();
-    // the countdown chip is its own <span>, so match its exact text, not "exp today"
-    expect(screen.getByText('today')).toBeInTheDocument();
-    expect(screen.getByText(/\$148\.00 collected/)).toBeInTheDocument();
   });
 });

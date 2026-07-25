@@ -5,8 +5,7 @@ import { Odometer } from './Odometer';
 import { TickerTape } from './TickerTape';
 import { useFlash } from '../hooks/useFlash';
 import { formatMoney, formatSignedMoney, formatSignedPct, plColor } from '../lib/format';
-import { agoLabel, daysUntil, expiryLabel } from '../lib/time';
-import { premiumCollected } from '../lib/optionsMath';
+import { agoLabel } from '../lib/time';
 
 export interface TabProps {
   snap: Snapshot;
@@ -15,12 +14,13 @@ export interface TabProps {
   onMark: (symbol: string) => void;
   onSettleOption: (o: OptionPosition) => void;
   onEditOption: (o: OptionPosition) => void;
+  onSellWeek?: (expiration: string) => void;
   justAdded?: { kind: 'trade' | 'option'; id: number; symbol: string } | null;
 }
 
 const rowButtonStyle = { width: '100%', background: 'none', border: 'none', borderBottom: '1px solid var(--rule)', textAlign: 'left', font: 'inherit', color: 'inherit' } as const;
 
-export function PortfolioTab({ snap, onMark, onSettleOption, justAdded }: TabProps) {
+export function PortfolioTab({ snap, onMark, justAdded }: TabProps) {
   const positions = computeOpenPositions(snap.trades, snap.marks);
   const bookValue = positions.reduce(
     (s, p) => s + (p.marketValue ?? p.qty * p.avgCost),
@@ -28,7 +28,6 @@ export function PortfolioTab({ snap, onMark, onSettleOption, justAdded }: TabPro
   );
   const unrealized = positions.reduce((s, p) => s + (p.unrealizedPl ?? 0), 0);
   const flash = useFlash(bookValue);
-  const openOptions = snap.options.filter((o) => o.status === 'OPEN');
 
   return (
     <div>
@@ -77,30 +76,6 @@ export function PortfolioTab({ snap, onMark, onSettleOption, justAdded }: TabPro
           </div>
         </button>
       ))}
-      {openOptions.length > 0 && (
-        <>
-          <h2 className="section-title">Open Options</h2>
-          {openOptions.map((o) => (
-            <button
-              key={o.id}
-              className={justAdded?.kind === 'option' && justAdded.id === o.id ? 'row stamp-in' : 'row'}
-              style={rowButtonStyle}
-              onClick={() => onSettleOption(o)}
-            >
-              <div className="row-main">
-                <div className="row-sym">
-                  {o.symbol} ${o.strike} {o.opt_type}
-                </div>
-                <div className="row-sub">
-                  {o.contracts}x · exp{' '}
-                  <span className={`chip${daysUntil(o.expiration) <= 1 ? ' hot' : ''}`}>{expiryLabel(o.expiration)}</span>
-                  {' '}· {formatMoney(premiumCollected(o))} collected
-                </div>
-              </div>
-            </button>
-          ))}
-        </>
-      )}
     </div>
   );
 }
