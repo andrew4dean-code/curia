@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { LedgerTab } from '../LedgerTab';
 import type { Snapshot } from '../../lib/api';
@@ -53,15 +53,6 @@ describe('LedgerTab', () => {
       <LedgerTab snap={{ trades: [], marks: [], options: [], fetchedAt: snap.fetchedAt }} {...cbs} />,
     );
     expect(screen.getByText(/No closed trades yet/)).toBeInTheDocument();
-  });
-
-  it('shows an error instead of failing silently on a bad backup file', async () => {
-    render(<LedgerTab snap={snap} {...cbs} />);
-    fireEvent.click(screen.getByText(/All entries/));
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
-    const bad = new File(['not json {'], 'backup.json', { type: 'application/json' });
-    fireEvent.change(input, { target: { files: [bad] } });
-    await waitFor(() => expect(screen.getByText(/isn't a Curia backup/)).toBeInTheDocument());
   });
 
   it('shows the premium record with outcome tag and P/L', () => {

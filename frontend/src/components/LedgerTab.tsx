@@ -1,53 +1,18 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import type { TabProps } from './PortfolioTab';
 import { computeClosedTrades } from '../lib/fifo';
 import { computeStats } from '../lib/stats';
 import { computeOptionStats, optionRealizedPl } from '../lib/optionsMath';
-import { exportBackup, importBackup } from '../lib/api';
 import { formatMoney, formatPct, formatSignedMoney, formatSignedPct, plColor } from '../lib/format';
 
-export function LedgerTab({ snap, onRefresh, onEditTrade }: TabProps) {
+export function LedgerTab({ snap, onEditTrade }: TabProps) {
   const [showEntries, setShowEntries] = useState(false);
-  const [importError, setImportError] = useState('');
-  const fileRef = useRef<HTMLInputElement>(null);
   const closed = computeClosedTrades(snap.trades);
   const stats = computeStats(closed);
   const settledOptions = [...snap.options]
     .filter((o) => o.status !== 'OPEN')
     .sort((a, b) => (b.closed_at ?? '').localeCompare(a.closed_at ?? '') || b.id - a.id);
   const oStats = computeOptionStats(snap.options);
-
-  async function doExport() {
-    const data = await exportBackup();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `curia-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
-
-  async function doImport(file: File) {
-    setImportError('');
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(await file.text()) as Record<string, unknown>;
-    } catch {
-      setImportError("That file isn't a Curia backup (couldn't read it as JSON).");
-      return;
-    }
-    if ((parsed as { version?: unknown }).version !== 1 || !Array.isArray((parsed as { trades?: unknown }).trades)) {
-      setImportError("That file isn't a Curia backup.");
-      return;
-    }
-    if (!window.confirm('Replace ALL current data with this backup?')) return;
-    try {
-      await importBackup({ ...parsed, confirm: true });
-      await onRefresh();
-    } catch {
-      setImportError('Restore failed — the server rejected that backup. Nothing was changed.');
-    }
-  }
 
   return (
     <div>
@@ -134,23 +99,6 @@ export function LedgerTab({ snap, onRefresh, onEditTrade }: TabProps) {
               </div>
             </div>
           ))}
-          {importError && <div style={{ color: 'var(--pl-red)', textAlign: 'center', fontSize: 13, marginBottom: 12 }}>{importError}</div>}
-          <div className="link-row">
-            <button onClick={doExport}>Export backup</button>
-            {' · '}
-            <button onClick={() => fileRef.current?.click()}>Restore from backup</button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="application/json"
-              hidden
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                e.target.value = '';
-                if (f) void doImport(f);
-              }}
-            />
-          </div>
         </>
       )}
     </div>
