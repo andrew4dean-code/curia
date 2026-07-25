@@ -19,12 +19,14 @@
   --roll-ease: cubic-bezier(.18,.71,.21,1);
 }
 
-.odo { display: inline-flex; align-items: flex-end; line-height: 1; font-variant-numeric: tabular-nums; }
-.odo-reel { display: inline-block; height: 1em; line-height: 1; overflow: hidden; }
+/* Slot height 1.24em: Playfair Display paints taller than a 1em line box, so
+   1em slots let neighboring reel digits bleed into the visible window. */
+.odo { display: inline-flex; align-items: flex-end; line-height: 1.24; font-variant-numeric: tabular-nums; }
+.odo-reel { display: inline-block; height: 1.24em; line-height: 1.24; overflow: hidden; }
 .odo-strip { display: flex; flex-direction: column; transition: transform var(--roll-hero) var(--roll-ease); }
 .odo-detail .odo-strip { transition-duration: var(--roll-detail); }
-.odo-strip > span { height: 1em; line-height: 1; display: block; text-align: center; }
-.odo-ch { display: inline-block; }
+.odo-strip > span { height: 1.24em; line-height: 1.24; display: block; text-align: center; }
+.odo-ch { display: inline-block; line-height: 1.24; }
 
 .ticker { overflow: hidden; white-space: nowrap; background: #1F1B12; }
 .ticker-track { display: inline-block; animation: ticker-scroll 26s linear infinite; }
