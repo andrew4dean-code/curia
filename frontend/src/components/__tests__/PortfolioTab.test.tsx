@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { PortfolioTab } from '../PortfolioTab';
 import type { Snapshot } from '../../lib/api';
@@ -35,5 +35,39 @@ describe('PortfolioTab', () => {
                      onSettleOption={vi.fn()} onEditOption={vi.fn()} />,
     );
     expect(screen.getByText(/No open positions/)).toBeInTheDocument();
+  });
+
+  it('an active wheel claims its symbol: card renders, holdings exclude it', () => {
+    const withWheel: Snapshot = {
+      ...snap,
+      wheels: [{ id: 1, symbol: 'AAPL', no: 1, opened_at: '2026-06-01', closed_at: null }],
+    };
+    render(<PortfolioTab snap={withWheel} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()}
+                         onSettleOption={vi.fn()} onEditOption={vi.fn()} onFreshWheel={vi.fn()} />);
+    expect(screen.getByText(/Wheel Nº 1/)).toBeInTheDocument();
+    expect(screen.getByText('Other holdings')).toBeInTheDocument();
+    // AAPL now lives in the wheel card; NVDA remains a plain holding
+    expect(screen.getAllByText('NVDA').length).toBeGreaterThan(0);
+  });
+
+  it('with no wheels, invites a fresh one', () => {
+    const onFreshWheel = vi.fn();
+    render(<PortfolioTab snap={snap} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()}
+                         onSettleOption={vi.fn()} onEditOption={vi.fn()} onFreshWheel={onFreshWheel} />);
+    fireEvent.click(screen.getByText(/Begin a fresh wheel/));
+    expect(onFreshWheel).toHaveBeenCalledOnce();
+  });
+
+  it('completed wheels live in the archive with their final take', () => {
+    const withArchive: Snapshot = {
+      ...snap,
+      wheels: [{ id: 3, symbol: 'AAPL', no: 1, opened_at: '2026-05-04', closed_at: '2026-06-27' }],
+    };
+    const onViewWheelRecord = vi.fn();
+    render(<PortfolioTab snap={withArchive} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()}
+                         onSettleOption={vi.fn()} onEditOption={vi.fn()} onViewWheelRecord={onViewWheelRecord} />);
+    fireEvent.click(screen.getByText(/Wheel archive \(1\)/));
+    fireEvent.click(screen.getByText(/AAPL · Nº 1/));
+    expect(onViewWheelRecord).toHaveBeenCalledOnce();
   });
 });

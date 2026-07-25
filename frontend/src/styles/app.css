@@ -78,3 +78,25 @@
 @keyframes tab-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .row-tap { background: none; border: none; border-bottom: 1px solid var(--rule); font: inherit; color: inherit; text-align: left; width: 100%; }
 .row-action { background: none; border: none; color: var(--maroon); text-decoration: underline; font-family: var(--font-mono); font-size: 13px; padding: 2px 0 2px 12px; }
+.wheel-card { background: var(--parchment-card); border: 1px solid var(--maroon); border-radius: 12px; padding: 16px 14px 14px; margin: 10px 0 14px; }
+.wheel-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.wheel-card-title { font-family: var(--font-display); font-size: 20px; font-weight: 800; }
+.wheel-card-sh { font-family: var(--font-mono); font-size: 13px; font-weight: 400; color: var(--ink-soft); }
+.wheel-card-tag { font-size: 10px; letter-spacing: .08em; color: var(--gold-label); text-transform: uppercase; white-space: nowrap; }
+.wheel-card-sub { font-size: 11px; letter-spacing: .07em; color: var(--ink-soft); text-transform: uppercase; margin-top: 2px; }
+.wheel-dial-wrap { display: flex; justify-content: center; margin: 10px 0 2px; }
+.wheel-tiles { display: flex; gap: 8px; margin: 10px 0; }
+.wheel-tile { flex: 1; background: var(--parchment); border: 1px solid var(--rule); border-radius: 8px; padding: 8px; }
+.wheel-tile b { display: block; font-size: 9px; letter-spacing: .08em; color: var(--gold-label); text-transform: uppercase; font-weight: 400; }
+.wheel-tile span { font-family: var(--font-display); font-size: 16px; font-weight: 700; }
+.walkbar { margin: 12px 0 4px; }
+.walkbar-track { position: relative; height: 14px; background: var(--parchment); border: 1px solid var(--rule); border-radius: 999px; }
+.walkbar-premium { position: absolute; top: 0; bottom: 0; background: var(--gold); opacity: .7; border-radius: 999px; }
+.walkbar-needle { position: absolute; top: -6px; bottom: -6px; width: 3px; background: var(--pl-red); border-radius: 2px; transition: left 2.2s var(--roll-ease); }
+.walkbar-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--ink-soft); margin-top: 5px; }
+.wheel-total { text-align: center; margin: 12px 0 10px; padding-top: 10px; border-top: 3px double var(--rule); }
+.wheel-total b { display: block; font-size: 10px; letter-spacing: .1em; color: var(--gold-label); text-transform: uppercase; font-weight: 400; }
+.wheel-total-amount { font-family: var(--font-display); font-size: 30px; font-weight: 800; margin-top: 2px; }
+.fresh-wheel-panel { display: block; width: 100%; text-align: center; background: var(--parchment-card); border: 2px dashed var(--rule); border-radius: 12px; padding: 22px 16px; margin: 12px 0; font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--maroon); }
+.fresh-wheel-panel small { display: block; font-family: var(--font-mono); font-size: 11px; font-weight: 400; color: var(--ink-soft); margin-top: 6px; }
+.fresh-wheel-crest { display: block; font-size: 34px; margin-bottom: 4px; }
