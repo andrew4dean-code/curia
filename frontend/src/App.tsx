@@ -12,6 +12,8 @@ import { LedgerTab } from './components/LedgerTab';
 import { AddTradeSheet } from './components/AddTradeSheet';
 import { MarkSheet } from './components/MarkSheet';
 import { SettleSheet } from './components/SettleSheet';
+import { TradeCeremony } from './components/TradeCeremony';
+import type { TicketData } from './components/TradeCeremony';
 
 type Sheet =
   | { kind: 'trade'; trade: Trade | null }
@@ -26,6 +28,9 @@ export default function App() {
   const [offline, setOffline] = useState(false);
   const [tab, setTab] = useState<TabId>('portfolio');
   const [sheet, setSheet] = useState<Sheet>(null);
+  const [ceremony, setCeremony] = useState<TicketData | null>(null);
+  const [justAdded, setJustAdded] = useState<{ kind: 'trade' | 'option'; id: number; symbol: string } | null>(null);
+  const [landing, setLanding] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -67,10 +72,18 @@ export default function App() {
     onMark: (symbol: string) => setSheet({ kind: 'mark', symbol }),
     onSettleOption: (option: OptionPosition) => setSheet({ kind: 'settle', option }),
     onEditOption: (option: OptionPosition) => setSheet({ kind: 'optionEdit', option }),
+    justAdded,
   };
 
+  const onTicket = async (ticket: TicketData) => {
+    setSheet(null);
+    setJustAdded({ kind: ticket.title === 'OPTION TICKET' ? 'option' : 'trade', id: ticket.no, symbol: ticket.symbol });
+    setCeremony(ticket);
+  };
+  const onDeleted = async () => { setSheet(null); await refresh(); };
+
   return (
-    <div className="shell">
+    <div className={landing ? 'shell roll-slow' : 'shell'}>
       {offline && <OfflineBanner fetchedAt={snap.fetchedAt} />}
       {tab === 'portfolio' ? <PortfolioTab {...tabProps} /> : <LedgerTab {...tabProps} />}
       {!offline && (
@@ -79,16 +92,31 @@ export default function App() {
         </button>
       )}
       {sheet?.kind === 'trade' && (
-        <AddTradeSheet trade={sheet.trade} onDone={async () => { setSheet(null); await refresh(); }} onCancel={() => setSheet(null)} />
+        <AddTradeSheet trade={sheet.trade} onDone={onTicket} onDeleted={onDeleted} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'optionEdit' && (
-        <AddTradeSheet trade={null} option={sheet.option} onDone={async () => { setSheet(null); await refresh(); }} onCancel={() => setSheet(null)} />
+        <AddTradeSheet trade={null} option={sheet.option} onDone={onTicket} onDeleted={onDeleted} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'mark' && (
         <MarkSheet symbol={sheet.symbol} onDone={async () => { setSheet(null); await refresh(); }} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'settle' && (
         <SettleSheet option={sheet.option} onDone={async () => { setSheet(null); await refresh(); }} onEdit={() => setSheet({ kind: 'optionEdit', option: sheet.option })} onCancel={() => setSheet(null)} />
+      )}
+      {ceremony && (
+        <TradeCeremony
+          ticket={ceremony}
+          onDone={() => {
+            setCeremony(null);
+            setLanding(true);
+            void refresh().then(() => {
+              window.setTimeout(() => {
+                setLanding(false);
+                setJustAdded(null);
+              }, 3000);
+            });
+          }}
+        />
       )}
       <TabBar active={tab} onChange={setTab} />
     </div>

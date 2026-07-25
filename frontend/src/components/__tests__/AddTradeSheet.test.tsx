@@ -35,5 +35,6 @@ describe('AddTradeSheet option mode', () => {
     expect(url).toBe('/api/options');
     const body = JSON.parse((init as RequestInit).body as string);
     expect(body).toMatchObject({ symbol: 'TQQQ', opt_type: 'PUT', strike: 62, contracts: 2, premium: 0.74 });
+    expect(onDone.mock.calls[0][0]).toMatchObject({ no: 9, title: 'OPTION TICKET', symbol: 'TQQQ' });
   });
 });

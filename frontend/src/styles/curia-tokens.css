@@ -219,3 +219,6 @@
   --pl-down: var(--pl-red);
   --pl-flat: var(--ink-soft);
 }
+
+/* Ceremony landing: numbers wind slowly to their new totals for a few seconds. */
+.roll-slow { --roll-hero: 2.2s; --roll-detail: 2.6s; }

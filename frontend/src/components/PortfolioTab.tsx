@@ -15,11 +15,12 @@ export interface TabProps {
   onMark: (symbol: string) => void;
   onSettleOption: (o: OptionPosition) => void;
   onEditOption: (o: OptionPosition) => void;
+  justAdded?: { kind: 'trade' | 'option'; id: number; symbol: string } | null;
 }
 
 const rowButtonStyle = { width: '100%', background: 'none', border: 'none', borderBottom: '1px solid var(--rule)', textAlign: 'left', font: 'inherit', color: 'inherit' } as const;
 
-export function PortfolioTab({ snap, onMark, onSettleOption }: TabProps) {
+export function PortfolioTab({ snap, onMark, onSettleOption, justAdded }: TabProps) {
   const positions = computeOpenPositions(snap.trades, snap.marks);
   const bookValue = positions.reduce(
     (s, p) => s + (p.marketValue ?? p.qty * p.avgCost),
@@ -53,7 +54,7 @@ export function PortfolioTab({ snap, onMark, onSettleOption }: TabProps) {
       {positions.map((p) => (
         <button
           key={p.symbol}
-          className="row"
+          className={justAdded?.kind === 'trade' && justAdded.symbol === p.symbol ? 'row stamp-in' : 'row'}
           style={rowButtonStyle}
           onClick={() => onMark(p.symbol)}
         >
@@ -80,7 +81,12 @@ export function PortfolioTab({ snap, onMark, onSettleOption }: TabProps) {
         <>
           <h2 className="section-title">Open Options</h2>
           {openOptions.map((o) => (
-            <button key={o.id} className="row" style={rowButtonStyle} onClick={() => onSettleOption(o)}>
+            <button
+              key={o.id}
+              className={justAdded?.kind === 'option' && justAdded.id === o.id ? 'row stamp-in' : 'row'}
+              style={rowButtonStyle}
+              onClick={() => onSettleOption(o)}
+            >
               <div className="row-main">
                 <div className="row-sym">
                   {o.symbol} ${o.strike} {o.opt_type}

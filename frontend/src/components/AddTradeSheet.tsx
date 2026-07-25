@@ -3,21 +3,30 @@ import type { FormEvent } from 'react';
 import { createOption, createTrade, deleteTrade, updateOption, updateTrade } from '../lib/api';
 import type { OptionDraft, OptionPosition, OptionType, Side, Trade } from '../lib/types';
 import { nextFriday } from '../lib/time';
+import { formatMoney } from '../lib/format';
+import type { TicketData } from './TradeCeremony';
 
 const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+const fmtDate = (iso: string) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
 export function AddTradeSheet({
   trade,
   option,
   onDone,
+  onDeleted,
   onCancel,
 }: {
   trade: Trade | null;
   option?: OptionPosition | null;
-  onDone: () => Promise<void>;
+  onDone: (ticket: TicketData) => Promise<void>;
+  onDeleted?: () => Promise<void>;
   onCancel: () => void;
 }) {
   const [mode, setMode] = useState<'stock' | 'option'>(option ? 'option' : 'stock');
@@ -50,8 +59,18 @@ export function AddTradeSheet({
           expiration, contracts: Number(contracts), premium: Number(premium),
           fees: Number(fees) || 0, opened_at: date, note,
         };
-        if (option) await updateOption(option.id, draft);
-        else await createOption(draft);
+        const saved = option ? await updateOption(option.id, draft) : await createOption(draft);
+        const ticket: TicketData = {
+          no: saved.id,
+          title: 'OPTION TICKET',
+          symbol: draft.symbol,
+          lines: [
+            `SELL TO OPEN ${draft.contracts}x`,
+            `${draft.symbol} $${draft.strike} ${draft.opt_type} · exp ${fmtDate(draft.expiration)}`,
+            `${formatMoney(draft.premium * 100 * draft.contracts)} collected`,
+          ],
+        };
+        await onDone(ticket);
       } else {
         const body = {
           symbol: symbol.trim().toUpperCase(),
@@ -62,10 +81,18 @@ export function AddTradeSheet({
           executed_at: date,
           note,
         };
-        if (trade) await updateTrade({ ...body, id: trade.id });
-        else await createTrade(body);
+        const saved = trade ? await updateTrade({ ...body, id: trade.id }) : await createTrade(body);
+        const ticket: TicketData = {
+          no: saved.id,
+          title: 'TRADE TICKET',
+          symbol: body.symbol,
+          lines: [
+            `${body.side} ${body.qty} ${body.symbol}`,
+            `@ ${formatMoney(body.price)} · ${fmtDate(body.executed_at)}`,
+          ],
+        };
+        await onDone(ticket);
       }
-      await onDone();
     } catch {
       setError('Could not save — check the fields and your connection.');
       setBusy(false);
@@ -78,7 +105,7 @@ export function AddTradeSheet({
     setBusy(true);
     try {
       await deleteTrade(trade.id);
-      await onDone();
+      await onDeleted?.();
     } catch {
       setError('Could not delete — check your connection.');
       setBusy(false);
