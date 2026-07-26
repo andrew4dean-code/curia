@@ -135,6 +135,8 @@ export function Odometer({ value, speed = 'hero', className, dataTestid, run = t
     const dur = DURATION_MS[speed] * rollScale(host.current);
     const start = performance.now();
     const up = to.n >= from;
+    /** The last figure the eye was actually shown. The count ratchets against this. */
+    let last = from;
 
     const step = (now: number) => {
       const t = Math.min(1, (now - start) / dur);
@@ -153,6 +155,14 @@ export function Odometer({ value, speed = 'hero', className, dataTestid, run = t
       let s = Math.round(v / q) * q;
       s = up ? Math.min(s, to.n) : Math.max(s, to.n); // never overshoot
       s = Number(s.toFixed(DP));
+      // ...and never step behind the figure already on screen. q is a decade of the
+      // UNQUANTIZED remainder, so on the frame the remainder crosses a decade q drops
+      // tenfold and the finer rounding can land under the coarser value just painted
+      // ($10.00 then $9.00 on the way up). Clamping only against to.n never caught it.
+      // A ratchet against the last painted figure does: the count may hold for a frame,
+      // it can never reverse.
+      s = up ? Math.max(s, last) : Math.min(s, last);
+      last = s;
       cur.current = s;
       paint(build(s, to.signed));
       frame.current = requestAnimationFrame(step);

@@ -12,11 +12,17 @@ import { Odometer } from '../Odometer';
 let clock = 0;
 let pending = new Map<number, FrameRequestCallback>();
 let nextId = 1;
+/** What getComputedStyle reports for --roll-scale. jsdom resolves no cascade, so the
+ *  stylesheet's value never reaches the component on its own and every test would run
+ *  at one duration. 1 is :root; 1.8 is .roll-slow — both read off the real page in
+ *  headless Chrome against curia-tokens.css. */
+let rollScale = 1;
 
 beforeEach(() => {
   clock = 0;
   pending = new Map();
   nextId = 1;
+  rollScale = 1;
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
     const id = nextId++;
     pending.set(id, cb);
@@ -26,6 +32,20 @@ beforeEach(() => {
     pending.delete(id);
   });
   vi.spyOn(performance, 'now').mockImplementation(() => clock);
+
+  const real = window.getComputedStyle.bind(window);
+  vi.spyOn(window, 'getComputedStyle').mockImplementation(((el: Element, pe?: string | null) => {
+    const cs = real(el, pe);
+    return new Proxy(cs, {
+      get(target, key) {
+        if (key === 'getPropertyValue') {
+          return (p: string) => (p === '--roll-scale' ? String(rollScale) : target.getPropertyValue(p));
+        }
+        const v = Reflect.get(target, key);
+        return typeof v === 'function' ? v.bind(target) : v;
+      },
+    });
+  }) as typeof window.getComputedStyle);
 });
 
 afterEach(() => {
@@ -40,12 +60,16 @@ function tick(dt = 16.7) {
   act(() => due.forEach((cb) => cb(clock)));
 }
 
-/** Run the count to completion, recording every figure it paints. */
-function play(el: HTMLElement) {
+/** Run the count to completion, recording every figure it paints. `phase` is the gap
+ *  from the effect's start() to the first frame — a display never hands the first
+ *  callback over exactly one interval after a React commit. */
+function play(el: HTMLElement, dt = 16.7, phase = dt) {
   const seen = [el.textContent ?? ''];
   let frames = 0;
-  while (pending.size && frames < 400) {
-    tick();
+  let first = true;
+  while (pending.size && frames < 600) {
+    tick(first ? phase : dt);
+    first = false;
     frames++;
     const now = el.textContent ?? '';
     if (now !== seen[seen.length - 1]) seen.push(now);
@@ -61,6 +85,63 @@ function mount(value: string, props: { speed?: 'hero' | 'detail'; run?: boolean 
   const to = (next: string, more: typeof props = props) =>
     view.rerender(<Odometer value={next} dataTestid="odo" {...more} />);
   return { ...view, el, to };
+}
+
+/* The quantizer picks its step from the decade of the remaining distance, so which
+   figures it paints depends on exactly where the frames land inside the run. Pinning
+   any one of these axes hides a whole class of defect: at 60Hz, frame-aligned, plain
+   hero, the count is clean at every one of 3,000 integer targets, while the same code
+   ticked backward on 722 of them at 120Hz under .roll-slow. Every monotonicity test
+   sweeps all four. */
+interface Axis {
+  dt: number;
+  phase: number;
+  scale: number;
+  speed: 'hero' | 'detail';
+}
+
+const HZ = [
+  { dt: 8.333, hz: 120 }, // ProMotion, where the count broke
+  { dt: 16.7, hz: 60 },
+  { dt: 6.944, hz: 144 },
+  { dt: 11.111, hz: 90 },
+  { dt: 33.333, hz: 30 }, // a thermally throttled phone
+];
+const PHASES = [0.13, 0.37, 0.5, 0.71, 1];
+const SCALES = [1, 1.8]; // :root, .roll-slow
+const SPEEDS = ['hero', 'detail'] as const;
+
+function axes(): Axis[] {
+  const out: Axis[] = [];
+  for (const { dt } of HZ) {
+    for (const f of PHASES) {
+      for (const scale of SCALES) {
+        for (const speed of SPEEDS) out.push({ dt, phase: dt * f, scale, speed });
+      }
+    }
+  }
+  return out;
+}
+
+const where = (a: Axis, from: string, to: string) =>
+  `${from} -> ${to} @ ${(1000 / a.dt).toFixed(0)}Hz phase ${a.phase.toFixed(3)}ms ` +
+  `scale ${a.scale} ${a.speed}`;
+
+/* Figures that put a decade boundary inside the run, which is where the quantizer's
+   step changes and where the count used to stumble. Measured in headless Chrome: at
+   120Hz under .roll-slow, $0 -> $107.00 painted "$0.00 $10.00 $9.00 $11.00 ...". */
+const UP_TARGETS = ['$107.00', '$109.00', '$1,090.00', '$1,194.00', '$9.99', '$2,200.00'];
+
+const isMultiple = (v: number, q: number) => Math.abs(v / q - Math.round(v / q)) < 1e-6;
+
+/** One complete count, mounted and torn down on its own axis. */
+function sweepRun(from: string, to: string, a: Axis) {
+  rollScale = a.scale;
+  const view = mount(from, { speed: a.speed });
+  view.to(to, { speed: a.speed });
+  const { seen, frames } = play(view.el, a.dt, a.phase);
+  view.unmount();
+  return { seen, frames, values: seen.map(num) };
 }
 
 describe('Odometer', () => {
@@ -88,23 +169,64 @@ describe('Odometer', () => {
     });
   });
 
-  it('quantizes to a step that shrinks as it converges, so low places hold', () => {
-    const { el, to } = mount('$0.00');
-    to('$148.00');
-    const { seen } = play(el);
-
-    const isMultiple = (v: number, q: number) => Math.abs(v / q - Math.round(v / q)) < 1e-6;
-    for (const s of seen.slice(0, -1)) {
-      const v = num(s);
-      const rem = 148 - v;
-      if (rem >= 100) expect(isMultiple(v, 10)).toBe(true); // tens
-      else if (rem >= 10) expect(isMultiple(v, 1)).toBe(true); // whole dollars
-      else if (rem >= 1) expect(isMultiple(v, 0.1)).toBe(true); // dimes
+  it('never ticks backward on the way up, at any frame rate, duration or phase', () => {
+    for (const a of axes()) {
+      for (const target of UP_TARGETS) {
+        const { seen, values } = sweepRun('$0.00', target, a);
+        expect(seen[seen.length - 1], where(a, '$0.00', target)).toBe(target);
+        expect(seen.length, where(a, '$0.00', target)).toBeGreaterThan(15);
+        for (let i = 1; i < values.length; i++) {
+          // Strict: every painted figure is above the one the eye just saw.
+          expect(
+            values[i],
+            `${where(a, '$0.00', target)} — painted ${seen[i - 1]} then ${seen[i]}`,
+          ).toBeGreaterThan(values[i - 1]);
+        }
+      }
     }
-    // The cents only ever move inside the last dollar.
-    const centy = seen.filter((s) => !isMultiple(num(s), 0.1));
-    expect(centy.every((s) => 148 - num(s) < 1)).toBe(true);
-    expect(centy.length).toBeGreaterThan(0);
+  });
+
+  it('quantizes to a step that shrinks as it converges, so low places hold', () => {
+    // The code picks q from the UNQUANTIZED remainder and rounds to the nearest
+    // multiple of it, so the painted figure sits within q/2 of the value q was chosen
+    // for. Any claim stated on the painted remainder therefore needs half a step of
+    // slack — asserting the decade exactly is asserting something the code does not
+    // hold. A full decade of margin is well outside q/2 at every rung: while $2 of
+    // travel remain the cents have provably not moved, while $20 remain the dimes
+    // have not, while $200 remain the dollars have not.
+    const LADDER = [
+      { remaining: 200, step: 10 },
+      { remaining: 20, step: 1 },
+      { remaining: 2, step: 0.1 },
+    ];
+    let centyTotal = 0;
+    for (const a of axes()) {
+      for (const target of UP_TARGETS) {
+        const { seen } = sweepRun('$0.00', target, a);
+        const end = num(target);
+        for (const s of seen) {
+          const v = num(s);
+          const rem = end - v;
+          // The floor of the ladder: nothing finer than a cent is ever painted.
+          expect(isMultiple(v, 0.01), `${where(a, '$0.00', target)} painted ${s}`).toBe(true);
+          const rung = LADDER.find((l) => rem >= l.remaining);
+          if (rung) {
+            expect(
+              isMultiple(v, rung.step),
+              `${where(a, '$0.00', target)} painted ${s} with $${rem.toFixed(2)} left`,
+            ).toBe(true);
+          }
+        }
+        // Cents only ever move inside the last dollar (plus the half-step of slack).
+        const centy = seen.filter((s) => !isMultiple(num(s), 0.1));
+        expect(
+          centy.every((s) => end - num(s) < 1.01),
+          `${where(a, '$0.00', target)} cent-granular too early: ${centy[0]}`,
+        ).toBe(true);
+        centyTotal += centy.length;
+      }
+    }
+    expect(centyTotal).toBeGreaterThan(0); // the ladder does reach the bottom rung
   });
 
   it('takes the same time whichever way and however far the figure travels', () => {
@@ -134,6 +256,26 @@ describe('Odometer', () => {
       if (i > 0) expect(v).toBeLessThan(values[i - 1]);
     });
     expect(seen[seen.length - 1]).toBe('$0.00');
+  });
+
+  it('never ticks backward on the way down, at any frame rate, duration or phase', () => {
+    for (const a of axes()) {
+      for (const from of UP_TARGETS) {
+        const { seen, values } = sweepRun(from, '$0.00', a);
+        expect(seen[seen.length - 1], where(a, from, '$0.00')).toBe('$0.00');
+        expect(seen.length, where(a, from, '$0.00')).toBeGreaterThan(15);
+        for (let i = 1; i < values.length; i++) {
+          // Counting down, "backward" is a figure that rises — including the very
+          // first frame, which used to round $109.00 up to $110.00 before falling.
+          expect(
+            values[i],
+            `${where(a, from, '$0.00')} — painted ${seen[i - 1]} then ${seen[i]}`,
+          ).toBeLessThan(values[i - 1]);
+          expect(values[i], where(a, from, '$0.00')).toBeGreaterThanOrEqual(0);
+        }
+        expect(values[0], where(a, from, '$0.00')).toBe(num(from));
+      }
+    }
   });
 
   it('takes the sign from the interpolated value, not from the endpoint', () => {
