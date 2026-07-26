@@ -19,8 +19,12 @@
 .envelope-flap { position: absolute; left: 0; right: 0; top: 0; height: 0; border-left: 145px solid transparent; border-right: 145px solid transparent; border-top: 88px solid var(--parchment-card); filter: drop-shadow(0 2px 2px rgba(0,0,0,.15)); transform-origin: 50% 0%; transform: rotateX(180deg); }
 .envelope-seal { position: absolute; left: 50%; top: 74px; transform: translateX(-50%) scale(0); width: 40px; height: 40px; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-family: var(--font-display); font-weight: 800; font-size: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,.3); }
 
-/* ---- stage: print — rise off the press with a settle, then the seal stamps ---- */
-.ceremony[data-stage='print'] .ticket { animation: ticket-rise 1.0s cubic-bezier(.22, .9, .28, 1) both; }
+/* ---- stage: print — rise off the press with a settle, then the seal stamps ----
+   the rise lives on .ticket-wrap (not .ticket) because .ticket's transform is
+   also driven by the page-feed rule below; keeping them on separate elements
+   means neither the ticket-rise animation nor the feed transition ever have to
+   fight over the same computed transform. */
+.ceremony[data-stage='print'] .ticket-wrap { animation: ticket-rise 0.8s cubic-bezier(.22, .9, .28, 1) both; }
 .ceremony[data-stage='print'] .ticket-seal { animation: seal-stamp 0.4s 2.0s cubic-bezier(.3, 1.4, .5, 1) both; }
 @keyframes ticket-rise {
   0% { transform: translateY(110vh); }
@@ -118,3 +122,12 @@
 .wheel-crest-scene { position: relative; }
 .wheel-ceremony[data-phase='stamp'] .crest-banner { animation: banner-press 0.45s 0.15s cubic-bezier(.3,1.4,.5,1) forwards; }
 @keyframes banner-press { 0% { opacity: 0; transform: translate(-50%,-50%) rotate(-8deg) scale(1.6); } 100% { opacity: 1; transform: translate(-50%,-50%) rotate(-8deg) scale(1); } }
+
+/* ---- the press: platen roller + striking typebar ---- */
+.platen { position: absolute; left: -14px; right: -14px; top: -26px; height: 26px; border-radius: 13px; background: linear-gradient(#4a4137, #241f19 62%, #171310); box-shadow: 0 2px 5px rgba(0,0,0,.45), 0 -1px 0 rgba(255,255,255,.13) inset; z-index: 3; }
+.typebar { position: absolute; left: 50%; top: 46%; width: 3px; height: 78px; margin-left: -1.5px; background: linear-gradient(var(--ink), #0f0d0a); border-radius: 2px; transform-origin: 50% 100%; opacity: 0; z-index: 2; }
+.ceremony[data-typing='yes'] .typebar { opacity: .92; }
+.ceremony[data-typing='yes'] .typebar[data-strike='0'] { animation: bar-hit 96ms cubic-bezier(.3,0,.2,1) both; }
+.ceremony[data-typing='yes'] .typebar[data-strike='1'] { animation: bar-hit 96ms cubic-bezier(.3,0,.2,1) both; }
+@keyframes bar-hit { 0% { transform: rotate(26deg) translateY(10px); } 55% { transform: rotate(0deg) translateY(0); } 100% { transform: rotate(22deg) translateY(8px); } }
+.ceremony[data-stage='print'] .ticket { transform: translateY(calc(var(--feed, 0) * -3px)); transition: transform .13s steps(2, end); }
