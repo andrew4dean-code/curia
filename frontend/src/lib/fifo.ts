@@ -56,6 +56,7 @@ export function computeClosedTrades(trades: Trade[]): ClosedTrade[] {
           closedAt: t.executed_at,
           isWin: realizedPl > 0,
           fees: Math.round(fees * 10000) / 10000,
+          sellId: t.id,
         });
         q -= m;
         if (m >= lot.qty - EPS) lots.shift();
@@ -66,6 +67,15 @@ export function computeClosedTrades(trades: Trade[]): ClosedTrade[] {
   }
   closed.sort((a, b) => a.closedAt.localeCompare(b.closedAt));
   return closed;
+}
+
+// The realised result attributable to one SELL, read out of the existing FIFO
+// walk. A close-out ticket states what the exit actually earned; it must never
+// disagree with the Ledger, so it reads the same computation the Ledger does.
+export function realisedForSell(trades: Trade[], sell: Trade): number {
+  return computeClosedTrades(trades)
+    .filter((c) => c.sellId === sell.id)
+    .reduce((sum, c) => sum + c.realizedPl, 0);
 }
 
 export interface OpenLot {

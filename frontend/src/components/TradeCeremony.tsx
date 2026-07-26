@@ -81,12 +81,16 @@ export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: 
       <div className="ceremony-scene">
         <div className="ticket">
           <div className="ticket-head">CURIA · {ticket.title} Nº {ticket.no}</div>
-          {ticket.lines.map((full, i) => (
-            <div className="ticket-line" key={full}>
-              {shownLines[i] ?? ''}
-              {typing && i === typedLines.length - 1 && <span className="type-caret" />}
-            </div>
-          ))}
+          {ticket.lines.map((full, i) => {
+            const isRealised = full.includes('realised');
+            const sign = isRealised ? (full.startsWith('−') || full.startsWith('-') ? 'down' : 'up') : undefined;
+            return (
+              <div className="ticket-line" key={full} data-sign={sign}>
+                {shownLines[i] ?? ''}
+                {typing && i === typedLines.length - 1 && <span className="type-caret" />}
+              </div>
+            );
+          })}
           <div className="ticket-seal">C</div>
         </div>
         <div className="envelope">

@@ -77,4 +77,28 @@ describe('AddTradeSheet', () => {
     fireEvent.change(qty, { target: { value: '150' } });
     expect(qty.value).toBe('150'); // a partial exit is just an edit
   });
+
+  it('a close-out prints a POSITION CLOSED ticket carrying the realised figure', async () => {
+    vi.mocked(api.createTrade).mockClear();
+    vi.mocked(api.createTrade).mockResolvedValueOnce({
+      id: 2, symbol: 'TQQQ', side: 'SELL', qty: 100, price: 72, fees: 0, executed_at: '2026-07-25', note: '',
+    });
+    const onDone = vi.fn();
+    render(
+      <AddTradeSheet
+        trade={null}
+        wheels={[]}
+        trades={[{ id: 1, symbol: 'TQQQ', side: 'BUY', qty: 100, price: 60, fees: 0, executed_at: '2026-06-01', note: '' }]}
+        prefill={{ side: 'SELL', symbol: 'TQQQ', qty: 100 }}
+        onDone={onDone}
+        onCancel={vi.fn()}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText(/price/i), { target: { value: '72' } });
+    fireEvent.click(screen.getByRole('button', { name: /add trade/i }));
+    await waitFor(() => expect(onDone).toHaveBeenCalledOnce());
+    const ticket = onDone.mock.calls[0][0];
+    expect(ticket.title).toBe('POSITION CLOSED');
+    expect(ticket.lines.join(' ')).toMatch(/\+\$1,200\.00 realised/);
+  });
 });

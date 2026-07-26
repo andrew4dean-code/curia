@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeClosedTrades } from '../fifo';
+import { computeClosedTrades, realisedForSell } from '../fifo';
 import type { Trade } from '../types';
 
 let nextId = 1;
@@ -79,5 +79,23 @@ describe('computeClosedTrades', () => {
     const closed = computeClosedTrades([sellFirst, buyAfter]);
     expect(closed).toHaveLength(1);
     expect(closed[0].realizedPl).toBeCloseTo(25);
+  });
+});
+
+describe('realisedForSell', () => {
+  const buy = { id: 1, symbol: 'TQQQ', side: 'BUY' as const, qty: 100, price: 60, fees: 0, executed_at: '2026-06-01', note: '' };
+  const win = { id: 2, symbol: 'TQQQ', side: 'SELL' as const, qty: 100, price: 72, fees: 0, executed_at: '2026-07-01', note: '' };
+  const loss = { id: 3, symbol: 'TQQQ', side: 'SELL' as const, qty: 100, price: 51, fees: 0, executed_at: '2026-07-01', note: '' };
+
+  it('returns the gain on a profitable exit', () => {
+    expect(realisedForSell([buy, win], win)).toBeCloseTo(1200, 6);
+  });
+
+  it('returns a negative number on a loss', () => {
+    expect(realisedForSell([buy, loss], loss)).toBeCloseTo(-900, 6);
+  });
+
+  it('returns 0 for a sell it cannot match', () => {
+    expect(realisedForSell([win], win)).toBeCloseTo(0, 6);
   });
 });

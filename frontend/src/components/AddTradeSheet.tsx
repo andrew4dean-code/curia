@@ -3,8 +3,9 @@ import type { FormEvent } from 'react';
 import { createTrade, deleteTrade, updateTrade } from '../lib/api';
 import { todayIso } from '../lib/time';
 import { wheelWindowNote } from '../lib/wheelMath';
+import { realisedForSell } from '../lib/fifo';
 import type { Side, Trade, Wheel } from '../lib/types';
-import { formatMoney } from '../lib/format';
+import { formatMoney, formatSignedMoney } from '../lib/format';
 import type { TicketData } from './TradeCeremony';
 
 const fmtDate = (iso: string) => {
@@ -15,6 +16,7 @@ const fmtDate = (iso: string) => {
 export function AddTradeSheet({
   trade,
   wheels,
+  trades = [],
   prefill,
   onDone,
   onDeleted,
@@ -22,6 +24,7 @@ export function AddTradeSheet({
 }: {
   trade: Trade | null;
   wheels: Wheel[];
+  trades?: Trade[];
   prefill?: { side: Side; symbol: string; qty: number };
   onDone: (ticket: TicketData) => Promise<void>;
   onDeleted?: () => Promise<void>;
@@ -53,15 +56,30 @@ export function AddTradeSheet({
         note,
       };
       const saved = trade ? await updateTrade({ ...body, id: trade.id }) : await createTrade(body);
-      const ticket: TicketData = {
-        no: saved.id,
-        title: 'TRADE TICKET',
-        symbol: body.symbol,
-        lines: [
-          `${body.side} ${body.qty} ${body.symbol}`,
-          `@ ${formatMoney(body.price)} · ${fmtDate(body.executed_at)}`,
-        ],
-      };
+      const closing = !trade && prefill?.side === 'SELL';
+      const realised = closing
+        ? realisedForSell([...trades, { ...body, id: saved.id }], { ...body, id: saved.id })
+        : 0;
+      const ticket: TicketData = closing
+        ? {
+            no: saved.id,
+            title: 'POSITION CLOSED',
+            symbol: body.symbol,
+            lines: [
+              `SOLD ${body.qty} ${body.symbol}`,
+              `@ ${formatMoney(body.price)} · ${fmtDate(body.executed_at)}`,
+              `${formatSignedMoney(realised)} realised`,
+            ],
+          }
+        : {
+            no: saved.id,
+            title: 'TRADE TICKET',
+            symbol: body.symbol,
+            lines: [
+              `${body.side} ${body.qty} ${body.symbol}`,
+              `@ ${formatMoney(body.price)} · ${fmtDate(body.executed_at)}`,
+            ],
+          };
       await onDone(ticket);
     } catch {
       setError('Could not save — check the fields and your connection.');

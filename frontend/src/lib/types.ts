@@ -29,6 +29,10 @@ export interface ClosedTrade {
   closedAt: string; // YYYY-MM-DD
   isWin: boolean;
   fees: number;
+  // id of the SELL trade whose FIFO consumption produced this row. Optional
+  // so existing fixtures/tests that construct a ClosedTrade by hand still
+  // type-check; computeClosedTrades always sets it.
+  sellId?: number;
 }
 
 export interface OpenPosition {

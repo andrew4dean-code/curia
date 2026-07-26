@@ -142,7 +142,7 @@ export default function App() {
         </button>
       )}
       {sheet?.kind === 'trade' && (
-        <AddTradeSheet trade={sheet.trade} wheels={snap.wheels} prefill={sheet.prefill} onDone={onTicket} onDeleted={onDeleted} onCancel={() => setSheet(null)} />
+        <AddTradeSheet trade={sheet.trade} wheels={snap.wheels} trades={snap.trades} prefill={sheet.prefill} onDone={onTicket} onDeleted={onDeleted} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'position' && (
         <PositionSheet
