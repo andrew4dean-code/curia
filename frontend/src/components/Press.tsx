@@ -6,17 +6,42 @@
 // bottom of the scene, which kept the arm off the header and typed text but still
 // drew a long tapered shaft down the rest of the page.
 //
-// The head and arm shaft are authored once at the line-0 position, then the whole
-// assembly is translated down by the same per-line offset that drives strikeY.
-// That keeps the head locked just inside the top of the clip band at every line
-// index, instead of sitting at a fixed y that the band clips away on later lines.
-// The translate lives on an inner <g> (not on .press-arm itself) because the
-// swing animation sets a CSS `transform` on .press-arm, and a CSS transform on an
-// element overrides any SVG `transform` attribute on that same element — nesting
-// keeps the two from fighting.
+// LINE_PITCH is the real rendered height of a `.ticket-line` (see ceremony.css),
+// not a guess: font-size 14px with the inherited body line-height of 1.5 gives a
+// 21px content line, plus the rule's own 3px top/bottom padding = 27px. (The
+// rule's `min-height: 1.45em` — 20.3px — never wins: natural content height is
+// taller, so it's a no-op here.) Confirmed by rendering three stacked
+// `.ticket-line` elements in a real browser and reading their bounding rects:
+// consecutive lines land exactly 27px apart. Using the wrong pitch (a guessed 21
+// in an earlier pass) meant the strike point drifted further out of register
+// with the text on every line after the first.
+//
+// LINE_GAP_OFFSET pushes the strike point from the *top* of the current line
+// down past that line's own glyphs, landing in the gap before the next line
+// starts: 3px padding-top + 21px line content = 24px is exactly where this
+// line's text ends and its bottom padding begins. That's "just under the
+// baseline" without yet touching the next line.
+//
+// BASE_STRIKE_Y (line 0's strike point) and the head's authored `y` are the same
+// constant on purpose: the head's top edge and the clip band's top edge must be
+// the same y at every line, so nothing is ever drawn above the strike line —
+// enforced by the clip path, not by leaving a gap and hoping z-order cooperates.
+//
+// The head and arm shaft are authored once at the line-0 position, then the
+// whole assembly is translated down by the same per-line offset that drives
+// strikeY. That keeps the head locked to the top of the clip band at every line
+// index, instead of sitting at a fixed y that the band clips away on later
+// lines. The translate lives on an inner <g> (not on .press-arm itself) because
+// the swing animation sets a CSS `transform` on .press-arm, and a CSS transform
+// on an element overrides any SVG `transform` attribute on that same element —
+// nesting keeps the two from fighting.
+const LINE_PITCH = 27;
+const LINE_GAP_OFFSET = 24;
+const BASE_STRIKE_Y = 96 + LINE_GAP_OFFSET;
+
 export function Press({ striking, line }: { striking: number; line: number }) {
-  const strikeY = 96 + line * 21;
-  const armOffset = line * 21;
+  const strikeY = BASE_STRIKE_Y + line * LINE_PITCH;
+  const armOffset = line * LINE_PITCH;
   return (
     <svg className="press" viewBox="0 0 318 260" preserveAspectRatio="none" aria-hidden="true">
       <defs>
@@ -51,8 +76,8 @@ export function Press({ striking, line }: { striking: number; line: number }) {
       <g className="press-arm" data-strike={striking} clipPath="url(#press-clip)">
         <g transform={`translate(0, ${armOffset})`}>
           <path d="M155 258 L150 130 L166 130 L161 258 Z" fill="url(#arm-steel)" />
-          <rect className="press-head" x="146" y="112" width="24" height="20" rx="4" fill="#241f19" />
-          <rect x="150" y="116" width="16" height="12" rx="2" fill="#3c352c" />
+          <rect className="press-head" x="150" y={BASE_STRIKE_Y} width="16" height="12" rx="3" fill="#241f19" />
+          <rect x="153" y={BASE_STRIKE_Y + 3} width="10" height="6" rx="1.5" fill="#3c352c" />
         </g>
       </g>
 
