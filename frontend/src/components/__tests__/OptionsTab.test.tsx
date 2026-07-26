@@ -166,4 +166,12 @@ describe('OptionsTab board', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
     expect(screen.getByText(/left/)).toBeInTheDocument(); // current month's real live week returns
   });
+
+  it('marks the slide direction when browsing months', () => {
+    const { container } = render(<OptionsTab snap={snapWith([])} {...cbs} onSellWeek={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
+    expect(container.querySelector('.board-weeks')?.getAttribute('data-slide')).toBe('left');
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
+    expect(container.querySelector('.board-weeks')?.getAttribute('data-slide')).toBe('right');
+  });
 });

@@ -116,3 +116,9 @@
 .wk { box-shadow: 0 1px 0 rgba(255,255,255,.45) inset, 0 2px 5px rgba(46,40,32,.07); }
 .wk-todo { animation: todo-breathe 3.6s ease-in-out infinite; }
 @keyframes todo-breathe { 0%, 100% { opacity: 1; border-color: var(--maroon); } 50% { opacity: .62; border-color: rgba(140,43,38,.45); } }
+.board-weeks[data-slide='left'] { animation: board-in-left .34s cubic-bezier(.22,.9,.28,1) both; }
+.board-weeks[data-slide='right'] { animation: board-in-right .34s cubic-bezier(.22,.9,.28,1) both; }
+@keyframes board-in-left { from { transform: translateX(26%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes board-in-right { from { transform: translateX(-26%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.board-weeks .wk { animation: wk-deal .32s cubic-bezier(.22,.9,.28,1) both; animation-delay: calc(var(--wk-i, 0) * 55ms); }
+@keyframes wk-deal { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
