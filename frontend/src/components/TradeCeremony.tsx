@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { EnvelopeArt } from './EnvelopeArt';
 import { Press } from './Press';
 
 export interface TicketData {
@@ -114,8 +115,7 @@ export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: 
           </div>
         )}
         <div className="envelope">
-          <div className="envelope-flap" />
-          <div className="envelope-body" />
+          <EnvelopeArt />
           <div className="envelope-seal">C</div>
         </div>
       </div>

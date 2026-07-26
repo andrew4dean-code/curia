@@ -148,6 +148,12 @@ describe('TradeCeremony', () => {
     expect(flips).toBeGreaterThan(2);
   });
 
+  it('draws an envelope with four distinct flaps', () => {
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+    expect(container.querySelectorAll('.env-flap')).toHaveLength(4);
+    expect(container.querySelector('.env-flap-top')).not.toBeNull();
+  });
+
   it('binds data-strike=0 and data-strike=1 to two different keyframe names', () => {
     // Read the CSS straight off disk (not via a bundled import) so this pins the actual rules
     // that ship, not a jsdom-mocked stand-in.
