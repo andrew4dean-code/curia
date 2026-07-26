@@ -56,7 +56,7 @@ export function AddTradeSheet({
         note,
       };
       const saved = trade ? await updateTrade({ ...body, id: trade.id }) : await createTrade(body);
-      const closing = !trade && prefill?.side === 'SELL';
+      const closing = !trade && prefill != null && side === 'SELL';
       const realised = closing
         ? realisedForSell([...trades, { ...body, id: saved.id }], { ...body, id: saved.id })
         : 0;
