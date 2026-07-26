@@ -66,12 +66,16 @@ describe('SettleSheet', () => {
 
   it('settles a buyback with zero fees', async () => {
     const settle = vi.mocked(api.settleOption);
-    render(<SettleSheet option={csp} onDone={vi.fn()} onEdit={vi.fn()} onCancel={vi.fn()} />);
+    settle.mockClear();
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const onDone = vi.fn().mockResolvedValue(undefined);
+    render(<SettleSheet option={csp} onDone={onDone} onEdit={vi.fn()} onCancel={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: /bought back/i }));
     fireEvent.change(screen.getByLabelText(/buyback \/ share/i), { target: { value: '0.20' } });
     fireEvent.click(screen.getByRole('button', { name: /^settle$/i }));
-    await waitFor(() =>
-      expect(settle).toHaveBeenCalledWith(csp.id, expect.objectContaining({ buyback_price: 0.2, close_fees: 0 })),
-    );
+    await waitFor(() => expect(onDone).toHaveBeenCalledOnce());
+    expect(settle).toHaveBeenCalledOnce();
+    expect(settle).toHaveBeenCalledWith(csp.id, expect.objectContaining({ buyback_price: 0.2, close_fees: 0 }));
   });
 });

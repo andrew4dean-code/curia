@@ -34,13 +34,21 @@ describe('AddTradeSheet', () => {
 
   it('asks nothing about fees and sends zero', async () => {
     const create = vi.mocked(api.createTrade);
-    render(<AddTradeSheet trade={null} wheels={[]} onDone={vi.fn()} onCancel={vi.fn()} />);
+    create.mockClear();
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: 11 }), { status: 201 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const onDone = vi.fn().mockResolvedValue(undefined);
+    render(<AddTradeSheet trade={null} wheels={[]} onDone={onDone} onCancel={vi.fn()} />);
     expect(screen.queryByLabelText(/fees/i)).toBeNull();
     fireEvent.change(screen.getByLabelText(/symbol/i), { target: { value: 'tqqq' } });
     fireEvent.change(screen.getByLabelText(/shares/i), { target: { value: '100' } });
     fireEvent.change(screen.getByLabelText(/price/i), { target: { value: '62' } });
     fireEvent.click(screen.getByRole('button', { name: /add trade/i }));
-    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ fees: 0 })));
+    await waitFor(() => expect(onDone).toHaveBeenCalledOnce());
+    expect(create).toHaveBeenCalledOnce();
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ fees: 0 }));
   });
 
   it('warns when the trade date falls before its wheel started', () => {

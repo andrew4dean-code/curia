@@ -47,12 +47,20 @@ describe('OptionSellSheet', () => {
 
   it('sends zero fees', async () => {
     const create = vi.mocked(api.createOption);
-    render(<OptionSellSheet expiration="2026-08-14" wheels={[]} onDone={vi.fn()} onCancel={vi.fn()} />);
+    create.mockClear();
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: 13 }), { status: 201 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const onDone = vi.fn().mockResolvedValue(undefined);
+    render(<OptionSellSheet expiration="2026-08-14" wheels={[]} onDone={onDone} onCancel={vi.fn()} />);
     fireEvent.change(screen.getByLabelText(/symbol/i), { target: { value: 'tqqq' } });
     fireEvent.change(screen.getByLabelText(/strike/i), { target: { value: '62' } });
     fireEvent.change(screen.getByLabelText(/premium/i), { target: { value: '0.74' } });
     fireEvent.click(screen.getByRole('button', { name: /sell to open/i }));
-    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ fees: 0 })));
+    await waitFor(() => expect(onDone).toHaveBeenCalledOnce());
+    expect(create).toHaveBeenCalledOnce();
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ fees: 0 }));
   });
 
   it('warns when the sale date falls before its wheel started', () => {
