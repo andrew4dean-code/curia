@@ -9,6 +9,16 @@ import { readFileSync } from 'node:fs';
 
 const ticket: TicketData = { no: 47, title: 'TRADE TICKET', symbol: 'TQQQ', lines: ['BUY 400 TQQQ', '@ $72.00'] };
 
+// Read the CSS straight off disk (not via a bundled import) so these pin the actual rules that
+// ship, not a jsdom-mocked stand-in. jsdom computes no animation and no layout, so this whole
+// class of bug -- a transform that is never transitioned, a perspective on the wrong element,
+// preserve-3d on an SVG node -- is otherwise invisible to every test in this file.
+function readCeremonyCss(): string {
+  const testFilePath = new URL(import.meta.url).pathname;
+  const cssPath = testFilePath.replace(/components\/__tests__\/TradeCeremony\.test\.tsx$/, 'styles/ceremony.css');
+  return readFileSync(cssPath, 'utf8');
+}
+
 // Long enough to walk through many strike cycles: STRIKE_EVERY(3) * TYPE_CHAR_MS(48) = 144ms per
 // flip, and this fixture's 68 characters keep typing entirely inside the print stage's typing
 // window (600ms-4200ms) so the stage never advances out from under the sampling loop below.
@@ -148,12 +158,7 @@ describe('TradeCeremony', () => {
   });
 
   it('does not let a second rule collide with .fold-panel::after, and lights both folding panels bright at their crease', () => {
-    // Read the CSS straight off disk so this pins the actual rules that ship, not a
-    // jsdom-mocked stand-in (jsdom computes no animation, so this class of bug is otherwise
-    // invisible to every test).
-    const testFilePath = new URL(import.meta.url).pathname;
-    const cssPath = testFilePath.replace(/components\/__tests__\/TradeCeremony\.test\.tsx$/, 'styles/ceremony.css');
-    const css = readFileSync(cssPath, 'utf8');
+    const css = readCeremonyCss();
 
     // Only one rule may declare a `background` on .fold-panel/.fold-p0/.fold-p2's ::after. A
     // second one at equal specificity would silently overwrite the crease highlight's gradient.
@@ -192,18 +197,188 @@ describe('TradeCeremony', () => {
     expect(flips).toBeGreaterThan(2);
   });
 
-  it('draws an envelope with four distinct flaps', () => {
+  // REWRITTEN from 'draws an envelope with four distinct flaps'. That test asserted the
+  // rejected structure: four SVG <path class="env-flap"> siblings, one of them (.env-flap-top)
+  // the hinged flap. It passed while the ceremony was broken, because the defect was that the
+  // hinged flap was an SVG <g> mirrored ABOVE y=0 inside viewBox="0 0 290 170" -- SVG's default
+  // overflow:hidden clipped it, so the OPEN flap was never painted at all. Counting SVG paths
+  // could never have caught that. The assertions below are the same count of checks, aimed at
+  // the structure that actually makes the fold work.
+  it('builds the envelope as an HTML flap over a two-layer SVG body that can swallow the letter', () => {
     const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
-    expect(container.querySelectorAll('.env-flap')).toHaveLength(4);
-    expect(container.querySelector('.env-flap-top')).not.toBeNull();
+
+    // 1. The flap is an HTML element, not SVG. This is the whole fix for the clipping bug.
+    const flap = container.querySelector('.env-flap')!;
+    expect(flap).not.toBeNull();
+    expect(flap.namespaceURI).toBe('http://www.w3.org/1999/xhtml');
+
+    // 2. Two faces, so there is something to see from both sides of the rotation.
+    expect(container.querySelectorAll('.env-flap-face')).toHaveLength(2);
+    expect(container.querySelector('.env-flap-in')).not.toBeNull();
+    expect(container.querySelector('.env-flap-out')).not.toBeNull();
+
+    // 3. The body is TWO layers, back and front, so the letter can be sandwiched between them.
+    //    One SVG could not do it: the letter is a DOM element that lives outside the drawing.
+    expect(container.querySelector('.env-back')).not.toBeNull();
+    expect(container.querySelector('.env-front')).not.toBeNull();
+
+    // 4. The pocket occluder is painted BEFORE the decorative glued flaps, so occlusion cannot
+    //    leak through a seam between them.
+    const front = container.querySelector('.env-front')!;
+    const painted = Array.from(front.querySelectorAll('.env-pocket, .env-glue'));
+    expect(painted.length).toBeGreaterThan(1);
+    expect(painted[0].classList.contains('env-pocket')).toBe(true);
+
+    // 5. The travelling cast shadow, without which a rotateX reads as a vertical squash.
+    expect(container.querySelector('.env-flap-shadow')).not.toBeNull();
+  });
+
+  it('fits the folded packet to the pocket interior exactly', () => {
+    // The arithmetic that killed the previous two rounds. The packet is one third of the
+    // ticket, because .fold is inset:0 over a scene whose height IS the ticket's; the pocket
+    // interior is throat..floor. If those two numbers disagree the letter cannot go in, and
+    // nothing in the rendered DOM makes the mismatch visible until you scrub the animation.
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+    const css = readCeremonyCss();
+
+    const minHeight = css.match(/\.ticket-wrap \.ticket\s*\{[^}]*min-height:\s*(\d+)px/);
+    expect(minHeight).not.toBeNull();
+    const packet = Number(minHeight![1]) / 3;
+
+    // read the throat and the floor off the real path the component ships
+    const d = container.querySelector('.env-pocket')!.getAttribute('d')!;
+    const throat = Number(d.match(/^M0 (\d+)/)![1]);
+    const floor = Number(d.match(/V(\d+)/)![1]);
+
+    expect(throat).toBe(62);
+    expect(floor).toBe(158);
+    expect(packet).toBe(floor - throat);
+
+    // and it must be scoped so the settle ceremony's .settle-ticket keeps its own height
+    expect(css).not.toMatch(/^\.ticket\s*\{[^}]*min-height/m);
+  });
+
+  it('declares the perspective on .envelope-stack, with no filter anywhere on it', () => {
+    // perspective used to sit on .ceremony, where it applied to .ceremony-scene -- an element
+    // with no 3D transform -- and so never reached the flap, leaving the rotation flat. And
+    // .env-art carried filter: drop-shadow(), a grouping property that FLATTENS 3D subtrees:
+    // even a correctly placed perspective would have been destroyed by it.
+    const css = readCeremonyCss();
+    const stack = css.match(/\.envelope-stack\s*\{([^}]*)\}/);
+    expect(stack).not.toBeNull();
+    expect(stack![1]).toMatch(/perspective:\s*\d+px/);
+    expect(stack![1]).not.toMatch(/filter/);
+    // nothing between the stack and the flap may reintroduce it either -- .env-flap is a direct
+    // child, so the only other candidate is the flap itself.
+    const flap = css.match(/\n\.env-flap\s*\{([^}]*)\}/);
+    expect(flap).not.toBeNull();
+    expect(flap![1]).not.toMatch(/filter/);
+  });
+
+  it("rests the flap in the OPEN pose and closes it away from the viewer", () => {
+    // Rest must be rotateX(0deg) = open. Open costing no transform is what lets the ship stage
+    // hold the closed pose by carrying the same animation rule through, instead of pinning a
+    // second transform on .env-flap-hinge the way the old build did.
+    const css = readCeremonyCss();
+    const flap = css.match(/\n\.env-flap\s*\{([^}]*)\}/)![1];
+    expect(flap).toMatch(/transform:\s*rotateX\(0deg\)/);
+    expect(flap).toMatch(/transform-origin:\s*50% 100%/);
+
+    // and the close runs 0deg -> -180deg (with an overshoot), not the old 180deg -> 0deg
+    const close = css.match(/@keyframes env-flap-close\s*\{([^@]*?)\n\}/s)![1];
+    expect(close).toMatch(/0%\s*\{[^}]*rotateX\(0deg\)/);
+    expect(close).toMatch(/100%\s*\{[^}]*rotateX\(-180deg\)/);
+    expect(close).toMatch(/rotateX\(-187deg\)/);
+
+    // the ship-stage pin is gone: there is nothing left to pin a closed flap to
+    expect(css).not.toMatch(/env-flap-hinge/);
+  });
+
+  it('ducks the open flap under the letter, with the safe z-index as the base', () => {
+    // An open flap stands up in front of the mouth. Left above the letter it hides 52px of the
+    // 96px packet exactly when the letter should read as poised over the envelope; left below
+    // the pocket while shutting it disappears behind the envelope front. z-index is a total
+    // order, so it has to change with the pose -- and the BASE has to be the closing value, so
+    // that an engine ignoring z-index in keyframes degrades to the cosmetic failure and never
+    // to the flap vanishing mid-close.
+    const css = readCeremonyCss();
+    const base = Number(css.match(/\n\.env-flap\s*\{[^}]*z-index:\s*(\d+)/)![1]);
+    const front = Number(css.match(/\n\.env-front\s*\{[^}]*z-index:\s*(\d+)/)![1]);
+    const fold = Number(css.match(/\n\.fold\s*\{[^}]*z-index:\s*(\d+)/)![1]);
+    const duck = Number(css.match(/@keyframes env-flap-duck\s*\{[^}]*z-index:\s*(\d+)/)![1]);
+    const closed = Number(css.match(/@keyframes env-flap-close\s*\{[^}]*z-index:\s*(\d+)/)![1]);
+
+    expect(duck).toBeLessThan(fold); // open: under the letter
+    expect(closed).toBeGreaterThan(front); // closing: over the pocket
+    expect(base).toBe(closed); // the fail-safe base
+
+    // The flap's three animations must all be in ONE rule -- `animation` is a shorthand, so a
+    // second rule replaces rather than adds -- and the close must be listed AFTER the duck, or
+    // the duck's z-index would keep winning from 590ms on and the flap would shut behind the
+    // pocket. indexOf alone is not enough to assert that: a missing duck returns -1, which is
+    // "before" everything.
+    const list = css.match(/\.ceremony\[data-stage='ship'\] \.env-flap \{([^}]*)\}/s)![1];
+    expect(list).toMatch(/env-arrive/);
+    expect(list).toMatch(/env-flap-duck/);
+    expect(list).toMatch(/env-flap-close/);
+    expect(list.indexOf('env-flap-duck')).toBeLessThan(list.indexOf('env-flap-close'));
+  });
+
+  it('puts preserve-3d only on HTML elements, never on SVG', () => {
+    // The old .env-flap-hinge was an SVG <g> with transform-style: preserve-3d. SVG has no 3D
+    // rendering context: the property does nothing there, and the <g> is clipped by the
+    // viewBox besides. Any class that asks for preserve-3d has to land on an HTML element.
+    const css = readCeremonyCss();
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+    act(() => vi.advanceTimersByTime(6000)); // through fold + envelope, so every layer exists
+
+    const classes = new Set<string>();
+    for (const rule of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+      if (!/transform-style:\s*preserve-3d/.test(rule[2])) continue;
+      for (const cls of rule[1].matchAll(/\.([A-Za-z][\w-]*)/g)) classes.add(cls[1]);
+    }
+    expect(classes.size).toBeGreaterThan(0); // the fold and the flap both need it
+
+    for (const cls of classes) {
+      for (const el of container.querySelectorAll(`.${cls}`)) {
+        expect(`${cls}:${el.namespaceURI}`).toBe(`${cls}:http://www.w3.org/1999/xhtml`);
+      }
+    }
+  });
+
+  it('animates the letter into the envelope instead of teleporting and cross-fading it', () => {
+    // The rejected build set `transform: rotateX(-88deg) scaleY(0.42)` on .fold with
+    // `transition: opacity .3s` ONLY. The transform was never interpolated, so the letter
+    // snapped into a squash and dissolved while a separate envelope faded up over it -- there
+    // was no frame in which the envelope held the letter. The same .fold element must now
+    // travel, under a keyframe animation.
+    const css = readCeremonyCss();
+    expect(css).not.toMatch(/\[data-stage='envelope'\] \.fold\s*\{/);
+    expect(css).toMatch(/\[data-stage='envelope'\] \.fold,\s*\.ceremony\[data-stage='ship'\] \.fold \{ animation: packet-insert/);
+    // no cross-fade: nothing in the envelope stage may fade the packet out
+    expect(css).not.toMatch(/\[data-stage='(?:envelope|ship)'\] \.fold\s*\{[^}]*opacity/);
+
+    // the packet ends below the throat, so the occluder has actually eaten it
+    const insert = css.match(/@keyframes packet-insert\s*\{([^@]*?)\n\}/s)![1];
+    const rest = Number(insert.match(/100%\s*\{[^}]*translateY\((-?\d+)px\)/)![1]);
+    const mouth = Number(insert.match(/28\.8%\s*\{[^}]*translateY\((-?\d+)px\)/)![1]);
+    // packet is scene 96..192; throat is scene 158. Resting top = 96 + rest must clear it.
+    expect(96 + rest).toBeGreaterThan(158);
+    expect(rest - mouth).toBeGreaterThan(90); // a real slide, not a nudge
+  });
+
+  it('stamps the seal strictly after the flap has stopped moving', () => {
+    // seal-stamp-env used to fire at .6s while env-flap-close ran to .72s: 120ms of the seal
+    // pressing into a flap that was still swinging.
+    const css = readCeremonyCss();
+    const flapClose = css.match(/animation:[^;]*env-flap-close (\.\d+)s (\.\d+)s/)!;
+    const flapEnd = Number(flapClose[1]) + Number(flapClose[2]);
+    const sealStart = Number(css.match(/animation: seal-stamp-env \.\d+s (\.\d+)s/)![1]);
+    expect(sealStart).toBeGreaterThanOrEqual(flapEnd);
   });
 
   it('binds data-strike=0 and data-strike=1 to two different keyframe names', () => {
-    // Read the CSS straight off disk (not via a bundled import) so this pins the actual rules
-    // that ship, not a jsdom-mocked stand-in.
-    const testFilePath = new URL(import.meta.url).pathname;
-    const cssPath = testFilePath.replace(/components\/__tests__\/TradeCeremony\.test\.tsx$/, 'styles/ceremony.css');
-    const css = readFileSync(cssPath, 'utf8');
+    const css = readCeremonyCss();
 
     const strike0 = css.match(/\.press-arm\[data-strike='0'\]\s*\{\s*animation:\s*(\S+)/);
     const strike1 = css.match(/\.press-arm\[data-strike='1'\]\s*\{\s*animation:\s*(\S+)/);

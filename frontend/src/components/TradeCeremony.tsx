@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { EnvelopeArt } from './EnvelopeArt';
+import { EnvelopeBack, EnvelopeFront } from './EnvelopeArt';
 import { Press } from './Press';
 
 export interface TicketData {
@@ -100,25 +100,40 @@ export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: 
             <div className="ticket-seal">C</div>
           </div>
         </div>
-        {stage !== 'print' && (
-          <div className="fold" aria-hidden="true">
-            {[0, 1, 2].map((n) => (
-              <div className={`fold-panel fold-p${n}`} key={n}>
-                <div className="fold-inner" style={{ transform: `translateY(-${n * 33.333}%)` }}>
-                  <div className="ticket-head">CURIA · {ticket.title} Nº {ticket.no}</div>
-                  {ticket.lines.map((l) => (
-                    <div className="ticket-line" key={l}>{l}</div>
-                  ))}
+        {/* The letter is a SIBLING of the two envelope halves, sandwiched between
+            them by z-index (see the ladder in ceremony.css). That is the only way a
+            DOM element can be swallowed by an SVG envelope: the back wall paints
+            behind it, the pocket paints over it. .envelope-stack is the shared
+            perspective ancestor and must stay free of `filter`, which would flatten
+            the flap's rotation back into a squash. */}
+        <div className="envelope-stack" aria-hidden="true">
+          <EnvelopeBack />
+          {stage !== 'print' && (
+            <div className="fold">
+              {[0, 1, 2].map((n) => (
+                <div className={`fold-panel fold-p${n}`} key={n}>
+                  <div className="fold-inner" style={{ transform: `translateY(-${n * 33.333}%)` }}>
+                    <div className="ticket-head">CURIA · {ticket.title} Nº {ticket.no}</div>
+                    {ticket.lines.map((l) => (
+                      <div className="ticket-line" key={l}>{l}</div>
+                    ))}
+                  </div>
+                  <div className="fold-shade" />
+                  {n !== 1 && <div className="fold-edge" />}
                 </div>
-                <div className="fold-shade" />
-                {n !== 1 && <div className="fold-edge" />}
-              </div>
-            ))}
-            <div className="fold-contact" aria-hidden="true" />
+              ))}
+              <div className="fold-contact" />
+            </div>
+          )}
+          <div className="env-throat env-part" />
+          <EnvelopeFront />
+          <div className="env-flap-shadow" />
+          {/* the flap is a div, not SVG: as an SVG <g> mirrored above the viewBox it
+              was clipped away by overflow:hidden and the open pose never rendered. */}
+          <div className="env-flap">
+            <div className="env-flap-face env-flap-in" />
+            <div className="env-flap-face env-flap-out" />
           </div>
-        )}
-        <div className="envelope">
-          <EnvelopeArt />
           <div className="envelope-seal">C</div>
         </div>
       </div>

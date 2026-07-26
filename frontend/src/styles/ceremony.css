@@ -1,4 +1,8 @@
-.ceremony { position: fixed; inset: 0; z-index: 40; background: rgba(31, 27, 18, 0.55); display: flex; align-items: center; justify-content: center; perspective: 900px; animation: ceremony-in 0.3s ease-out both; }
+/* No `perspective` here. It used to sit on .ceremony, where it applied to
+   .ceremony-scene -- an element with no 3D transform of its own -- and therefore
+   reached nothing that actually rotates. The two things that rotate in 3D each own
+   their perspective now: .fold (the tri-fold panels) and .envelope-stack (the flap). */
+.ceremony { position: fixed; inset: 0; z-index: 40; background: rgba(31, 27, 18, 0.55); display: flex; align-items: center; justify-content: center; animation: ceremony-in 0.3s ease-out both; }
 @keyframes ceremony-in { from { background: rgba(31, 27, 18, 0); } to { background: rgba(31, 27, 18, 0.55); } }
 .ceremony-scene { position: relative; width: 290px; }
 
@@ -14,15 +18,109 @@
 .ticket-seal, .envelope-seal { box-shadow: 0 2px 6px rgba(0,0,0,.35), 0 0 0 0 rgba(46,40,32,.32); }
 .ticket-seal { position: absolute; right: 14px; bottom: -18px; width: 44px; height: 44px; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-family: var(--font-display); font-weight: 800; font-size: 22px; display: flex; align-items: center; justify-content: center; opacity: 0; }
 
-/* ---- the envelope ---- */
-.envelope { position: absolute; inset: 0; margin: auto; width: 290px; height: 170px; opacity: 0; will-change: transform, opacity; }
-.env-art { position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 14px 30px rgba(0,0,0,.38)); }
-.env-flap-hinge { transform-origin: 145px 0px; transform: rotateX(180deg); transform-style: preserve-3d; }
-/* the top flap descends to y=96 in EnvelopeArt's 290x170 viewBox (1 SVG unit ==
-   1px here, since .env-art fills .envelope exactly); the seal is centred a few
-   pixels below that tip, same as it was against the old CSS-triangle flap's
-   apex, so it reads as stamped over the point where the flap meets the body. */
-.envelope-seal { position: absolute; left: 50%; top: 82px; transform: translateX(-50%) scale(0); width: 40px; height: 40px; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-family: var(--font-display); font-weight: 800; font-size: 20px; display: flex; align-items: center; justify-content: center; }
+/* THE TRADE TICKET IS PINNED TO 288px TALL, and that number is load-bearing.
+   .ceremony-scene's only in-flow child is .ticket-wrap, so the scene is exactly as
+   tall as the ticket; .fold is inset:0 over the scene and each .fold-panel is a
+   third of it, so the folded packet is ticket-height / 3. Left to its natural
+   height the ticket is 147.5px on a two-line trade and 174.5px on a three-line one
+   (22 pad + 41.5 head + 27 per line + 30 pad, at the inherited 1.5 line-height), so
+   the packet was BOTH too small for the envelope AND a different size on every
+   ticket -- it could never be tuned against a fixed pocket. 288 / 3 = 96px, which
+   is exactly the pocket interior (throat y=62 to floor y=158). The alternative the
+   design notes offered -- dropping the throat to y=58 -- buys only 100px and leaves
+   the packet variable, so it was rejected. min-height binds up to seven ticket
+   lines; the app never emits more than three.
+   Scoped to .ticket-wrap so the settle ceremony's .settle-ticket, which shares the
+   .ticket class but has no wrapper and a composition tuned to its own height, is
+   untouched. */
+.ticket-wrap .ticket { min-height: 288px; }
+
+/* ---- the envelope -------------------------------------------------------------
+   ONE COORDINATE SYSTEM, WRITTEN DOWN ONCE.
+   .envelope-stack is inset:0 over the 290x288 scene, so "scene y" below is measured
+   from the top of the ticket. Every flat envelope layer (.env-art) is a 300x170 box
+   pinned at top:96px, and both SVGs use viewBox "0 0 300 170", so 1 SVG unit == 1px
+   and envelope-local y maps to scene y by adding 96:
+
+       landmark      env y     scene y
+       flap free edge   -8          88   (open) / 96 -> 192 (closed)
+       hinge            44         140   = the body's TOP edge, not its mid-height
+       throat           62         158   at or below this the letter is occluded
+       floor           158         254
+       body bottom     164         260
+
+   The packet is the middle third of the 288px scene, i.e. scene 96..192, 96px tall,
+   which is exactly the pocket interior (158 - 62). See the note on .ticket-wrap
+   .ticket for why the ticket is pinned to 288px to make that true.
+
+   THE FLAP IS AN HTML DIV. As an SVG <g> it was mirrored above y=0 inside the
+   viewBox and clipped away by SVG's default overflow:hidden, so the open flap was
+   never painted -- it appeared out of nowhere already half shut. Nothing between
+   .envelope-stack and .env-flap may carry `filter` (or any other grouping property):
+   filter flattens 3D subtrees, and a drop-shadow on the old .env-art is what
+   destroyed the flap's rotation even where the perspective was right. The two SVGs
+   keep their drop-shadows because they are leaves, not ancestors of the flap. */
+.envelope-stack {
+  position: absolute; inset: 0; z-index: 4;
+  perspective: 520px;
+  /* the camera sits on the hinge line. The design note said 50% 28%, which is 28%
+     of a 170-tall envelope box (47.6px, i.e. the hinge); against this 288-tall
+     stack the same percentage would land 60px above the hinge and shear the flap.
+     140px IS the hinge in stack coordinates (96 + 44), so it is written as a
+     length -- it does not drift with the scene's height. */
+  perspective-origin: 50% 140px;
+}
+
+/* the flat layers. Explicit z-index ladder, no `auto` anywhere, so occlusion is a
+   property of the stylesheet and not of source order:
+     .env-back 2  <  .fold 3  <  .env-throat 4  <  .env-front 5
+     <  .env-flap-shadow 6  <  .env-flap 7 (while closing)  <  .envelope-seal 8
+   .env-flap rests at 1 -- BELOW the letter -- because an open flap stands up in
+   front of the mouth and would otherwise hide 52px of the 96px packet exactly when
+   the letter is meant to be poised above the envelope. It is promoted to 7 by the
+   close keyframes, which is the one moment it has to paint over the pocket. */
+.env-art { position: absolute; left: -5px; right: -5px; top: 96px; height: 170px; opacity: 0; }
+.env-back { z-index: 2; filter: drop-shadow(0 14px 28px rgba(0,0,0,.36)); }
+.env-front { z-index: 5; filter: drop-shadow(0 5px 9px rgba(46,40,32,.26)); }
+
+/* the mouth shadow: env y 40..62, i.e. it stops dead on the throat. It sits above
+   the letter and below the pocket, so the last 18px of the letter darkens as it
+   goes in, then the occluder takes it. */
+.env-throat { position: absolute; left: -5px; right: -5px; top: 136px; height: 22px; z-index: 4; opacity: 0; pointer-events: none; background: linear-gradient(rgba(46,40,32,0) 0%, rgba(46,40,32,.16) 44%, rgba(46,40,32,.5) 100%); }
+
+/* the flap. REST IS THE OPEN POSE, and open costs no transform: rotateX(0deg) is
+   the identity. That is what lets the ship stage hold the closed pose by simply
+   carrying the same animation rule through instead of pinning a second transform.
+   The base z-index is 7, the value the flap needs while CLOSING (above the pocket).
+   The open pose wants 1 instead -- below the letter -- and that is applied by the
+   env-flap-duck animation rather than declared here, deliberately: z-index is
+   animatable, but if any engine ever ignored it in keyframes the flap would fall
+   back to this base value and merely sit in front of the letter while open, which
+   is cosmetic. Declaring 1 here and animating up to 7 has the opposite failure --
+   the closing flap disappears behind the pocket -- so the safe value is the base. */
+.env-flap { position: absolute; left: -5px; right: -5px; top: 88px; height: 52px; z-index: 7; opacity: 0; transform-style: preserve-3d; transform-origin: 50% 100%; transform: rotateX(0deg); }
+/* Two faces, each backface-visibility:hidden, 1px apart in Z. The far face is
+   `rotateX(180deg) translateZ(.5px)`, NOT translateZ(-.5px): after the 180 flip the
+   face's local +Z points at global -Z, so a local +.5 puts it .5px BEHIND the near
+   face. Writing -.5px there lands both faces on global +0.5 -- coplanar, and then
+   which one you see is left entirely to backface-visibility with nothing to fall
+   back on. With the real 1px gap, depth sorting alone already picks the right face,
+   and backface-visibility is belt and braces rather than the only mechanism. */
+.env-flap-face { position: absolute; inset: 0; backface-visibility: hidden; }
+.env-flap-in { transform: translateZ(.5px); -webkit-clip-path: polygon(0 100%, 100% 100%, 50% 0); clip-path: polygon(0 100%, 100% 100%, 50% 0); background: linear-gradient(#EFE7D2 0%, #DFD4B4 58%, #C8B98F 100%); }
+.env-flap-out { transform: rotateX(180deg) translateZ(.5px); -webkit-clip-path: polygon(0 0, 100% 0, 50% 100%); clip-path: polygon(0 0, 100% 0, 50% 100%); background: linear-gradient(#F3ECDA 0%, #E7DDC4 62%, #D5C8A4 100%); }
+
+/* the travelling cast shadow, anchored on the hinge and sweeping down the face as
+   the flap comes over. Without it a rotateX reads as a vertical squash, not as
+   paper leaving the plane. Same construction as .fold-contact below. */
+.env-flap-shadow { position: absolute; left: 6px; right: 6px; top: 140px; height: 58px; z-index: 6; opacity: 0; pointer-events: none; transform-origin: 50% 0%; transform: scaleY(.15); background: radial-gradient(128% 86% at 50% 0%, rgba(46,40,32,.5), rgba(46,40,32,0) 74%); }
+
+/* the closed flap's free edge is hinge + flap height = 44 + 52 = env y 96 = scene
+   y 192. Measured, not guessed: the design notes carried both 96 and 87 and only 96
+   follows from the geometry above. The seal is 40px, centred on that tip, so it
+   straddles the point where the flap meets the body -- half on paper that moved,
+   half on paper that did not, which is what a wax seal is for. */
+.envelope-seal { position: absolute; left: 50%; top: 172px; z-index: 8; transform: translateX(-50%) scale(0); opacity: 0; width: 40px; height: 40px; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-family: var(--font-display); font-weight: 800; font-size: 20px; display: flex; align-items: center; justify-content: center; }
 
 /* ---- stage: print — rise off the press with a settle, then the seal stamps ----
    the rise lives on .ticket-wrap (not .ticket) because .ticket's transform is
@@ -44,20 +142,41 @@
    fold panels below take over as the visible proxy for the page. */
 .ceremony[data-stage='fold'] .ticket, .ceremony[data-stage='envelope'] .ticket, .ceremony[data-stage='ship'] .ticket { opacity: 0; }
 
-/* ---- the fold: three panels of the actual ticket content, clipped to thirds ---- */
-.fold { position: absolute; inset: 0; transform-style: preserve-3d; perspective: 700px; }
+/* ---- the fold: three panels of the actual ticket content, clipped to thirds ----
+   .fold lives INSIDE .envelope-stack so that the letter is a sibling of the two
+   envelope halves and can be sandwiched between them by z-index. It keeps inset:0
+   over the scene, so nothing about the fold stage changes. It carries no
+   transform-origin, so its default 50% 50% is the packet's own centre -- which is
+   what the insertion translate below wants. */
+.fold { position: absolute; inset: 0; z-index: 3; transform-style: preserve-3d; perspective: 700px; }
 .fold-panel { position: absolute; left: 0; right: 0; height: 33.334%; overflow: hidden; background: var(--parchment-card); }
 .fold-inner { position: absolute; left: 0; right: 0; top: 0; height: 300%; padding: 22px 20px; backface-visibility: hidden; }
 .fold-p0 { top: 0; transform-origin: 50% 100%; z-index: 3; }
 .fold-p1 { top: 33.333%; z-index: 1; }
 .fold-p2 { top: 66.666%; transform-origin: 50% 0%; z-index: 2; }
-.ceremony[data-stage='fold'] .fold-p2 { animation: fold-up .62s cubic-bezier(.45,0,.2,1) both; }
-.ceremony[data-stage='fold'] .fold-p0 { animation: fold-down .62s .70s cubic-bezier(.45,0,.2,1) both; }
+/* Every fold-stage animation below is carried through 'envelope' and 'ship' by
+   listing those stages in the same rule. It is not decoration: the packet is no
+   longer thrown away when the envelope arrives, it is the thing that goes IN. These
+   animations hold the folded pose only while their selector matches, so scoping
+   them to 'fold' alone meant the panels sprang flat again the instant the stage
+   advanced. Repeating the selector (rather than adding a second rule) keeps the
+   computed animation value identical across the three stages, so nothing restarts —
+   the same mechanism the certificate uses under "stage: file" further down. */
+.ceremony[data-stage='fold'] .fold-p2,
+.ceremony[data-stage='envelope'] .fold-p2,
+.ceremony[data-stage='ship'] .fold-p2 { animation: fold-up .62s cubic-bezier(.45,0,.2,1) both; }
+.ceremony[data-stage='fold'] .fold-p0,
+.ceremony[data-stage='envelope'] .fold-p0,
+.ceremony[data-stage='ship'] .fold-p0 { animation: fold-down .62s .70s cubic-bezier(.45,0,.2,1) both; }
 @keyframes fold-up { 0% { transform: rotateX(0deg); box-shadow: 0 0 0 rgba(0,0,0,0); } 60% { box-shadow: 0 -8px 16px rgba(46,40,32,.34); } 100% { transform: rotateX(-180deg) translateZ(1px); box-shadow: 0 -3px 9px rgba(46,40,32,.26); } }
 @keyframes fold-down { 0% { transform: rotateX(0deg); } 60% { box-shadow: 0 8px 16px rgba(46,40,32,.34); } 100% { transform: rotateX(180deg) translateZ(2px); box-shadow: 0 3px 9px rgba(46,40,32,.26); } }
 .fold-panel::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0; background: linear-gradient(rgba(255,255,255,.5), rgba(46,40,32,.16)); }
-.ceremony[data-stage='fold'] .fold-p2::after { animation: crease .62s ease-out both; }
-.ceremony[data-stage='fold'] .fold-p0::after { animation: crease .62s .70s ease-out both; }
+.ceremony[data-stage='fold'] .fold-p2::after,
+.ceremony[data-stage='envelope'] .fold-p2::after,
+.ceremony[data-stage='ship'] .fold-p2::after { animation: crease .62s ease-out both; }
+.ceremony[data-stage='fold'] .fold-p0::after,
+.ceremony[data-stage='envelope'] .fold-p0::after,
+.ceremony[data-stage='ship'] .fold-p0::after { animation: crease .62s .70s ease-out both; }
 @keyframes crease { 0% { opacity: 0; } 45% { opacity: .85; } 100% { opacity: .3; } }
 
 /* ---- paper shading, contact shadow and edge thickness for the folding panels ----
@@ -77,8 +196,12 @@
    instead (the more obvious-looking fix, since it is the panel that folds upward)
    would leave both panels bright at the free edge and dark at the crease. */
 .fold-p0 .fold-shade { transform: scaleY(-1); }
-.ceremony[data-stage='fold'] .fold-p2 .fold-shade { animation: shade-roll .62s cubic-bezier(.45,0,.2,1) both; }
-.ceremony[data-stage='fold'] .fold-p0 .fold-shade { animation: shade-roll .62s .70s cubic-bezier(.45,0,.2,1) both; }
+.ceremony[data-stage='fold'] .fold-p2 .fold-shade,
+.ceremony[data-stage='envelope'] .fold-p2 .fold-shade,
+.ceremony[data-stage='ship'] .fold-p2 .fold-shade { animation: shade-roll .62s cubic-bezier(.45,0,.2,1) both; }
+.ceremony[data-stage='fold'] .fold-p0 .fold-shade,
+.ceremony[data-stage='envelope'] .fold-p0 .fold-shade,
+.ceremony[data-stage='ship'] .fold-p0 .fold-shade { animation: shade-roll .62s .70s cubic-bezier(.45,0,.2,1) both; }
 @keyframes shade-roll { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: .34; } }
 
 /* the paper-edge hairline: a sliver lighter than the face, at each folding panel's
@@ -90,16 +213,94 @@
 /* the contact shadow: cast by the folding panels onto the middle panel beneath them,
    tightening in as the top panel (.fold-p0) comes down to close over the stack. */
 .fold-contact { position: absolute; left: 6%; right: 6%; top: 33.333%; height: 33.334%; pointer-events: none; opacity: 0; background: radial-gradient(120% 70% at 50% 0%, rgba(46,40,32,.42), rgba(46,40,32,0) 72%); z-index: 2; }
-.ceremony[data-stage='fold'] .fold-contact { animation: contact-drop .62s .70s cubic-bezier(.45,0,.2,1) both; }
+.ceremony[data-stage='fold'] .fold-contact,
+.ceremony[data-stage='envelope'] .fold-contact,
+.ceremony[data-stage='ship'] .fold-contact { animation: contact-drop .62s .70s cubic-bezier(.45,0,.2,1) both; }
 @keyframes contact-drop { 0% { opacity: 0; transform: scaleY(.4); } 100% { opacity: 1; transform: scaleY(1); } }
 
-/* ---- stage: envelope — wraps the folded packet, flap presses shut, seal stamps ---- */
-.ceremony[data-stage='envelope'] .fold { transform: rotateX(-88deg) scaleY(0.42); opacity: 0; transition: opacity 0.3s ease-out; }
-.ceremony[data-stage='envelope'] .envelope { animation: env-appear 0.32s cubic-bezier(.25, .9, .35, 1) both; }
-.ceremony[data-stage='envelope'] .env-flap-hinge { animation: env-flap-close .46s .26s cubic-bezier(.5,0,.3,1) both; }
-.ceremony[data-stage='envelope'] .envelope-seal { animation: seal-stamp-env .4s .6s cubic-bezier(.3,1.5,.5,1) both, seal-dent .4s .6s ease-out both; }
-@keyframes env-appear { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
-@keyframes env-flap-close { from { transform: rotateX(180deg); } to { transform: rotateX(0deg); } }
+/* ---- stage: envelope — the letter is posted, 1100ms ---------------------------
+      0 - 170   the envelope rises into place from below while the packet lifts to
+                the mouth (bottom edge 2px clear of the throat)
+    170 - 590   the 420ms slide: 100px down, eaten progressively by the y>=62
+                occluder, hitting the pocket floor and springing 4px back
+    590 - 900   the flap closes, 310ms, its cast shadow sweeping with it
+    900 - 1100  the seal stamps, strictly after the flap has stopped moving
+
+   There is no cross-fade and no second element anywhere in here. The old build
+   replaced the packet with an unrelated envelope: it set a transform on .fold with
+   `transition: opacity .3s` only, so the transform was never interpolated -- the
+   letter TELEPORTED into a squash and dissolved while a separate envelope faded up
+   over it. There was literally no frame in which the envelope held the letter. That
+   rule is deleted; the SAME .fold element now travels into the pocket.
+
+   Every rule is written for both 'envelope' and 'ship' so its filled end state
+   survives the stage change without restarting (same computed animation value). */
+.ceremony[data-stage='envelope'] .env-part,
+.ceremony[data-stage='ship'] .env-part { animation: env-arrive .62s linear both; }
+.ceremony[data-stage='envelope'] .fold,
+.ceremony[data-stage='ship'] .fold { animation: packet-insert .59s linear both; }
+/* the flap needs the arrival, the duck and the close. All three must be declared in
+   one rule: `animation` is a shorthand, so a second rule would replace the first
+   rather than add to it. The close uses `forwards`, not `both`, on purpose -- during
+   its 590ms delay it contributes nothing at all, so env-arrive still owns `transform`
+   and env-flap-duck still owns `z-index`. Order matters: env-flap-close is listed
+   last, so from 590ms on its z-index wins over the duck's.
+   The duck is what holds the OPEN flap behind the letter. An open flap stands up
+   directly in front of the mouth; left in front it would cover 52px of the 96px
+   packet at exactly the moment the letter is meant to read as poised above the
+   envelope. It has to go under the letter while open and over the pocket while
+   shutting, and z-index is a total order, so it is the one property that must
+   change with the pose. */
+.ceremony[data-stage='envelope'] .env-flap,
+.ceremony[data-stage='ship'] .env-flap {
+  animation: env-arrive .62s linear both,
+             env-flap-duck .59s linear both,
+             env-flap-close .31s .59s cubic-bezier(.42,0,.28,1) forwards;
+}
+@keyframes env-flap-duck { 0%, 100% { z-index: 1; } }
+.ceremony[data-stage='envelope'] .env-flap-shadow,
+.ceremony[data-stage='ship'] .env-flap-shadow { animation: flap-shadow-sweep .31s .59s cubic-bezier(.42,0,.28,1) forwards; }
+.ceremony[data-stage='envelope'] .envelope-seal,
+.ceremony[data-stage='ship'] .envelope-seal { animation: seal-stamp-env .2s .9s cubic-bezier(.3,1.5,.5,1) forwards, seal-dent .2s .9s ease-out forwards; }
+
+/* the envelope rises 84px into place, then takes a 2px knock at 78-90% (485-560ms)
+   as the packet lands on its floor. Per-keyframe timing functions, so the arrival
+   easing does not smear across the knock. */
+@keyframes env-arrive {
+  0% { opacity: 0; transform: translateY(84px); animation-timing-function: cubic-bezier(.25,.9,.35,1); }
+  27% { opacity: 1; transform: translateY(0); animation-timing-function: linear; }
+  78% { transform: translateY(0); animation-timing-function: cubic-bezier(.3,0,.4,1); }
+  84% { transform: translateY(2px); animation-timing-function: cubic-bezier(.3,.9,.4,1); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* the insertion, in scene pixels (packet at rest = scene 96..192, throat = 158):
+     0%      0px   the packet is exactly where the fold left it — no jump
+     28.8% -36px   mouth: packet 60..156, bottom 2px clear of the throat  (170ms)
+     82%   +68px   floor: packet 164..260, top 6px under the throat       (484ms)
+     100%  +64px   rest:  packet 160..256, top 2px under, nothing peeks   (590ms)
+   The 4px between 82% and 100% is the spring off the pocket floor. */
+@keyframes packet-insert {
+  0% { transform: translateY(0); animation-timing-function: cubic-bezier(.24,.86,.36,1); }
+  28.8% { transform: translateY(-36px); animation-timing-function: cubic-bezier(.5,.02,.72,.86); }
+  82% { transform: translateY(68px); animation-timing-function: cubic-bezier(.3,.9,.4,1); }
+  100% { transform: translateY(64px); }
+}
+
+/* 0deg is open, -180deg is shut, and -187deg at 88% is the paper's overshoot as it
+   slaps down. Every keyframe repeats z-index: 7 so it reads as a step and never as
+   an interpolation — this is the value that overrides env-flap-duck's 1 from the
+   moment the flap starts coming over the pocket. */
+@keyframes env-flap-close {
+  0% { z-index: 7; transform: rotateX(0deg); }
+  88% { z-index: 7; transform: rotateX(-187deg); }
+  100% { z-index: 7; transform: rotateX(-180deg); }
+}
+@keyframes flap-shadow-sweep {
+  0% { opacity: 0; transform: scaleY(.15); }
+  58% { opacity: .34; transform: scaleY(.74); }
+  100% { opacity: .18; transform: scaleY(1); }
+}
 /* envelope-specific variant of seal-stamp: the envelope seal is centred via
    translateX(-50%) in its base rule (unlike the ticket seal, which has no
    horizontal centring), so its stamp keyframes must carry that translateX
@@ -108,12 +309,17 @@
    not gain a translateX it doesn't need. */
 @keyframes seal-stamp-env { 0% { opacity: 0; transform: translateX(-50%) scale(1.9) rotate(-9deg); } 45% { opacity: 1; transform: translateX(-50%) scale(.88) rotate(2.5deg); } 70% { transform: translateX(-50%) scale(1.06) rotate(-1deg); } 100% { opacity: 1; transform: translateX(-50%) scale(1) rotate(0deg); } }
 
-/* ---- stage: ship — a small dip of anticipation, then away off the top ---- */
-.ceremony[data-stage='ship'] .fold { opacity: 0; }
-.ceremony[data-stage='ship'] .envelope { opacity: 1; }
-.ceremony[data-stage='ship'] .env-flap-hinge { transform: rotateX(0deg); }
-.ceremony[data-stage='ship'] .envelope-seal { transform: translateX(-50%) scale(1); }
-.ceremony[data-stage='ship'] .envelope { animation: env-ship 0.9s cubic-bezier(.5, -.08, .75, .35) both; }
+/* ---- stage: ship — a small dip of anticipation, then away off the top ----
+   Four pinning rules used to live here: hold the fold hidden, hold the envelope
+   visible, hold the flap shut, hold the seal stamped. All four existed because the
+   envelope-stage animations stopped matching at this stage and dropped their held
+   state. Every one of them is now handled by carrying the animation's selector into
+   'ship' above, so this stage has one job: fly the whole thing off the top. The
+   flap pin in particular is gone because the resting pose is now OPEN (rotateX(0));
+   there is nothing to pin a closed flap to.
+   The transform goes on .envelope-stack, which contains the letter, so the packet
+   ships inside the envelope instead of being separately hidden. */
+.ceremony[data-stage='ship'] .envelope-stack { animation: env-ship 0.9s cubic-bezier(.5, -.08, .75, .35) both; }
 .ceremony[data-stage='ship'] { animation: dim-out 0.9s ease-in both; }
 @keyframes env-ship {
   0% { transform: translateY(0) rotate(0); }
