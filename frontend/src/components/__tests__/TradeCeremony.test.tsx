@@ -88,6 +88,36 @@ describe('TradeCeremony', () => {
     expect(container.querySelector('#press-clip')).not.toBeNull();
   });
 
+  it('keeps the typehead inside the clip band on the third line of a three-line ticket', () => {
+    // Regression for the defect where strikeY moved with the line index but the head's `y` was
+    // hard-coded to 112. On line three (the common case: option sells and closing trades both run
+    // three lines) strikeY landed below the head, so the clip removed it entirely and only a bare
+    // shaft remained visible.
+    const { container } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
+    act(() => vi.advanceTimersByTime(600)); // TYPE_START_MS: typing begins
+    // longTicket's first two lines plus their newlines are 47 characters (25 + 1 + 21), so the 49th
+    // typed character is the second character of the third line - comfortably inside line index 2
+    // and well within the print stage's typing window (600ms-4200ms for this fixture).
+    for (let i = 0; i < 49; i++) {
+      act(() => vi.advanceTimersByTime(48)); // TYPE_CHAR_MS
+    }
+
+    const head = container.querySelector('.press-head')!;
+    const headGroup = head.parentElement!;
+    const offsetMatch = headGroup.getAttribute('transform')?.match(/translate\(0,\s*(-?\d+(?:\.\d+)?)\)/);
+    expect(offsetMatch).toBeTruthy();
+    const offset = Number(offsetMatch![1]);
+    const headY = Number(head.getAttribute('y')) + offset;
+    const headHeight = Number(head.getAttribute('height'));
+
+    const clipRect = container.querySelector('#press-clip rect')!;
+    const clipY = Number(clipRect.getAttribute('y'));
+    const clipHeight = Number(clipRect.getAttribute('height'));
+
+    expect(headY).toBeGreaterThanOrEqual(clipY);
+    expect(headY + headHeight).toBeLessThanOrEqual(clipY + clipHeight);
+  });
+
   it('the fold stage builds three panels', () => {
     vi.useFakeTimers();
     const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);

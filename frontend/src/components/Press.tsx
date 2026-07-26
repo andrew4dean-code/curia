@@ -1,10 +1,22 @@
 // The platen is a cylinder, not a pill: the horizontal gradient runs dark at both
 // ends to a lit band above centre, which is what reads as a curved surface. The
-// arm is clipped at the strike line so it can never be drawn across the ticket —
-// the previous version relied on z-order for that and rendered a black diagonal
-// across the owner's typed text.
+// arm is clipped to a narrow band starting at the strike line so it can only ever
+// read as a typebar swinging up into the platen — never as a shaft lying across
+// the ticket. The previous version clipped an open-ended region down to the
+// bottom of the scene, which kept the arm off the header and typed text but still
+// drew a long tapered shaft down the rest of the page.
+//
+// The head and arm shaft are authored once at the line-0 position, then the whole
+// assembly is translated down by the same per-line offset that drives strikeY.
+// That keeps the head locked just inside the top of the clip band at every line
+// index, instead of sitting at a fixed y that the band clips away on later lines.
+// The translate lives on an inner <g> (not on .press-arm itself) because the
+// swing animation sets a CSS `transform` on .press-arm, and a CSS transform on an
+// element overrides any SVG `transform` attribute on that same element — nesting
+// keeps the two from fighting.
 export function Press({ striking, line }: { striking: number; line: number }) {
   const strikeY = 96 + line * 21;
+  const armOffset = line * 21;
   return (
     <svg className="press" viewBox="0 0 318 260" preserveAspectRatio="none" aria-hidden="true">
       <defs>
@@ -30,16 +42,18 @@ export function Press({ striking, line }: { striking: number; line: number }) {
           <stop offset="1" stopColor="#171410" />
         </linearGradient>
         <clipPath id="press-clip">
-          <rect x="0" y={strikeY} width="318" height={260 - strikeY} />
+          <rect x="0" y={strikeY} width="318" height="70" />
         </clipPath>
       </defs>
 
       <rect className="press-cast" x="0" y="30" width="318" height="26" fill="url(#platen-cast)" />
 
       <g className="press-arm" data-strike={striking} clipPath="url(#press-clip)">
-        <path d="M155 258 L150 130 L166 130 L161 258 Z" fill="url(#arm-steel)" />
-        <rect className="press-head" x="146" y="112" width="24" height="20" rx="4" fill="#241f19" />
-        <rect x="150" y="116" width="16" height="12" rx="2" fill="#3c352c" />
+        <g transform={`translate(0, ${armOffset})`}>
+          <path d="M155 258 L150 130 L166 130 L161 258 Z" fill="url(#arm-steel)" />
+          <rect className="press-head" x="146" y="112" width="24" height="20" rx="4" fill="#241f19" />
+          <rect x="150" y="116" width="16" height="12" rx="2" fill="#3c352c" />
+        </g>
       </g>
 
       <g className="press-platen">
