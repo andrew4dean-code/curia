@@ -6,7 +6,7 @@ import { computeStats } from '../lib/stats';
 import { computeOptionStats, optionRealizedPl } from '../lib/optionsMath';
 import { formatMoney, formatPct, formatSignedMoney, formatSignedPct, plColor } from '../lib/format';
 
-export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord, strikingTradeId }: TabProps) {
+export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord, strikingTradeId, onDeleted }: TabProps) {
   const [showEntries, setShowEntries] = useState(false);
   const entriesVisible = showEntries || strikingTradeId != null;
   const closed = computeClosedTrades(snap.trades);
@@ -104,7 +104,12 @@ export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord, striking
                   className="row-action"
                   onClick={() => {
                     if (window.confirm(`Delete this ${t.symbol} ${t.side.toLowerCase()}? This can't be undone.`)) {
-                      void deleteTrade(t.id).then(() => onRefresh());
+                      // Route through the same App-level strike-and-refresh sequence the
+                      // edit-sheet delete uses, so this row strikes too instead of just
+                      // vanishing. Fall back to a plain refresh if no handler is wired.
+                      void deleteTrade(t.id)
+                        .then(() => (onDeleted ? onDeleted(t.id) : onRefresh()))
+                        .catch(() => {}); // failed delete: no strike, no fold — the row stays put
                     }
                   }}
                 >

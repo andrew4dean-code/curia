@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { LedgerTab } from '../LedgerTab';
@@ -96,6 +97,70 @@ describe('LedgerTab', () => {
     await waitFor(() => expect(onRefresh).toHaveBeenCalledOnce());
     expect(fetchMock.mock.calls[0][0]).toMatch(/\/api\/trades\/\d+/);
     expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe('DELETE');
+    confirmSpy.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it('inline delete routes through the App-level handler and strikes the row instead of just vanishing', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+
+    // A tiny harness standing in for App.tsx: it owns strikingTradeId and an
+    // onDeleted that marks a row struck, mirroring the real onDeleted's
+    // synchronous half (the 700ms clear-and-refresh is App.tsx's own concern
+    // and is covered by the App-level strike-timer tests).
+    function Harness() {
+      const [strikingTradeId, setStrikingTradeId] = useState<number | null>(null);
+      const onDeleted = async (id?: number) => {
+        if (id != null) setStrikingTradeId(id);
+      };
+      return (
+        <LedgerTab
+          snap={snap}
+          {...cbs}
+          onRefresh={onRefresh}
+          onDeleted={onDeleted}
+          strikingTradeId={strikingTradeId}
+        />
+      );
+    }
+
+    const { container } = render(<Harness />);
+    fireEvent.click(screen.getByText(/All entries/));
+    fireEvent.click(screen.getAllByText('delete')[0]);
+
+    await waitFor(() => expect(container.querySelectorAll('.striking')).toHaveLength(1));
+    expect(container.querySelector('.striking')?.textContent).toMatch(/NVDA/);
+    // The App-level handler owns the refresh (after its own 700ms strike);
+    // LedgerTab must not short-circuit it by refreshing directly.
+    expect(onRefresh).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it('a failed inline delete leaves the row untouched — no strike, no fold', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+    const onDeleted = vi.fn().mockResolvedValue(undefined);
+
+    render(<LedgerTab snap={snap} {...cbs} onRefresh={onRefresh} onDeleted={onDeleted} />);
+    fireEvent.click(screen.getByText(/All entries/));
+    fireEvent.click(screen.getAllByText('delete')[0]);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    // let the rejected delete settle without anything downstream firing
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onDeleted).not.toHaveBeenCalled();
+    expect(onRefresh).not.toHaveBeenCalled();
+    expect(document.querySelectorAll('.striking')).toHaveLength(0);
+    expect(screen.getByText(/NVDA/)).toBeInTheDocument();
+
     confirmSpy.mockRestore();
     vi.unstubAllGlobals();
   });

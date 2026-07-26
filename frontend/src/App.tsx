@@ -53,6 +53,7 @@ export default function App() {
   const [strikingTradeId, setStrikingTradeId] = useState<number | null>(null);
   const [landing, setLanding] = useState(false);
   const landingTimer = useRef<number | null>(null);
+  const strikeTimer = useRef<number | null>(null);
 
   const clearLandingTimer = useCallback(() => {
     if (landingTimer.current !== null) {
@@ -61,7 +62,17 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => clearLandingTimer, [clearLandingTimer]);
+  const clearStrikeTimer = useCallback(() => {
+    if (strikeTimer.current !== null) {
+      window.clearTimeout(strikeTimer.current);
+      strikeTimer.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => {
+    clearLandingTimer();
+    clearStrikeTimer();
+  }, [clearLandingTimer, clearStrikeTimer]);
 
   const refresh = useCallback(async () => {
     try {
@@ -96,6 +107,21 @@ export default function App() {
   }
   if (!snap) return <div className="empty">Loading…</div>;
 
+  const onDeleted = async (id?: number) => {
+    setSheet(null);
+    if (id == null) { await refresh(); return; }
+    // A new strike is starting: any pending clear-and-refresh timer from a
+    // prior strike is now stale (it would clear this row's strike early and
+    // refresh before its 700ms is up), so drop it and start the new one clean.
+    clearStrikeTimer();
+    setStrikingTradeId(id);
+    strikeTimer.current = window.setTimeout(() => {
+      strikeTimer.current = null;
+      setStrikingTradeId(null);
+      void refresh();
+    }, 700);
+  };
+
   const tabProps = {
     snap,
     onRefresh: refresh,
@@ -118,6 +144,7 @@ export default function App() {
     onViewWheelRecord: (wheel: Wheel) => setSheet({ kind: 'wheelRecord', wheel }),
     justAdded,
     strikingTradeId,
+    onDeleted,
   };
 
   const onTicket = async (ticket: TicketData) => {
@@ -129,12 +156,6 @@ export default function App() {
     clearLandingTimer();
     setLanding(false);
     setCeremony(ticket);
-  };
-  const onDeleted = async (id?: number) => {
-    setSheet(null);
-    if (id == null) { await refresh(); return; }
-    setStrikingTradeId(id);
-    window.setTimeout(() => { setStrikingTradeId(null); void refresh(); }, 700);
   };
 
   return (

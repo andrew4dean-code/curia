@@ -29,6 +29,7 @@ export interface TabProps {
   onViewWheelRecord?: (w: Wheel) => void;
   justAdded?: { kind: 'trade' | 'option'; id: number; symbol: string } | null;
   strikingTradeId?: number | null;
+  onDeleted?: (id?: number) => Promise<void>;
 }
 
 const rowButtonStyle = { width: '100%', background: 'none', border: 'none', borderBottom: '1px solid var(--rule)', textAlign: 'left', font: 'inherit', color: 'inherit' } as const;
