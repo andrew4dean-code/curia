@@ -20,6 +20,8 @@ import { OptionRecordSheet } from './components/OptionRecordSheet';
 import { CompleteWheelSheet, FreshWheelSheet, WheelRecordSheet } from './components/WheelSheets';
 import { WheelCeremony } from './components/WheelCeremony';
 import type { WheelCeremonyData } from './components/WheelCeremony';
+import { SettleCeremony } from './components/SettleCeremony';
+import type { SettleData } from './components/SettleCeremony';
 import { summarizeWheel } from './lib/wheelMath';
 import { deleteWheel } from './lib/api';
 import { TradeCeremony } from './components/TradeCeremony';
@@ -46,6 +48,7 @@ export default function App() {
   const [sheet, setSheet] = useState<Sheet>(null);
   const [ceremony, setCeremony] = useState<TicketData | null>(null);
   const [wheelCeremony, setWheelCeremony] = useState<WheelCeremonyData | null>(null);
+  const [settleCeremony, setSettleCeremony] = useState<SettleData | null>(null);
   const [justAdded, setJustAdded] = useState<{ kind: 'trade' | 'option'; id: number; symbol: string } | null>(null);
   const [landing, setLanding] = useState(false);
   const landingTimer = useRef<number | null>(null);
@@ -208,7 +211,22 @@ export default function App() {
         <MarkSheet symbol={sheet.symbol} onDone={async () => { setSheet(null); await refresh(); }} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'settle' && (
-        <SettleSheet option={sheet.option} onDone={async () => { setSheet(null); await refresh(); }} onEdit={() => setSheet({ kind: 'optionEdit', option: sheet.option })} onCancel={() => setSheet(null)} />
+        <SettleSheet
+          option={sheet.option}
+          onDone={async (c) => { setSheet(null); setSettleCeremony(c); }}
+          onDeleted={async () => { setSheet(null); await refresh(); }}
+          onEdit={() => setSheet({ kind: 'optionEdit', option: sheet.option })}
+          onCancel={() => setSheet(null)}
+        />
+      )}
+      {settleCeremony && (
+        <SettleCeremony
+          data={settleCeremony}
+          onDone={() => {
+            setSettleCeremony(null);
+            void refresh();
+          }}
+        />
       )}
       {ceremony && (
         <TradeCeremony

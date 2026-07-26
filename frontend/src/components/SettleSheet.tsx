@@ -2,18 +2,22 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { deleteOption, settleOption } from '../lib/api';
 import { settleDateDefault, todayIso } from '../lib/time';
-import { premiumCollected } from '../lib/optionsMath';
-import { formatMoney } from '../lib/format';
+import { optionRealizedPl, premiumCollected } from '../lib/optionsMath';
+import { formatMoney, formatSignedMoney } from '../lib/format';
+import { stampFor } from '../lib/settleStamp';
+import type { SettleData } from './SettleCeremony';
 import type { OptionPosition, OptionStatus } from '../lib/types';
 
 export function SettleSheet({
   option,
   onDone,
+  onDeleted,
   onEdit,
   onCancel,
 }: {
   option: OptionPosition;
-  onDone: () => Promise<void>;
+  onDone: (c: SettleData) => Promise<void>;
+  onDeleted?: () => Promise<void>;
   onEdit: () => void;
   onCancel: () => void;
 }) {
@@ -39,7 +43,21 @@ export function SettleSheet({
           ? { buyback_price: Number(buyback), close_fees: 0 }
           : {}),
       });
-      await onDone();
+      const settled: OptionPosition = {
+        ...option,
+        status: outcome,
+        closed_at: date,
+        ...(outcome === 'BOUGHT_BACK'
+          ? { buyback_price: Number(buyback), close_fees: 0 }
+          : {}),
+      };
+      const realised = optionRealizedPl(settled) ?? 0;
+      await onDone({
+        ...stampFor(outcome, realised),
+        amount: formatSignedMoney(realised),
+        symbol: option.symbol,
+        ...(outcome === 'ASSIGNED' ? { shares: `${bookQty} SHARES · ${option.symbol}` } : {}),
+      });
     } catch {
       setError('Could not settle — check your connection.');
       setBusy(false);
@@ -51,7 +69,7 @@ export function SettleSheet({
     setBusy(true);
     try {
       await deleteOption(option.id);
-      await onDone();
+      await onDeleted?.();
     } catch {
       setError('Could not delete — check your connection.');
       setBusy(false);

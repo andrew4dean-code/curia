@@ -142,3 +142,19 @@
 .ceremony[data-typing='yes'] .typebar[data-strike='1'] { animation: bar-hit 96ms cubic-bezier(.3,0,.2,1) both; }
 @keyframes bar-hit { 0% { transform: rotate(26deg) translateY(10px); } 55% { transform: rotate(0deg) translateY(0); } 100% { transform: rotate(22deg) translateY(8px); } }
 .ceremony[data-stage='print'] .ticket { transform: translateY(calc(var(--feed, 0) * -3px)); transition: transform .13s steps(2, end); }
+
+/* ---- the settle stamp: outcome slams diagonally across the ticket, amount counts up beneath it ---- */
+.settle-ceremony[data-tone='up'] { --stamp: var(--pl-green); }
+.settle-ceremony[data-tone='down'] { --stamp: var(--pl-red); }
+.settle-ceremony[data-tone='assign'] { --stamp: var(--maroon); }
+.settle-stamp { position: absolute; left: 50%; top: 46%; margin-left: -110px; width: 220px; text-align: center; font-family: var(--font-display); font-weight: 800; font-size: 30px; letter-spacing: .05em; color: var(--stamp); border: 3px solid var(--stamp); border-radius: 6px; padding: 6px 0; opacity: 0; transform: rotate(-12deg); }
+.settle-ceremony[data-stage='swing'] .settle-stamp { animation: stamp-swing .62s cubic-bezier(.4,0,.25,1) both; }
+.settle-ceremony:not([data-stage='swing']) .settle-stamp { opacity: .92; }
+@keyframes stamp-swing { 0% { opacity: 0; transform: rotate(-40deg) scale(2.4) translateY(-90px); } 70% { opacity: 1; transform: rotate(-9deg) scale(.94); } 100% { opacity: .92; transform: rotate(-12deg) scale(1); } }
+.settle-ceremony[data-stage='hit'] .settle-ticket { animation: ticket-jolt .3s cubic-bezier(.36,.07,.19,.97) both; }
+@keyframes ticket-jolt { 0%, 100% { transform: translateY(0); } 22% { transform: translateY(7px) rotate(.6deg); } 55% { transform: translateY(-3px) rotate(-.3deg); } }
+.settle-amount { margin-top: 74px; text-align: center; font-size: 30px; color: var(--stamp); opacity: 0; transform: translateY(10px); }
+.settle-ceremony[data-stage='count'] .settle-amount,
+.settle-ceremony[data-stage='certificate'] .settle-amount { animation: amount-rise .4s cubic-bezier(.3,1.4,.5,1) both; }
+@keyframes amount-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.settle-cert { margin-top: 14px; text-align: center; font-family: var(--font-mono); font-size: 14px; letter-spacing: .08em; color: var(--ink); }
