@@ -179,4 +179,20 @@ describe('OptionsTab board', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
     expect(container.querySelector('.board-weeks')?.getAttribute('data-slide')).toBe('right');
   });
+
+  it('strikes an open option chip on the board', () => {
+    const { container } = render(<OptionsTab snap={snapWith([base])} {...cbs} onSellWeek={vi.fn()} strikingOptionId={base.id} />);
+    expect(container.querySelectorAll('.striking')).toHaveLength(1);
+  });
+
+  it('strikes a settled option row on the board', () => {
+    const settled = { ...base, id: 9, status: 'EXPIRED' as const, closed_at: '2026-08-07', expiration: '2026-08-07' };
+    const { container } = render(<OptionsTab snap={snapWith([settled])} {...cbs} onSellWeek={vi.fn()} strikingOptionId={9} />);
+    expect(container.querySelectorAll('.striking')).toHaveLength(1);
+  });
+
+  it('strikes nothing when no option is being deleted', () => {
+    const { container } = render(<OptionsTab snap={snapWith([base])} {...cbs} onSellWeek={vi.fn()} />);
+    expect(container.querySelectorAll('.striking')).toHaveLength(0);
+  });
 });

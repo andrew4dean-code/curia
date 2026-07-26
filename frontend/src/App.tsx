@@ -51,6 +51,7 @@ export default function App() {
   const [settleCeremony, setSettleCeremony] = useState<SettleData | null>(null);
   const [justAdded, setJustAdded] = useState<{ kind: 'trade' | 'option'; id: number; symbol: string } | null>(null);
   const [strikingTradeId, setStrikingTradeId] = useState<number | null>(null);
+  const [strikingOptionId, setStrikingOptionId] = useState<number | null>(null);
   const [landing, setLanding] = useState(false);
   const [cover, setCover] = useState(false);
   const landingTimer = useRef<number | null>(null);
@@ -69,6 +70,11 @@ export default function App() {
       window.clearTimeout(strikeTimer.current);
       strikeTimer.current = null;
     }
+    // A trade strike and an option strike share this one timer, so clearing it
+    // must also clear both ids — otherwise a superseded strike leaves its row
+    // struck forever with no timer left to clear it.
+    setStrikingTradeId(null);
+    setStrikingOptionId(null);
   }, []);
 
   const clearCoverTimer = useCallback(() => {
@@ -138,6 +144,19 @@ export default function App() {
     }, 700);
   };
 
+  // Same shape as onDeleted, and deliberately the same timer: a trade strike and
+  // an option strike must never run over each other.
+  const onOptionDeleted = async (id?: number) => {
+    setSheet(null);
+    if (id == null) { await refresh(); return; }
+    clearStrikeTimer();
+    setStrikingOptionId(id);
+    strikeTimer.current = window.setTimeout(() => {
+      setStrikingOptionId(null);
+      void refresh();
+    }, 700);
+  };
+
   const tabProps = {
     snap,
     onRefresh: refresh,
@@ -160,6 +179,7 @@ export default function App() {
     onViewWheelRecord: (wheel: Wheel) => setSheet({ kind: 'wheelRecord', wheel }),
     justAdded,
     strikingTradeId,
+    strikingOptionId,
     onDeleted,
   };
 
@@ -212,7 +232,7 @@ export default function App() {
         <OptionSellSheet option={sheet.option} expiration={sheet.option.expiration} wheels={snap.wheels} onDone={onTicket} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'record' && (
-        <OptionRecordSheet option={sheet.option} onDone={async () => { setSheet(null); await refresh(); }} onCancel={() => setSheet(null)} />
+        <OptionRecordSheet option={sheet.option} onDeleted={onOptionDeleted} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'freshWheel' && (
         <FreshWheelSheet
@@ -261,7 +281,7 @@ export default function App() {
         <SettleSheet
           option={sheet.option}
           onDone={async (c) => { setSheet(null); setSettleCeremony(c); }}
-          onDeleted={async () => { setSheet(null); await refresh(); }}
+          onDeleted={onOptionDeleted}
           onEdit={() => setSheet({ kind: 'optionEdit', option: sheet.option })}
           onCancel={() => setSheet(null)}
         />

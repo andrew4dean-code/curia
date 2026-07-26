@@ -87,6 +87,41 @@ describe('SettleSheet', () => {
     expect(onDone.mock.calls[0][0].shares).toMatch(/^CALLED AWAY /);
   });
 
+  it('deletes an open option after confirm, passing its id to onDeleted', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const onDeleted = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<SettleSheet option={csp} onDone={vi.fn()} onDeleted={onDeleted} onEdit={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Delete$/ }));
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledOnce());
+    expect(onDeleted).toHaveBeenCalledWith(csp.id);
+    expect(fetchMock.mock.calls[0][0]).toBe(`/api/options/${csp.id}`);
+    expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe('DELETE');
+  });
+
+  it('refuses to delete without confirmation', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<SettleSheet option={csp} onDone={vi.fn()} onDeleted={vi.fn()} onEdit={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Delete$/ }));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('a failed delete leaves onDeleted uncalled — no strike, no fold', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const onDeleted = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<SettleSheet option={csp} onDone={vi.fn()} onDeleted={onDeleted} onEdit={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Delete$/ }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onDeleted).not.toHaveBeenCalled();
+    expect(screen.getByText(/Could not delete/)).toBeInTheDocument();
+  });
+
   it('settles a buyback with zero fees', async () => {
     const settle = vi.mocked(api.settleOption);
     settle.mockClear();

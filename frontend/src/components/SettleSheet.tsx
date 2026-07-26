@@ -17,7 +17,7 @@ export function SettleSheet({
 }: {
   option: OptionPosition;
   onDone: (c: SettleData) => Promise<void>;
-  onDeleted?: () => Promise<void>;
+  onDeleted?: (id?: number) => Promise<void>;
   onEdit: () => void;
   onCancel: () => void;
 }) {
@@ -69,7 +69,7 @@ export function SettleSheet({
     setBusy(true);
     try {
       await deleteOption(option.id);
-      await onDeleted?.();
+      await onDeleted?.(option.id);
     } catch {
       setError('Could not delete — check your connection.');
       setBusy(false);

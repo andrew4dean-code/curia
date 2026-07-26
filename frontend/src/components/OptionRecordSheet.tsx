@@ -12,11 +12,11 @@ const OUTCOME_LABELS: Record<string, string> = {
 
 export function OptionRecordSheet({
   option,
-  onDone,
+  onDeleted,
   onCancel,
 }: {
   option: OptionPosition;
-  onDone: () => Promise<void>;
+  onDeleted?: (id: number) => Promise<void>;
   onCancel: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -29,7 +29,7 @@ export function OptionRecordSheet({
     setError('');
     try {
       await deleteOption(option.id);
-      await onDone();
+      await onDeleted?.(option.id);
     } catch {
       setError('Could not delete — check your connection.');
       setBusy(false);

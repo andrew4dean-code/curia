@@ -40,6 +40,11 @@ const settledPut: OptionPosition = {
   status: 'EXPIRED', closed_at: '2026-07-18', buyback_price: 0, close_fees: 0, assigned_trade_id: null,
 };
 
+const snapWithSettledOptions: Snapshot = {
+  ...snap,
+  options: [settledPut, { ...settledPut, id: 7, symbol: 'AAPL' }],
+};
+
 describe('LedgerTab', () => {
   it('shows closed trades and stats', () => {
     render(<LedgerTab snap={snap} {...cbs} />);
@@ -170,5 +175,12 @@ describe('LedgerTab', () => {
     const struck = container.querySelectorAll('.striking');
     expect(struck).toHaveLength(1);
     expect(struck[0].textContent).toMatch(/TQQQ/);
+  });
+
+  it('marks a struck settled option and leaves its neighbours alone', () => {
+    const { container } = render(<LedgerTab snap={snapWithSettledOptions} {...cbs} strikingOptionId={7} />);
+    const struck = container.querySelectorAll('.striking');
+    expect(struck).toHaveLength(1);
+    expect(struck[0].getAttribute('data-opt-id')).toBe('7');
   });
 });
