@@ -29,6 +29,7 @@ export interface TabProps {
   onViewWheelRecord?: (w: Wheel) => void;
   justAdded?: { kind: 'trade' | 'option'; id: number; symbol: string } | null;
   strikingTradeId?: number | null;
+  strikingOptionId?: number | null;
   onDeleted?: (id?: number) => Promise<void>;
 }
 

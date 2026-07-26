@@ -6,7 +6,7 @@ import { computeStats } from '../lib/stats';
 import { computeOptionStats, optionRealizedPl } from '../lib/optionsMath';
 import { formatMoney, formatPct, formatSignedMoney, formatSignedPct, plColor } from '../lib/format';
 
-export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord, strikingTradeId, onDeleted }: TabProps) {
+export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord, strikingTradeId, strikingOptionId, onDeleted }: TabProps) {
   const [showEntries, setShowEntries] = useState(false);
   const entriesVisible = showEntries || strikingTradeId != null;
   const closed = computeClosedTrades(snap.trades);
@@ -54,7 +54,13 @@ export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord, striking
         <>
           <h2 className="section-title">Premium Record</h2>
           {settledOptions.map((o) => (
-            <button type="button" className="row row-tap" key={`opt-${o.id}`} onClick={() => onViewRecord?.(o)}>
+            <button
+              type="button"
+              className={o.id === strikingOptionId ? 'row row-tap striking' : 'row row-tap'}
+              data-opt-id={o.id}
+              key={`opt-${o.id}`}
+              onClick={() => onViewRecord?.(o)}
+            >
               <div className="row-main">
                 <div className="row-sym">
                   {o.symbol} ${o.strike} {o.opt_type}{' '}

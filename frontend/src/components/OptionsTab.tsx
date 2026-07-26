@@ -13,7 +13,7 @@ function fmtShort(dateStr: string): string {
   return `${MONTHS[m - 1].slice(0, 3)} ${d}`;
 }
 
-export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onMarkQuiet, onClearQuiet }: TabProps) {
+export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onMarkQuiet, onClearQuiet, strikingOptionId }: TabProps) {
   const now = new Date();
   const [ym, setYm] = useState<[number, number]>([now.getFullYear(), now.getMonth() + 1]);
   // Undefined until the chevrons actually move the month: the board-in-left/
@@ -72,7 +72,7 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onM
               <div className="wk-rule" />
               {rows.map((o) =>
                 o.status === 'OPEN' ? (
-                  <button key={o.id} className="wk-chip" onClick={() => onSettleOption(o)}>
+                  <button key={o.id} className={o.id === strikingOptionId ? 'wk-chip striking' : 'wk-chip'} onClick={() => onSettleOption(o)}>
                     <span className="wk-seal">{o.opt_type === 'PUT' ? 'P' : 'C'}</span>
                     <span className="wk-chip-text">
                       {o.symbol} ${o.strike} {o.opt_type} · {o.contracts}x · {formatMoney(premiumCollected(o))}
@@ -80,7 +80,7 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onM
                     </span>
                   </button>
                 ) : (
-                  <button key={o.id} type="button" className="wk-settled" style={{ color: (optionRealizedPl(o) ?? 0) >= 0 ? 'var(--pl-up)' : 'var(--pl-down)' }} onClick={() => onViewRecord?.(o)}>
+                  <button key={o.id} type="button" className={o.id === strikingOptionId ? 'wk-settled striking' : 'wk-settled'} style={{ color: (optionRealizedPl(o) ?? 0) >= 0 ? 'var(--pl-up)' : 'var(--pl-down)' }} onClick={() => onViewRecord?.(o)}>
                     ✓ {o.symbol} ${o.strike} {o.opt_type} — {(optionRealizedPl(o) ?? 0) >= 0 ? 'kept' : 'gave back'} {formatSignedMoney(optionRealizedPl(o) ?? 0)}
                   </button>
                 ),

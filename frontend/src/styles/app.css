@@ -127,6 +127,8 @@
 .row.striking::after { content: ''; position: absolute; left: 0; top: 50%; height: 2px; width: 100%; background: var(--ink); transform-origin: 0 50%; transform: scaleX(0); animation: strike .34s cubic-bezier(.3,.7,.4,1) both; }
 @keyframes strike { to { transform: scaleX(1); } }
 @keyframes row-fold { to { transform: scaleY(0); opacity: 0; } }
+.wk-chip.striking, .wk-settled.striking { position: relative; animation: row-fold .3s .4s cubic-bezier(.5,0,.75,0) both; }
+.wk-chip.striking::after, .wk-settled.striking::after { content: ''; position: absolute; left: 0; top: 50%; height: 2px; width: 100%; background: var(--ink); transform-origin: 0 50%; transform: scaleX(0); animation: strike .34s cubic-bezier(.3,.7,.4,1) both; }
 
 .book-cover { position: fixed; inset: 0; z-index: 60; pointer-events: none; background: linear-gradient(120deg, #6B2320, var(--maroon) 45%, #521a17); transform-origin: 0% 50%; animation: cover-open .9s cubic-bezier(.5,0,.2,1) both; }
 .book-cover::after { content: 'C'; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); font-family: var(--font-display); font-weight: 800; font-size: 64px; color: var(--gold); opacity: .85; }

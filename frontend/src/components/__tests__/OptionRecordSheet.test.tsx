@@ -18,7 +18,7 @@ describe('OptionRecordSheet', () => {
   });
 
   it('shows the record and its P/L', () => {
-    render(<OptionRecordSheet option={settled} onDone={vi.fn()} onCancel={vi.fn()} />);
+    render(<OptionRecordSheet option={settled} onCancel={vi.fn()} />);
     expect(screen.getByText(/Expired worthless/)).toBeInTheDocument();
     expect(screen.getByText('+$146.70')).toBeInTheDocument();
     expect(screen.queryByText(/booked share trade stays/)).toBeNull();
@@ -28,7 +28,6 @@ describe('OptionRecordSheet', () => {
     render(
       <OptionRecordSheet
         option={{ ...settled, status: 'ASSIGNED', assigned_trade_id: 3 }}
-        onDone={vi.fn()}
         onCancel={vi.fn()}
       />,
     );
@@ -38,15 +37,29 @@ describe('OptionRecordSheet', () => {
   it('deletes after confirm and refuses without it', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetchMock);
-    const onDone = vi.fn().mockResolvedValue(undefined);
+    const onDeleted = vi.fn().mockResolvedValue(undefined);
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    render(<OptionRecordSheet option={settled} onDone={onDone} onCancel={vi.fn()} />);
+    render(<OptionRecordSheet option={settled} onDeleted={onDeleted} onCancel={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: /Delete record/ }));
     expect(fetchMock).not.toHaveBeenCalled();
     confirmSpy.mockReturnValue(true);
     fireEvent.click(screen.getByRole('button', { name: /Delete record/ }));
-    await waitFor(() => expect(onDone).toHaveBeenCalledOnce());
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledOnce());
+    expect(onDeleted).toHaveBeenCalledWith(7);
     expect(fetchMock.mock.calls[0][0]).toBe('/api/options/7');
     expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe('DELETE');
+  });
+
+  it('a failed delete leaves onDeleted uncalled — no strike, no fold', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const onDeleted = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<OptionRecordSheet option={settled} onDeleted={onDeleted} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /Delete record/ }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onDeleted).not.toHaveBeenCalled();
+    expect(screen.getByText(/Could not delete/)).toBeInTheDocument();
   });
 });
