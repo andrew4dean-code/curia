@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { STAGE_MS, TradeCeremony } from '../TradeCeremony';
+import { STAGE_MS, TYPE_CHAR_MS, TYPE_START_MS, TradeCeremony } from '../TradeCeremony';
 import type { TicketData } from '../TradeCeremony';
+import { PRESS_HOME_X, PRESS_OVERHANG, tiltForChar } from '../Press';
 // @ts-expect-error -- no @types/node in this project; read the raw CSS source directly so the
 // test sees the real rules on disk, bypassing Vitest's mocked CSS-import handling (which returns
 // '' for .css imports under jsdom by default, so a normal `import` here would prove nothing).
@@ -19,9 +20,12 @@ function readCeremonyCss(): string {
   return readFileSync(cssPath, 'utf8');
 }
 
-// Long enough to walk through many strike cycles: STRIKE_EVERY(3) * TYPE_CHAR_MS(48) = 144ms per
-// flip, and this fixture's 68 characters keep typing entirely inside the print stage's typing
-// window (600ms-4200ms) so the stage never advances out from under the sampling loop below.
+// Long enough to walk through many strike cycles. There is one strike per PRINTED character
+// now (the old STRIKE_EVERY(3) let two of every three glyphs appear with no strike at all), so
+// the flip period is TYPE_CHAR_MS, one beat. Newlines cost no beat, so this fixture is 66 beats
+// (25 + 21 + 20 glyphs, the two line breaks free), which keeps typing entirely inside the print
+// stage's typing window (600ms-4200ms) and the stage never advances out from under the sampling
+// loops below.
 const longTicket: TicketData = {
   no: 91,
   title: 'TRADE TICKET',
@@ -29,21 +33,67 @@ const longTicket: TicketData = {
   lines: ['SELL 500 NVDA CALLS LIMIT', 'STRIKE 120 EXP FRIDAY', 'ACCOUNT REF 55210-TQ'],
 };
 
+// What is actually struck on each line: the ghost span beside it holds the REST of the line,
+// laid out but not painted, so the line box never changes width. Text queries would match the
+// ghost too, so every assertion about "what has been typed so far" reads the ink span.
+function inked(container: HTMLElement): string[] {
+  return Array.from(container.querySelectorAll('.tl-ink')).map((n) => n.textContent ?? '');
+}
+
+// jsdom has no layout: every getBoundingClientRect is 0, so the component's own guard keeps the
+// bar parked on the centre line and registration would be untestable. This stub gives the scene
+// a real width and lays the line out the way a monospace face would -- the PITCH LIVES ONLY
+// HERE. The component must never know it; it has to read the column back out of the DOM,
+// because Space Mono is a Google-hosted webfont on an offline-first PWA and the first cold run
+// gets whatever the fallback face's advance happens to be. .tl-strike is the cell occupied by
+// the glyph just struck; .print-column is the zero-width anchor sitting after it.
+const FAKE_LEFT = 46;
+const FAKE_PITCH = 8.4;
+
+function fakeRect(left: number, width: number): DOMRect {
+  return { x: left, y: 0, left, right: left + width, top: 0, bottom: 0, width, height: 0, toJSON: () => ({}) } as DOMRect;
+}
+
+function stubLayout() {
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    if (this.classList.contains('ceremony-scene')) return fakeRect(0, 290);
+    const typed = this.closest('.ticket-line')?.querySelector('.tl-ink')?.textContent?.length ?? 0;
+    if (this.classList.contains('tl-strike')) return fakeRect(FAKE_LEFT + (typed - 1) * FAKE_PITCH, FAKE_PITCH);
+    if (this.classList.contains('print-column')) return fakeRect(FAKE_LEFT + typed * FAKE_PITCH, 0);
+    return fakeRect(0, 0);
+  });
+}
+
+// the carriage offset and the per-line feed, straight off the group that carries them
+function carrier(container: HTMLElement): { dx: number; feed: number } {
+  const m = container.querySelector('.press-carrier')!.getAttribute('transform')!
+    .match(/translate\((-?[\d.]+),\s*(-?[\d.]+)\)/)!;
+  return { dx: Number(m[1]), feed: Number(m[2]) };
+}
+
 describe('TradeCeremony', () => {
   beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
 
   it('types the ticket like a press and advances through the stages', () => {
     const onDone = vi.fn();
     const { container } = render(<TradeCeremony ticket={ticket} onDone={onDone} />);
     expect(screen.getByText(/TRADE TICKET Nº 47/)).toBeInTheDocument();
-    // the trade lines hammer out one character at a time
-    expect(screen.queryByText('BUY 400 TQQQ')).toBeNull();
+    // the trade lines hammer out one character at a time. REWRITTEN from screen.getByText: both
+    // lines are now split into an ink span and a hidden ghost span holding the rest of the line
+    // (that is what stops a centred line sliding left as it grows), so a text query would match
+    // the ghost before a single character had been struck. Reading the ink is strictly more
+    // precise -- it asserts what is actually printed, not what is merely reserved.
+    expect(inked(container)).toEqual(['', '']);
     act(() => vi.advanceTimersByTime(400));
-    expect(screen.queryByText('BUY 400 TQQQ')).toBeNull(); // typing hasn't started yet
+    expect(inked(container)).toEqual(['', '']); // typing hasn't started yet
+    // ...while the full text is already laid out, unpainted, holding the line width
+    expect(container.querySelector('.ticket-line')!.textContent).toBe('BUY 400 TQQQ');
     act(() => vi.advanceTimersByTime(2000));
-    expect(screen.getByText('BUY 400 TQQQ')).toBeInTheDocument();
-    expect(screen.getByText('@ $72.00')).toBeInTheDocument();
+    expect(inked(container)).toEqual(['BUY 400 TQQQ', '@ $72.00']);
     const root = container.querySelector('[data-stage]')!;
     act(() => vi.advanceTimersByTime(1800)); // 4200ms total
     expect(root.getAttribute('data-stage')).toBe('fold');
@@ -91,41 +141,165 @@ describe('TradeCeremony', () => {
     expect(container.querySelector('.press-head')).not.toBeNull();
   });
 
-  it('clips the arm so it can never cross the ticket', () => {
+  it('clips the arm so it can never cross the ticket, and fades the shaft out before the cut', () => {
     const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
     const arm = container.querySelector('.press-arm')!;
     expect(arm.getAttribute('clip-path')).toMatch(/press-clip/);
     expect(container.querySelector('#press-clip')).not.toBeNull();
+
+    // The clip alone ends the bar in a hard horizontal cut across the ticket, which is the
+    // thing that reads as a stick. The shaft fades out above that edge instead -- and the fade
+    // must FINISH before the cut, or the guillotine line is still there at reduced opacity.
+    const shaft = container.querySelector('.press-shaft')!;
+    expect(shaft.getAttribute('mask')).toMatch(/arm-fade/);
+    const fadeEnd = Number(container.querySelector('#arm-fade-g')!.getAttribute('y2'));
+    const band = container.querySelector('#press-clip rect')!;
+    const bandBottom = Number(band.getAttribute('y')) + Number(band.getAttribute('height'));
+    // the fade is authored in the carrier's local space (line 0 here, so the two agree)
+    expect(fadeEnd).toBeLessThan(bandBottom);
   });
 
-  it('keeps the typehead inside the clip band on the third line of a three-line ticket', () => {
-    // Regression for the defect where strikeY moved with the line index but the head's `y` was
-    // hard-coded to 112. On line three (the common case: option sells and closing trades both run
-    // three lines) strikeY landed below the head, so the clip removed it entirely and only a bare
-    // shaft remained visible.
+  it('lands the head on the live print column, and keeps it inside the clip band on the third line', () => {
+    // REWRITTEN. The original only checked y: it was the regression test for strikeY moving with
+    // the line index while the head's `y` stayed hard-coded, which clipped the head away entirely
+    // on line three. Both halves of registration are asserted now, because the arm used to strike
+    // at a FIXED x while .ticket-line is centre-aligned and grows rightward -- the hammer never
+    // landed where the letter appeared. The x assertions are the new half; the y assertions are
+    // the original ones, kept verbatim in intent and re-pointed at .press-carrier (the head's
+    // parent is now the per-character tilt group, so the feed offset is read one level up).
+    stubLayout();
     const { container } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
-    act(() => vi.advanceTimersByTime(600)); // TYPE_START_MS: typing begins
-    // longTicket's first two lines plus their newlines are 47 characters (25 + 1 + 21), so the 49th
-    // typed character is the second character of the third line - comfortably inside line index 2
-    // and well within the print stage's typing window (600ms-4200ms for this fixture).
-    for (let i = 0; i < 49; i++) {
-      act(() => vi.advanceTimersByTime(48)); // TYPE_CHAR_MS
+    act(() => vi.advanceTimersByTime(TYPE_START_MS));
+    // 25 beats finish line one and 21 finish line two (their line breaks cost nothing), so beat
+    // 48 is the second character of the third line -- comfortably inside line index 2 and well
+    // within the print stage's typing window (600ms-4200ms for this fixture).
+    for (let i = 0; i < 48; i++) {
+      act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
     }
+    expect(inked(container)[2]).toBe('AC');
 
+    // x: the head's centre sits on the centre of the cell the letter just landed in -- the
+    // second cell of the line here, i.e. FAKE_LEFT + 1.5 advances -- in scene pixels. Measuring
+    // the anchor AFTER the ink instead would put it half a character to the right of the letter
+    // it had just struck, for the whole beat that letter was on screen.
+    const { dx, feed } = carrier(container);
+    const headSceneX = PRESS_HOME_X + dx - PRESS_OVERHANG;
+    expect(headSceneX).toBeCloseTo(FAKE_LEFT + 1.5 * FAKE_PITCH, 1);
+
+    // and it TRACKS: one more character moves the carriage by exactly one measured advance,
+    // which the component never knew and could not have hardcoded.
+    act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
+    expect(inked(container)[2]).toBe('ACC');
+    expect(carrier(container).dx - dx).toBeCloseTo(FAKE_PITCH, 2);
+
+    // y: unchanged from the original assertion.
     const head = container.querySelector('.press-head')!;
-    const headGroup = head.parentElement!;
-    const offsetMatch = headGroup.getAttribute('transform')?.match(/translate\(0,\s*(-?\d+(?:\.\d+)?)\)/);
-    expect(offsetMatch).toBeTruthy();
-    const offset = Number(offsetMatch![1]);
-    const headY = Number(head.getAttribute('y')) + offset;
+    const headY = Number(head.getAttribute('y')) + feed;
     const headHeight = Number(head.getAttribute('height'));
 
     const clipRect = container.querySelector('#press-clip rect')!;
     const clipY = Number(clipRect.getAttribute('y'));
     const clipHeight = Number(clipRect.getAttribute('height'));
 
+    // 24px per line, not the 27px line pitch: the page itself rolls up 3px at every line
+    // break (`--feed * -3px` in ceremony.css), so line n is painted 3n above where it is laid
+    // out. Striking at the full pitch left the head 6px low by the third line.
+    expect(feed).toBe(2 * 24);
     expect(headY).toBeGreaterThanOrEqual(clipY);
     expect(headY + headHeight).toBeLessThanOrEqual(clipY + clipHeight);
+  });
+
+  it('parks the bar on the centre line until something has actually been measured', () => {
+    // No stubLayout here: every box is zero-sized, as it would be before first layout. The
+    // component must not divide by that or treat it as a real column of x=0 -- it falls back to
+    // the scene's centre, which is where the shaft is authored.
+    const { container } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
+    act(() => vi.advanceTimersByTime(TYPE_START_MS + TYPE_CHAR_MS * 4));
+    expect(carrier(container).dx).toBe(0);
+  });
+
+  it('holds every line at its final width from the first frame', () => {
+    // .ticket-line is centre-aligned, so a line that grew a character at a time slid LEFT under
+    // the hammer as it went. Paper cannot do that. Each line renders its typed part and a ghost
+    // holding the rest -- laid out, not painted -- so the line box is full width before the first
+    // character is struck and the centring has nothing left to re-centre.
+    const { container } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
+    const lines = () => Array.from(container.querySelectorAll('.ticket-line'));
+
+    for (const ms of [0, TYPE_START_MS, TYPE_CHAR_MS * 9, TYPE_CHAR_MS * 30]) {
+      act(() => vi.advanceTimersByTime(ms));
+      // the full line is present in the layout at every instant, however little of it is inked
+      expect(lines().map((l) => l.textContent)).toEqual(longTicket.lines);
+    }
+    const ghosts = container.querySelectorAll('.tl-ghost');
+    expect(ghosts).toHaveLength(longTicket.lines.length);
+    expect((ghosts[0] as HTMLElement).style.visibility).toBe('hidden');
+
+    // and the join between ink and ghost must not collapse a run of spaces as it moves through
+    // the line, which would change the width after all
+    expect(readCeremonyCss()).toMatch(/\.ticket-line\s*\{[^}]*white-space:\s*pre-wrap/);
+  });
+
+  it('costs no beat to return the carriage', () => {
+    // '\n' prints nothing. If it ate a tick, every line break inserted a silent gap and pushed
+    // the strike for the first letter of the next line one beat late -- a phase shift the eye
+    // reads as the machine losing its rhythm.
+    const { container } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
+    act(() => vi.advanceTimersByTime(TYPE_START_MS));
+    for (let i = 0; i < 25; i++) act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
+    expect(inked(container)[0]).toBe('SELL 500 NVDA CALLS LIMIT'); // 25 glyphs, 25 beats
+    expect(inked(container)[1]).toBe('');
+
+    act(() => vi.advanceTimersByTime(TYPE_CHAR_MS)); // beat 26
+    expect(inked(container)[1]).toBe('S'); // a glyph, not a swallowed newline
+    expect(container.querySelector('.press-arm')!.getAttribute('data-strike')).toBe('0'); // beat 26 of 26
+
+    // and the strike keeps alternating straight across the break rather than repeating itself
+    act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
+    expect(container.querySelector('.press-arm')!.getAttribute('data-strike')).toBe('1');
+  });
+
+  it('does not swing at a page with nothing on it yet', () => {
+    // The arm is on screen from the first frame -- the machine is there before the paper is --
+    // but the print stage opens with the ticket still flying up into the platen, and a strike
+    // then is a strike at nothing. data-strike="idle" matches neither strike rule, so the bar
+    // just sits at rest until there is a character to hit.
+    const { container } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
+    const arm = container.querySelector('.press-arm')!;
+    expect(arm.getAttribute('data-strike')).toBe('idle');
+    act(() => vi.advanceTimersByTime(TYPE_START_MS + TYPE_CHAR_MS));
+    expect(arm.getAttribute('data-strike')).toBe('1');
+
+    // and the parked pose has to BE the rest pose, or the first strike starts with a jump --
+    // the same defect as the old press-hit-a/press-hit-b handover, just at the top of the stage.
+    const css = readCeremonyCss();
+    const base = css.match(/\n\.press-arm\s*\{[^}]*transform:\s*([^;]+);/)![1].trim();
+    const rest = css
+      .match(/@keyframes press-hit-a\s*\{([^@]*?)\n\}/)![1]
+      .match(/0%\s*\{\s*transform:\s*([^;]+);/)![1]
+      .trim();
+    expect(base).toBe(rest);
+  });
+
+  it('gives the same letter the same face every time it is struck', () => {
+    // The face used to come from the beat's parity (press-hit-a leaned one way, press-hit-b the
+    // other), so the SAME letter presented a different slug depending on where in the line it
+    // fell. That is arbitrariness by construction. The tilt is a function of the character now.
+    expect(tiltForChar('A')).toBe(tiltForChar('A'));
+    expect(tiltForChar('A')).not.toBe(tiltForChar('B'));
+    expect(Math.abs(tiltForChar('A'))).toBeGreaterThanOrEqual(4); // never 0: every letter shows a face
+    expect(Math.abs(tiltForChar('Z'))).toBeLessThanOrEqual(8);
+
+    // and it rotates about the head's own contact point, so a tilt can never move the print
+    // position off the column the carriage just measured.
+    const { container } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
+    act(() => vi.advanceTimersByTime(TYPE_START_MS + TYPE_CHAR_MS));
+    const tilt = container.querySelector('.press-tilt')!.getAttribute('transform')!;
+    const [, deg, cx, cy] = tilt.match(/rotate\((-?[\d.]+)\s+([\d.]+)\s+([\d.]+)\)/)!;
+    const head = container.querySelector('.press-head')!;
+    expect(Number(deg)).toBe(tiltForChar('S')); // first glyph of longTicket
+    expect(Number(cx)).toBe(Number(head.getAttribute('x')) + Number(head.getAttribute('width')) / 2);
+    expect(Number(cy)).toBe(Number(head.getAttribute('y')));
   });
 
   it('the fold stage builds three panels', () => {
@@ -175,17 +349,24 @@ describe('TradeCeremony', () => {
     expect(css).not.toMatch(/\.fold-p2 \.fold-shade\s*\{\s*transform:\s*scaleY\(-1\)/);
   });
 
-  it('the arm actually restrikes: data-strike alternates through printing, not just once', () => {
+  it('the arm actually restrikes: data-strike flips on every single glyph, not every third one', () => {
+    // REWRITTEN, and strengthened. The header used to read "STRIKE_EVERY(3) * TYPE_CHAR_MS(48) =
+    // 144ms per flip", which encoded the defect: at one strike per three characters, two of every
+    // three glyphs appeared with no strike at all. That is the single largest reason the machine
+    // read as random. The period is one beat now, so the assertion is no longer "it flips more
+    // than twice" but "it flips EVERY time" -- a strike that skips a glyph fails here.
     const { container } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
     const arm = container.querySelector('.press-arm')!;
-    act(() => vi.advanceTimersByTime(600)); // TYPE_START_MS: typing begins
+    act(() => vi.advanceTimersByTime(TYPE_START_MS));
 
-    // Sample data-strike after every character tick across the whole print stage. If the
-    // attribute only ever flips once (or never) this regresses to "strikes once at mount,
-    // then freezes" — the exact bug that shipped silently before.
+    // Sample data-strike after every character tick. 60 beats stays inside this fixture's 66, so
+    // every sample below is a beat that really printed something. If the attribute only ever
+    // flipped once (or never) this would regress to "strikes once at mount, then freezes" — the
+    // bug that shipped silently before — and if it flipped every third beat it would be the
+    // rejected design.
     const samples: string[] = [];
-    for (let i = 0; i < 70; i++) {
-      act(() => vi.advanceTimersByTime(48)); // TYPE_CHAR_MS
+    for (let i = 0; i < 60; i++) {
+      act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
       samples.push(arm.getAttribute('data-strike')!);
     }
 
@@ -194,7 +375,7 @@ describe('TradeCeremony', () => {
     expect(seen.has('1')).toBe(true);
 
     const flips = samples.slice(1).filter((value, i) => value !== samples[i]).length;
-    expect(flips).toBeGreaterThan(2);
+    expect(flips).toBe(samples.length - 1); // one restart per glyph, no exceptions
   });
 
   // REWRITTEN from 'draws an envelope with four distinct flaps'. That test asserted the
@@ -389,5 +570,94 @@ describe('TradeCeremony', () => {
     // data-strike toggles, so CSS never restarts the animation: the arm strikes once at mount and
     // freezes in its end pose for the rest of the print stage.
     expect(strike0![1]).not.toBe(strike1![1]);
+  });
+
+  it('makes the two strike keyframes byte-identical, so only the name differs', () => {
+    // The names must differ (the test above) purely to force the restart. The BODIES must not:
+    // the old pair encoded the approach angle, one leaning +9deg and the other -9deg, so the
+    // arm's rest pose flipped with the beat parity and the same letter presented a different face
+    // depending on where in the line it fell. Angle is a property of the character now
+    // (tiltForChar in Press.tsx), and these two are one animation under two names.
+    const css = readCeremonyCss();
+    const a = css.match(/@keyframes press-hit-a\s*\{([^@]*?)\n\}/)![1];
+    const b = css.match(/@keyframes press-hit-b\s*\{([^@]*?)\n\}/)![1];
+    expect(a).toBe(b);
+  });
+
+  it('returns the bar to an identical rest, and survives being sampled at 60fps', () => {
+    const css = readCeremonyCss();
+    const body = css.match(/@keyframes press-hit-a\s*\{([^@]*?)\n\}/)![1];
+
+    // 0% and 100% must be the SAME pose. They used to differ from each other AND from the next
+    // strike's 0%: press-hit-a held rotate(7deg) translateY(13px) on `both` and press-hit-b began
+    // at rotate(-9deg) translateY(16px), a 16-degree teleport seven times a second, with no frame
+    // anywhere at which the arm was at rest. That is why the idle pose looked arbitrary.
+    const rest = body.match(/0%\s*\{\s*transform:\s*([^;]+);/)![1].trim();
+    const end = body.match(/100%\s*\{\s*transform:\s*([^;]+);/)![1].trim();
+    expect(end).toBe(rest);
+    expect(rest).not.toMatch(/rotate\(0deg\)/); // rest is a swung-back bar, not the contact pose
+
+    // Contact is early, and it is the pose a sampled frame should MISS: at 60fps the frames land
+    // near 0%, ~38% and ~76% of a 44ms strike, so what is most likely on screen is the arm at
+    // rest below the line. A head parked on top of the character it just printed is worse than
+    // the defect this replaces.
+    const contact = Number(body.match(/(\d+)%\s*\{[^}]*rotate\(0deg\)/)![1]);
+    expect(contact).toBeGreaterThanOrEqual(18);
+    expect(contact).toBeLessThanOrEqual(30);
+
+    // and the strike has to be long enough to be caught at all: >= 2.5 frames at 60fps.
+    const ms = Number(css.match(/\.press-arm\[data-strike='0'\]\s*\{\s*animation:\s*press-hit-a\s+(\d+)ms/)![1]);
+    expect(ms).toBeGreaterThanOrEqual(42);
+  });
+
+  it('has no second clock: the blinking caret is gone from the ticket', () => {
+    // A 0.5s step-end blink against a ~48ms character beat shares no common divisor with it, so
+    // it read as noise laid over the strike; and with the carriage now tracking the column it was
+    // a second print-position indicator contradicting the first. The element that remains carries
+    // no ink at all and exists only to be measured.
+    const css = readCeremonyCss();
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+    expect(css).not.toMatch(/caret-blink/);
+    expect(container.querySelector('.type-caret')).toBeNull();
+    const anchor = css.match(/\.print-column\s*\{([^}]*)\}/)![1];
+    expect(anchor).toMatch(/width:\s*0/);
+    expect(anchor).not.toMatch(/background/);
+    expect(anchor).not.toMatch(/animation/);
+  });
+
+  it('draws a machine wider than the paper: platen knobs and a rail that overhang the card', () => {
+    // "The typewriter stick still looks fake." A bare tapered shaft behind a card is a stick; a
+    // platen with end knobs and a rail running past both edges of the paper is a machine. The
+    // silhouette is the deliverable here, not typehead detail.
+    const css = readCeremonyCss();
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+
+    const sceneW = Number(css.match(/\.ceremony-scene\s*\{[^}]*width:\s*(\d+)px/)![1]);
+    const bleed = Number(css.match(/\n\.press\s*\{[^}]*left:\s*-(\d+)px/)![1]);
+    const viewW = Number(container.querySelector('.press')!.getAttribute('viewBox')!.split(' ')[2]);
+    // one user unit must stay one CSS pixel, or every measured y in Press.tsx is void
+    expect(viewW).toBe(sceneW + bleed * 2);
+    expect(bleed).toBe(PRESS_OVERHANG);
+
+    // both knobs, and both of them project past the card
+    const knobs = Array.from(container.querySelectorAll('.press-knob'));
+    expect(knobs).toHaveLength(2);
+    const edges = knobs.map((k) => {
+      const c = k.querySelector('circle')!;
+      const cx = Number(c.getAttribute('cx'));
+      const r = Number(c.getAttribute('r'));
+      return [cx - r - bleed, cx + r - bleed]; // in scene pixels
+    });
+    expect(Math.min(...edges.map((e) => e[0]))).toBeLessThan(0);
+    expect(Math.max(...edges.map((e) => e[1]))).toBeGreaterThan(sceneW);
+
+    // the rail runs the full width, also past the card, and carries two margin stops
+    const rail = container.querySelector('.press-rail rect')!;
+    expect(Number(rail.getAttribute('x')) - bleed).toBeLessThan(0);
+    expect(Number(rail.getAttribute('x')) + Number(rail.getAttribute('width')) - bleed).toBeGreaterThan(sceneW);
+    expect(container.querySelectorAll('.press-stop')).toHaveLength(2);
+
+    // and the nip, the shadow where the sheet passes under the roller
+    expect(container.querySelector('.press-nip')).not.toBeNull();
   });
 });

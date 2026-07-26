@@ -10,11 +10,31 @@
 .ticket { position: relative; background: var(--parchment-card); border-radius: 10px 10px 4px 4px; padding: 22px 20px 30px; box-shadow: 0 12px 30px rgba(0,0,0,.35); border-top: 2px dashed var(--rule); border-bottom: 2px dashed var(--rule); transform-origin: 50% 0%; will-change: transform, opacity; }
 .ticket::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 16px; border-radius: 10px 10px 0 0; background: linear-gradient(rgba(46,40,32,.16), rgba(46,40,32,0)); pointer-events: none; }
 .ticket-head { font-family: var(--font-display); font-weight: 800; font-size: 15px; letter-spacing: .06em; text-align: center; border-bottom: 1px solid var(--rule); padding-bottom: 8px; margin-bottom: 10px; }
-.ticket-line { font-family: var(--font-mono); font-size: 14px; text-align: center; padding: 3px 0; min-height: 1.45em; }
+/* `text-align: center` stays, and it is safe now only because of the ghost span: a
+   partly-typed line is rendered as <span class="tl-ink">typed</span><span
+   class="tl-ghost" hidden>the rest</span>, so the line box is its FINAL width from
+   the first frame and the centring has nothing left to re-centre. Without the ghost
+   a growing centred line slides left one half-character at a time -- paper cannot do
+   that, and it is what made the text look like it was swimming under the hammer.
+   `white-space: pre-wrap` is part of the same guarantee: the ink and the ghost meet
+   mid-line, and under normal collapsing a run of spaces straddling that join would
+   collapse to one and the line would change width as the join moved through it. */
+.ticket-line { font-family: var(--font-mono); font-size: 14px; text-align: center; padding: 3px 0; min-height: 1.45em; white-space: pre-wrap; }
 .ticket-line[data-sign='up'] { color: var(--pl-green); }
 .ticket-line[data-sign='down'] { color: var(--pl-red); }
-.type-caret { display: inline-block; width: 2px; height: 1em; background: var(--ink); margin-left: 2px; vertical-align: -0.15em; animation: caret-blink 0.5s step-end infinite; }
-@keyframes caret-blink { 50% { opacity: 0; } }
+/* The print-position anchor: zero-width, no ink, and it exists ONLY to be measured.
+   TradeCeremony drives the carriage off the box of the glyph just struck (.tl-strike,
+   the last character of the ink, in its own span) and falls back to this anchor for
+   the one frame before anything has been typed -- both read against the scene's box,
+   neither assuming a character pitch. It is NOT a caret: a blinking bar next to a
+   carriage that is already tracking the column is
+   two print-position indicators disagreeing with each other, and its 0.5s step-end
+   clock shares no common divisor with the ~48ms character beat, so it read as pure
+   noise on top of the strike. The blink keyframes are deleted outright, not gated. */
+.print-column { display: inline-block; width: 0; height: 1em; vertical-align: -0.15em; }
+/* still used by the wheel ceremony's caption, which has no press and no carriage in
+   front of it -- there it is the only indication of where the next letter lands. */
+.type-caret { display: inline-block; width: 2px; height: 1em; background: var(--ink); margin-left: 2px; vertical-align: -0.15em; }
 .ticket-seal, .envelope-seal { box-shadow: 0 2px 6px rgba(0,0,0,.35), 0 0 0 0 rgba(46,40,32,.32); }
 .ticket-seal { position: absolute; right: 14px; bottom: -18px; width: 44px; height: 44px; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-family: var(--font-display); font-weight: 800; font-size: 22px; display: flex; align-items: center; justify-content: center; opacity: 0; }
 
@@ -374,21 +394,60 @@
 .wheel-ceremony[data-phase='stamp'] .crest-banner { animation: banner-press 0.45s 0.15s cubic-bezier(.3,1.4,.5,1) forwards; }
 @keyframes banner-press { 0% { opacity: 0; transform: translate(-50%,-50%) rotate(-8deg) scale(1.6); } 100% { opacity: 1; transform: translate(-50%,-50%) rotate(-8deg) scale(1); } }
 
-/* ---- the press: platen roller + striking arm (SVG, see Press.tsx) ---- */
-.press { position: absolute; left: -14px; right: -14px; top: -34px; height: 260px; overflow: visible; pointer-events: none; z-index: 3; }
-.press-arm { opacity: 0; transform-origin: 158px 258px; }
+/* ---- the press: platen roller, rail + margin stops, striking arm (SVG, see Press.tsx) ----
+   -30px each side, not -14px: the machine has to be WIDER than the paper or it reads
+   as a stick behind a card rather than a card in a machine. The scene is 290px in a
+   375px viewport, so there is (375-290)/2 = 42.5px of margin each side and a 30px
+   bleed fits with room to spare. The viewBox is 350 wide to match (see Press.tsx),
+   so one user unit is still exactly one CSS pixel in both axes. */
+.press { position: absolute; left: -30px; right: -30px; top: -34px; height: 260px; overflow: visible; pointer-events: none; z-index: 3; }
+/* The home pivot is the base of the shaft on the scene's centre line; Press.tsx sets an
+   inline transform-origin that tracks the carriage, so this is the value the bar swings
+   about only before the first measurement lands. The base `transform` is THE REST POSE,
+   identical to 0%/100% of the strike: before the first character (data-strike="idle")
+   no strike rule matches, and an arm with no animation must still be parked below the
+   line rather than standing at the contact pose on top of an empty page. */
+.press-arm { opacity: 0; transform: rotate(-8deg) translateY(18px); transform-origin: 175px 258px; transition: opacity .2s ease-out; }
 .ceremony[data-typing='yes'] .press-arm { opacity: 1; }
-.ceremony[data-typing='yes'] .press-arm[data-strike='0'] { animation: press-hit-a 110ms cubic-bezier(.3,0,.2,1) both; }
-.ceremony[data-typing='yes'] .press-arm[data-strike='1'] { animation: press-hit-b 110ms cubic-bezier(.3,0,.2,1) both; }
-/* press-hit-a / press-hit-b alternate the arm's approach angle (not just its
-   name) so it reads as two different typebars striking, not one bar
-   twitching. They still must carry different keyframe names regardless:
-   alternating the computed animation-name on each strike is what forces the
-   browser to restart the animation. Two rules sharing one keyframe name
-   compute to the same animation-name, and CSS does not restart an animation
-   whose computed value hasn't changed. */
-@keyframes press-hit-a { 0% { transform: rotate(9deg) translateY(16px); } 52% { transform: rotate(0deg) translateY(0); } 100% { transform: rotate(7deg) translateY(13px); } }
-@keyframes press-hit-b { 0% { transform: rotate(-9deg) translateY(16px); } 52% { transform: rotate(0deg) translateY(0); } 100% { transform: rotate(-7deg) translateY(13px); } }
+.ceremony[data-typing='yes'] .press-arm[data-strike='0'] { animation: press-hit-a 44ms linear both; }
+.ceremony[data-typing='yes'] .press-arm[data-strike='1'] { animation: press-hit-b 44ms linear both; }
+/* THE BAR RETURNS TO REST, and 0% and 100% are the identical pose so that it returns
+   to the SAME rest every time. The old pair ended at rotate(7deg) translateY(13px)
+   and held there on `both`, and the next strike began at rotate(-9deg)
+   translateY(16px): a 16-degree teleport, seven times a second, with no frame in
+   between at which the arm was ever at rest. That is why the idle pose looked
+   arbitrary -- there was no idle pose.
+   The two keyframe bodies are now BYTE-IDENTICAL and the names differ only so the
+   computed animation-name changes on each strike; that is the whole mechanism that
+   forces the browser to restart the animation (two rules sharing one keyframe name
+   compute to the same animation-name, and CSS does not restart an animation whose
+   computed value has not changed). What differs per character is the tilt of the
+   slug at the tip, an SVG rotate about its own contact point -- see tiltForChar in
+   Press.tsx. Angle belongs to the character, not to the beat parity.
+   44ms, not 110ms: the beat is 48ms, so the swing now finishes INSIDE its own
+   character and holds rest for the remainder instead of being interrupted mid-flight
+   by the next glyph forever. It is floored well above 2.5 frames at 60fps so a
+   sampled frame can still catch it. Contact sits at 26% -- deliberately early, so the
+   pose a frame is most likely to land on is REST, below the line. A head parked on
+   top of the letter it just printed is worse than no strike at all.
+   The per-keyframe easing is the impact: accelerating INTO the paper (a hammer does
+   not decelerate as it arrives), snapping away off it, falling back for the ribbon's
+   second touch, then settling. A single ease across the whole swing smeared all four
+   of those into one drifting motion. */
+@keyframes press-hit-a {
+  0% { transform: rotate(-8deg) translateY(18px); animation-timing-function: cubic-bezier(.5,0,.9,.55); }
+  26% { transform: rotate(0deg) translateY(0px); animation-timing-function: cubic-bezier(.2,.8,.4,1); }
+  44% { transform: rotate(-3deg) translateY(6px); animation-timing-function: cubic-bezier(.5,0,.8,.5); }
+  58% { transform: rotate(-1deg) translateY(1px); animation-timing-function: cubic-bezier(.2,.7,.3,1); }
+  100% { transform: rotate(-8deg) translateY(18px); }
+}
+@keyframes press-hit-b {
+  0% { transform: rotate(-8deg) translateY(18px); animation-timing-function: cubic-bezier(.5,0,.9,.55); }
+  26% { transform: rotate(0deg) translateY(0px); animation-timing-function: cubic-bezier(.2,.8,.4,1); }
+  44% { transform: rotate(-3deg) translateY(6px); animation-timing-function: cubic-bezier(.5,0,.8,.5); }
+  58% { transform: rotate(-1deg) translateY(1px); animation-timing-function: cubic-bezier(.2,.7,.3,1); }
+  100% { transform: rotate(-8deg) translateY(18px); }
+}
 .ceremony:not([data-stage='print']) .press { opacity: 0; transition: opacity .3s ease-out; }
 .ceremony[data-stage='print'] .ticket { transform: translateY(calc(var(--feed, 0) * -3px)); transition: transform .13s steps(2, end); }
 
