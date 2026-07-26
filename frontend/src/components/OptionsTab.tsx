@@ -16,7 +16,11 @@ function fmtShort(dateStr: string): string {
 export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onMarkQuiet, onClearQuiet }: TabProps) {
   const now = new Date();
   const [ym, setYm] = useState<[number, number]>([now.getFullYear(), now.getMonth() + 1]);
-  const [slide, setSlide] = useState<'left' | 'right'>('left');
+  // Undefined until the chevrons actually move the month: the board-in-left/
+  // right slide-in must only play on a real month change, not on first
+  // render, where the week-card deal-in (wk-deal) already carries the
+  // entrance on its own.
+  const [slide, setSlide] = useState<'left' | 'right' | undefined>(undefined);
   const [year, month] = ym;
   const fridays = fridaysOfMonth(year, month);
   const today = todayIso();

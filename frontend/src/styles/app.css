@@ -64,7 +64,7 @@
 }
 /* Past weeks recede via a sunken background, NOT opacity: the ink and the
    settled-green both sit near 4.9:1, so any fade drops them under AA. */
-.wk.past { background: var(--parchment); border-color: rgba(201, 182, 135, .38); }
+.wk.past { background-color: var(--parchment); border-color: rgba(201, 182, 135, .38); }
 .wk.past .wk-num { opacity: .05; }
 .wk.past .wk-rule { opacity: .55; }
 .wk-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }

@@ -177,7 +177,10 @@ export default function App() {
   return (
     <div className={landing ? 'shell roll-slow' : 'shell'}>
       {offline && <OfflineBanner fetchedAt={snap.fetchedAt} />}
-      <div className="tab-fade" key={tab}>
+      {/* The Options tab supplies its own entrance (the week-card deal-in)
+          and must not also get the whole-tab fade — that combination is
+          what stacked three entrance animations at once. */}
+      <div className={tab === 'options' ? undefined : 'tab-fade'} key={tab}>
         {tab === 'portfolio' && <PortfolioTab {...tabProps} />}
         {tab === 'options' && <OptionsTab {...tabProps} />}
         {tab === 'ledger' && <LedgerTab {...tabProps} />}
