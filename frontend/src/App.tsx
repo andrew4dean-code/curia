@@ -137,10 +137,10 @@ export default function App() {
         </button>
       )}
       {sheet?.kind === 'trade' && (
-        <AddTradeSheet trade={sheet.trade} onDone={onTicket} onDeleted={onDeleted} onCancel={() => setSheet(null)} />
+        <AddTradeSheet trade={sheet.trade} wheels={snap.wheels} onDone={onTicket} onDeleted={onDeleted} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'optionEdit' && (
-        <OptionSellSheet option={sheet.option} expiration={sheet.option.expiration} onDone={onTicket} onCancel={() => setSheet(null)} />
+        <OptionSellSheet option={sheet.option} expiration={sheet.option.expiration} wheels={snap.wheels} onDone={onTicket} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'record' && (
         <OptionRecordSheet option={sheet.option} onDone={async () => { setSheet(null); await refresh(); }} onCancel={() => setSheet(null)} />
@@ -183,7 +183,7 @@ export default function App() {
         />
       )}
       {sheet?.kind === 'sellOption' && (
-        <OptionSellSheet expiration={sheet.expiration} onDone={onTicket} onCancel={() => setSheet(null)} />
+        <OptionSellSheet expiration={sheet.expiration} wheels={snap.wheels} onDone={onTicket} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'mark' && (
         <MarkSheet symbol={sheet.symbol} onDone={async () => { setSheet(null); await refresh(); }} onCancel={() => setSheet(null)} />

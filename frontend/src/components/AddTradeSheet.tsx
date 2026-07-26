@@ -1,14 +1,11 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { createTrade, deleteTrade, updateTrade } from '../lib/api';
-import type { Side, Trade } from '../lib/types';
+import { todayIso } from '../lib/time';
+import { wheelWindowNote } from '../lib/wheelMath';
+import type { Side, Trade, Wheel } from '../lib/types';
 import { formatMoney } from '../lib/format';
 import type { TicketData } from './TradeCeremony';
-
-const today = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
 
 const fmtDate = (iso: string) => {
   const [y, m, d] = iso.split('-').map(Number);
@@ -17,11 +14,13 @@ const fmtDate = (iso: string) => {
 
 export function AddTradeSheet({
   trade,
+  wheels,
   onDone,
   onDeleted,
   onCancel,
 }: {
   trade: Trade | null;
+  wheels: Wheel[];
   onDone: (ticket: TicketData) => Promise<void>;
   onDeleted?: () => Promise<void>;
   onCancel: () => void;
@@ -30,11 +29,12 @@ export function AddTradeSheet({
   const [symbol, setSymbol] = useState(trade?.symbol ?? '');
   const [qty, setQty] = useState(trade ? String(trade.qty) : '');
   const [price, setPrice] = useState(trade ? String(trade.price) : '');
-  const [fees, setFees] = useState(trade ? String(trade.fees) : '0');
-  const [date, setDate] = useState(trade?.executed_at ?? today());
+  const [date, setDate] = useState(trade?.executed_at ?? todayIso());
   const [note, setNote] = useState(trade?.note ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  const wheelNote = wheelWindowNote(symbol, date, wheels);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -46,7 +46,7 @@ export function AddTradeSheet({
         side,
         qty: Number(qty),
         price: Number(price),
-        fees: Number(fees) || 0,
+        fees: 0,
         executed_at: date,
         note,
       };
@@ -104,13 +104,10 @@ export function AddTradeSheet({
           <input id="price" type="number" inputMode="decimal" step="any" min="0" value={price} onChange={(e) => setPrice(e.target.value)} required />
         </div>
         <div className="field">
-          <label htmlFor="fees">Fees</label>
-          <input id="fees" type="number" inputMode="decimal" step="any" min="0" value={fees} onChange={(e) => setFees(e.target.value)} />
-        </div>
-        <div className="field">
           <label htmlFor="date">Date</label>
           <input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         </div>
+        {wheelNote && <div className="sheet-note">{wheelNote}</div>}
         <div className="field">
           <label htmlFor="note">Note (optional)</label>
           <input id="note" value={note} onChange={(e) => setNote(e.target.value)} />

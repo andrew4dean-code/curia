@@ -1,14 +1,10 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { deleteOption, settleOption } from '../lib/api';
+import { settleDateDefault, todayIso } from '../lib/time';
 import { premiumCollected } from '../lib/optionsMath';
 import { formatMoney } from '../lib/format';
 import type { OptionPosition, OptionStatus } from '../lib/types';
-
-const today = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
 
 export function SettleSheet({
   option,
@@ -23,8 +19,7 @@ export function SettleSheet({
 }) {
   const [outcome, setOutcome] = useState<Exclude<OptionStatus, 'OPEN'> | null>(null);
   const [buyback, setBuyback] = useState('');
-  const [closeFees, setCloseFees] = useState('0');
-  const [date, setDate] = useState(today());
+  const [date, setDate] = useState(settleDateDefault(option.expiration, todayIso()));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -41,7 +36,7 @@ export function SettleSheet({
         outcome,
         closed_at: date,
         ...(outcome === 'BOUGHT_BACK'
-          ? { buyback_price: Number(buyback), close_fees: Number(closeFees) || 0 }
+          ? { buyback_price: Number(buyback), close_fees: 0 }
           : {}),
       });
       await onDone();
@@ -84,16 +79,10 @@ export function SettleSheet({
           </button>
         </div>
         {outcome === 'BOUGHT_BACK' && (
-          <>
-            <div className="field">
-              <label htmlFor="buyback">Buyback / share</label>
-              <input id="buyback" type="number" inputMode="decimal" step="any" min="0" autoFocus value={buyback} onChange={(e) => setBuyback(e.target.value)} required />
-            </div>
-            <div className="field">
-              <label htmlFor="close-fees">Fees</label>
-              <input id="close-fees" type="number" inputMode="decimal" step="any" min="0" value={closeFees} onChange={(e) => setCloseFees(e.target.value)} />
-            </div>
-          </>
+          <div className="field">
+            <label htmlFor="buyback">Buyback / share</label>
+            <input id="buyback" type="number" inputMode="decimal" step="any" min="0" autoFocus value={buyback} onChange={(e) => setBuyback(e.target.value)} required />
+          </div>
         )}
         {outcome === 'ASSIGNED' && (
           <div className="books-preview">

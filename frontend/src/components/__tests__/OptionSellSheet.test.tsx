@@ -1,6 +1,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as api from '../../lib/api';
 import { OptionSellSheet } from '../OptionSellSheet';
+
+// Passthrough spy: existing tests still stub global fetch and inspect it directly,
+// this just lets the new tests assert on createOption's own call args.
+vi.spyOn(api, 'createOption');
 
 describe('OptionSellSheet', () => {
   afterEach(() => {
@@ -14,7 +19,7 @@ describe('OptionSellSheet', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
     const onDone = vi.fn().mockResolvedValue(undefined);
-    render(<OptionSellSheet expiration="2026-08-21" onDone={onDone} onCancel={vi.fn()} />);
+    render(<OptionSellSheet expiration="2026-08-21" wheels={[]} onDone={onDone} onCancel={vi.fn()} />);
     expect(screen.getByText(/week of Fri Aug 21/)).toBeInTheDocument();
     expect(screen.queryByLabelText('Expiration')).toBeNull(); // no date field
     fireEvent.change(screen.getByLabelText('Symbol'), { target: { value: 'tqqq' } });
@@ -30,8 +35,39 @@ describe('OptionSellSheet', () => {
   });
 
   it('CALL toggle flips opt_type', () => {
-    render(<OptionSellSheet expiration="2026-08-21" onDone={vi.fn()} onCancel={vi.fn()} />);
+    render(<OptionSellSheet expiration="2026-08-21" wheels={[]} onDone={vi.fn()} onCancel={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'CALL' }));
     expect(screen.getByRole('button', { name: 'CALL' })).toHaveClass('on');
+  });
+
+  it('asks nothing about fees', () => {
+    render(<OptionSellSheet expiration="2026-08-14" wheels={[]} onDone={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.queryByLabelText(/fees/i)).toBeNull();
+  });
+
+  it('sends zero fees', async () => {
+    const create = vi.mocked(api.createOption);
+    render(<OptionSellSheet expiration="2026-08-14" wheels={[]} onDone={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/symbol/i), { target: { value: 'tqqq' } });
+    fireEvent.change(screen.getByLabelText(/strike/i), { target: { value: '62' } });
+    fireEvent.change(screen.getByLabelText(/premium/i), { target: { value: '0.74' } });
+    fireEvent.click(screen.getByRole('button', { name: /sell to open/i }));
+    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ fees: 0 })));
+  });
+
+  it('warns when the sale date falls before its wheel started', () => {
+    const wheel = { id: 1, symbol: 'TQQQ', no: 1, opened_at: '2026-08-10', closed_at: null };
+    render(<OptionSellSheet expiration="2026-08-14" wheels={[wheel]} onDone={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/symbol/i), { target: { value: 'TQQQ' } });
+    fireEvent.change(screen.getByLabelText(/date sold/i), { target: { value: '2026-08-03' } });
+    expect(screen.getByText(/before your TQQQ wheel started \(2026-08-10\)/i)).toBeInTheDocument();
+  });
+
+  it('stays quiet once the date is inside the wheel', () => {
+    const wheel = { id: 1, symbol: 'TQQQ', no: 1, opened_at: '2026-08-10', closed_at: null };
+    render(<OptionSellSheet expiration="2026-08-14" wheels={[wheel]} onDone={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/symbol/i), { target: { value: 'TQQQ' } });
+    fireEvent.change(screen.getByLabelText(/date sold/i), { target: { value: '2026-08-12' } });
+    expect(screen.queryByText(/won't count toward it/i)).toBeNull();
   });
 });
