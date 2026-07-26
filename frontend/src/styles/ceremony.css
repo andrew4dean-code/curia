@@ -43,9 +43,9 @@
 .ceremony[data-stage='fold'] .ticket, .ceremony[data-stage='envelope'] .ticket, .ceremony[data-stage='ship'] .ticket { opacity: 0; }
 
 /* ---- the fold: three panels of the actual ticket content, clipped to thirds ---- */
-.fold { position: absolute; inset: 0; transform-style: preserve-3d; perspective: 1100px; }
-.fold-panel { position: absolute; left: 0; right: 0; height: 33.334%; overflow: hidden; background: var(--parchment-card); backface-visibility: hidden; }
-.fold-inner { position: absolute; left: 0; right: 0; top: 0; height: 300%; padding: 22px 20px; }
+.fold { position: absolute; inset: 0; transform-style: preserve-3d; perspective: 700px; }
+.fold-panel { position: absolute; left: 0; right: 0; height: 33.334%; overflow: hidden; background: var(--parchment-card); }
+.fold-inner { position: absolute; left: 0; right: 0; top: 0; height: 300%; padding: 22px 20px; backface-visibility: hidden; }
 .fold-p0 { top: 0; transform-origin: 50% 100%; z-index: 3; }
 .fold-p1 { top: 33.333%; z-index: 1; }
 .fold-p2 { top: 66.666%; transform-origin: 50% 0%; z-index: 2; }
@@ -136,7 +136,8 @@
 @keyframes banner-press { 0% { opacity: 0; transform: translate(-50%,-50%) rotate(-8deg) scale(1.6); } 100% { opacity: 1; transform: translate(-50%,-50%) rotate(-8deg) scale(1); } }
 
 /* ---- the press: platen roller + striking typebar ---- */
-.platen { position: absolute; left: -14px; right: -14px; top: -26px; height: 26px; border-radius: 13px; background: linear-gradient(#4a4137, #241f19 62%, #171310); box-shadow: 0 2px 5px rgba(0,0,0,.45), 0 -1px 0 rgba(255,255,255,.13) inset; z-index: 3; }
+.platen { position: absolute; left: -14px; right: -14px; top: -26px; height: 26px; border-radius: 13px; background: linear-gradient(#4a4137, #241f19 62%, #171310); box-shadow: 0 2px 5px rgba(0,0,0,.45), 0 -1px 0 rgba(255,255,255,.13) inset; z-index: 3; opacity: 0; transition: opacity 0.3s ease-out; }
+.ceremony[data-stage='print'] .platen { opacity: 1; }
 .typebar { position: absolute; left: 50%; top: 46%; width: 3px; height: 78px; margin-left: -1.5px; background: linear-gradient(var(--ink), #0f0d0a); border-radius: 2px; transform-origin: 50% 100%; opacity: 0; z-index: 2; }
 .ceremony[data-typing='yes'] .typebar { opacity: .92; }
 .ceremony[data-typing='yes'] .typebar[data-strike='0'] { animation: bar-hit 96ms cubic-bezier(.3,0,.2,1) both; }
