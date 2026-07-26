@@ -158,3 +158,13 @@
 .settle-ceremony[data-stage='certificate'] .settle-amount { animation: amount-rise .4s cubic-bezier(.3,1.4,.5,1) both; }
 @keyframes amount-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 .settle-cert { margin-top: 14px; text-align: center; font-family: var(--font-mono); font-size: 14px; letter-spacing: .08em; color: var(--ink); }
+
+/* ---- stage: certificate — the option terms dissolve, the share line forms, an ornate border draws in ---- */
+.settle-ceremony[data-stage='certificate'] .settle-stamp { animation: stamp-dissolve .6s ease-in both; }
+@keyframes stamp-dissolve { to { opacity: 0; transform: rotate(-12deg) scale(1.25); filter: blur(3px); } }
+.settle-ceremony[data-stage='certificate'] .settle-amount { animation: cert-settle .6s ease-out both; }
+@keyframes cert-settle { from { transform: translateY(0); } to { transform: translateY(-10px); } }
+.cert-frame { position: absolute; inset: 6px; border: 2px solid var(--gold); border-radius: 3px; box-shadow: 0 0 0 3px var(--parchment-card) inset, 0 0 0 4px rgba(169,136,66,.55) inset; clip-path: inset(0 100% 100% 0); animation: cert-draw 1.5s .35s cubic-bezier(.3,.8,.3,1) both; }
+@keyframes cert-draw { 0% { clip-path: inset(0 100% 100% 0); } 50% { clip-path: inset(0 0 100% 0); } 100% { clip-path: inset(0 0 0 0); } }
+.settle-ceremony[data-stage='certificate'] .settle-cert { animation: cert-text .7s .9s ease-out both; }
+@keyframes cert-text { from { opacity: 0; letter-spacing: .3em; } to { opacity: 1; letter-spacing: .08em; } }

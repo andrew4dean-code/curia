@@ -48,7 +48,10 @@ export function SettleCeremony({ data, onDone }: { data: SettleData; onDone: () 
             <Odometer value={data.amount} speed="hero" dataTestid="settle-amount" />
           </div>
           {stage === 'certificate' && data.shares && (
-            <div className="settle-cert">{data.shares}</div>
+            <>
+              <div className="cert-frame" aria-hidden="true" />
+              <div className="settle-cert">{data.shares}</div>
+            </>
           )}
         </div>
       </div>

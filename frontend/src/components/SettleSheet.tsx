@@ -56,7 +56,7 @@ export function SettleSheet({
         ...stampFor(outcome, realised),
         amount: formatSignedMoney(realised),
         symbol: option.symbol,
-        ...(outcome === 'ASSIGNED' ? { shares: `${bookQty} SHARES · ${option.symbol}` } : {}),
+        ...(outcome === 'ASSIGNED' ? { shares: `${bookQty} SHARES · ${option.symbol} @ ${formatMoney(option.strike)}` } : {}),
       });
     } catch {
       setError('Could not settle — check your connection.');
