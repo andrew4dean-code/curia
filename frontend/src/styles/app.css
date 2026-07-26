@@ -112,3 +112,7 @@
 .fresh-wheel-panel small { display: block; font-family: var(--font-mono); font-size: 11px; font-weight: 400; color: var(--ink-soft); margin-top: 6px; }
 .fresh-wheel-crest { display: block; font-size: 34px; margin-bottom: 4px; }
 .sheet-note { margin: -4px 0 12px; padding: 8px 10px; border-left: 3px solid var(--gold-label); background: var(--parchment); font-family: var(--font-mono); font-size: 12px; line-height: 1.45; color: var(--ink-soft); }
+.wk, .sheet, .card { background-image: radial-gradient(rgba(46,40,32,.030) .5px, transparent .5px), radial-gradient(rgba(46,40,32,.022) .5px, transparent .5px); background-size: 7px 7px, 11px 11px; background-position: 0 0, 3px 4px; }
+.wk { box-shadow: 0 1px 0 rgba(255,255,255,.45) inset, 0 2px 5px rgba(46,40,32,.07); }
+.wk-todo { animation: todo-breathe 3.6s ease-in-out infinite; }
+@keyframes todo-breathe { 0%, 100% { opacity: 1; border-color: var(--maroon); } 50% { opacity: .62; border-color: rgba(140,43,38,.45); } }
