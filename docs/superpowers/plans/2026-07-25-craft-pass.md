@@ -30,7 +30,12 @@
 | 4 — Everywhere else | T12–T14 | Short clips of each |
 | Ship | T15 | — |
 
-Stop after each pass, deliver the checkpoint, and wait for the owner's response before starting the next. Redirection is expected and is the reason the passes exist.
+**Run continuously — do not stop for the owner between passes.** He has explicitly asked for
+uninterrupted execution, after being told the risk that animation is taste and building all
+eighteen items blind buries the misses under the hits. That is his call.
+
+Still capture each checkpoint's screenshots or recording and deliver them in chat as the pass
+lands, so he has the record and can redirect if he wants to — but keep going without waiting.
 
 ---
 
@@ -649,7 +654,7 @@ cd ~/curia-app && git add frontend/src && git commit -m "feat(board): months sli
 
 - [ ] **Step 8: PASS 1 CHECKPOINT**
 
-Start the preview at 375×667, seed a month with one open past-due option, one quiet week, one empty past week and one future week. Capture: the decluttered board, the pill actions, a month slide, the deal-in, the position sheet, and a close-out ticket. Deliver in chat and **stop for the owner's response before Task 6.**
+Start the preview at 375×667, seed a month with one open past-due option, one quiet week, one empty past week and one future week. Capture: the decluttered board, the pill actions, a month slide, the deal-in, the position sheet, and a close-out ticket. Deliver in chat, then **continue straight to Task 6** — do not wait.
 
 ---
 
@@ -896,7 +901,7 @@ cd ~/curia-app && git add frontend/src/styles/ceremony.css && git commit -m "fea
 
 - [ ] **Step 4: PASS 2 CHECKPOINT**
 
-Record one complete trade ceremony at 375×667 and deliver it in chat. Say plainly whether the fold reads as paper. **Stop for the owner's response before Task 9.**
+Record one complete trade ceremony at 375×667 and deliver it in chat. Say plainly whether the fold reads as paper. **Continue straight to Task 9** — do not wait.
 
 ---
 
@@ -1241,7 +1246,7 @@ cd ~/curia-app && git add frontend/src && git commit -m "feat(settle): assignmen
 
 - [ ] **Step 8: PASS 3 CHECKPOINT**
 
-Record settling an option two ways — one expiring worthless, one assigned — and deliver both in chat. **Stop for the owner's response before Task 12.**
+Record settling an option two ways — one expiring worthless, one assigned — and deliver both in chat, then **continue straight to Task 12** — do not wait.
 
 ---
 
@@ -1414,7 +1419,7 @@ cd ~/curia-app && git add frontend/src && git commit -m "feat(gate): unlocking s
 
 - [ ] **Step 7: PASS 4 CHECKPOINT**
 
-Short clips of the dial sweep, a delete, and an unlock. Deliver in chat. **Stop for the owner's response before Task 15.**
+Short clips of the dial sweep, a delete, and an unlock. Deliver in chat, then **continue straight to Task 15** — do not wait.
 
 ---
 
