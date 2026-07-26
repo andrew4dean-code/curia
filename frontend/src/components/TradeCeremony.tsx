@@ -184,22 +184,41 @@ export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: 
           <EnvelopeBack />
           {stage !== 'print' && (
             <div className="fold">
+              {/* EACH FOLDING PANEL IS A SHEET WITH TWO FACES, not a printed decal.
+                  The front carries the thirds of the ticket; the back is blank
+                  parchment with the shadow of the crease on it, and it is a REAL
+                  ELEMENT. It has to be: the flip lives on .fold-panel, and the old
+                  fail-safe (backface-visibility on .fold-inner) could never fire
+                  through it. Without a back face a correctly-signed fold shows the
+                  printed side in reverse -- mirrored, upside-down type on a letter
+                  that is supposed to have been folded shut. p1 is the middle panel
+                  and never turns over, so it needs no reverse. */}
               {[0, 1, 2].map((n) => (
                 <div className={`fold-panel fold-p${n}`} key={n}>
-                  <div className="fold-inner" style={{ transform: `translateY(-${n * 33.333}%)` }}>
-                    <div className="ticket-head">CURIA · {ticket.title} Nº {ticket.no}</div>
-                    {ticket.lines.map((l) => (
-                      <div className="ticket-line" key={l}>{l}</div>
-                    ))}
+                  <div className="fold-face fold-face-front">
+                    <div className="fold-inner" style={{ transform: `translateY(-${n * 33.333}%)` }}>
+                      <div className="ticket-head">CURIA · {ticket.title} Nº {ticket.no}</div>
+                      {ticket.lines.map((l) => (
+                        <div className="ticket-line" key={l}>{l}</div>
+                      ))}
+                    </div>
+                    <div className="fold-shade" />
+                    {n !== 1 && <div className="fold-edge" />}
                   </div>
-                  <div className="fold-shade" />
-                  {n !== 1 && <div className="fold-edge" />}
+                  {n !== 1 && (
+                    <div className="fold-face fold-face-back">
+                      <div className="fold-back-shade" />
+                      <div className="fold-edge" />
+                    </div>
+                  )}
                 </div>
               ))}
               <div className="fold-contact" />
             </div>
           )}
-          <div className="env-throat env-part" />
+          {/* not an .env-part: it needs a second animation on top of the arrival
+              (mouth-shut), and `animation` is a shorthand -- see ceremony.css. */}
+          <div className="env-throat" />
           <EnvelopeFront />
           <div className="env-flap-shadow" />
           {/* the flap is a div, not SVG: as an SVG <g> mirrored above the viewBox it

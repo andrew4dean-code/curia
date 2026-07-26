@@ -20,6 +20,20 @@ function readCeremonyCss(): string {
   return readFileSync(cssPath, 'utf8');
 }
 
+// The rules with the comments taken out. Several assertions below are of the form "this name
+// does not appear anywhere" -- and this file explains at length why the names it deleted were
+// deleted, so a prose mention would fail them. Strip the prose and they assert what they mean.
+function readCeremonyRules(): string {
+  return readCeremonyCss().replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+// One @keyframes block, braces balanced one level deep, so it reads a block written on a single
+// line exactly as well as one spread over five. The `[^@]*?\n\}` form used elsewhere in this file
+// silently matches nothing when a block has no newline before its closing brace.
+function keyframes(css: string, name: string): string {
+  return css.match(new RegExp(`@keyframes ${name}\\s*\\{((?:[^{}]|\\{[^{}]*\\})*)\\}`))![1];
+}
+
 // Long enough to walk through many strike cycles. There is one strike per PRINTED character
 // now (the old STRIKE_EVERY(3) let two of every three glyphs appear with no strike at all), so
 // the flip period is TYPE_CHAR_MS, one beat. Newlines cost no beat, so this fixture is 66 beats
@@ -475,34 +489,182 @@ describe('TradeCeremony', () => {
     expect(css).not.toMatch(/env-flap-hinge/);
   });
 
-  it('ducks the open flap under the letter, with the safe z-index as the base', () => {
-    // An open flap stands up in front of the mouth. Left above the letter it hides 52px of the
-    // 96px packet exactly when the letter should read as poised over the envelope; left below
-    // the pocket while shutting it disappears behind the envelope front. z-index is a total
-    // order, so it has to change with the pose -- and the BASE has to be the closing value, so
-    // that an engine ignoring z-index in keyframes degrades to the cosmetic failure and never
-    // to the flap vanishing mid-close.
+  it('holds the open flap clear of the letter for every frame of the arrival, and never behind it', () => {
+    // REWRITTEN, and it now asserts the opposite of what it used to. The old test pinned
+    // `duck < fold` -- the flap ducked BELOW the letter while open -- and that assertion was
+    // the defect. Rendered in headless Chrome at t=170 the top painter at the flap's own apex
+    // was .fold-p0: the mouth pose put the packet at scene 60..156, a band that strictly
+    // CONTAINS the flap's 88..140, so ducking the lid buried it under an opaque 290x96 letter.
+    // The envelope had no lid at all until ~310ms into an 1100ms stage. A test that pins the
+    // cause of a defect is worse than no test, so this one pins the fix instead: the letter and
+    // the lid never occupy the same band, at any frame, and no rule may put the lid behind.
     const css = readCeremonyCss();
-    const base = Number(css.match(/\n\.env-flap\s*\{[^}]*z-index:\s*(\d+)/)![1]);
-    const front = Number(css.match(/\n\.env-front\s*\{[^}]*z-index:\s*(\d+)/)![1]);
+
+    const flapRule = css.match(/\n\.env-flap\s*\{([^}]*)\}/)![1];
+    const apex = Number(flapRule.match(/top:\s*(\d+)px/)![1]); // scene 88: the open flap's tip
+    // the packet is the middle third of the ticket, so scene [h, 2h] with h = min-height / 3
+    const third = Number(css.match(/\.ticket-wrap \.ticket\s*\{[^}]*min-height:\s*(\d+)px/)![1]) / 3;
+    const packetBottom = third * 2;
+
+    const kf = (name: string) => keyframes(css, name);
+    const steps = (body: string) =>
+      Array.from(body.matchAll(/([\d.]+)%\s*\{([^}]*)/g)).map((m) => ({ pct: Number(m[1]), body: m[2] }));
+    const dur = (name: string) => Number(css.match(new RegExp(`animation: ${name} (\\.\\d+)s`))![1]) * 1000;
+
+    const arrive = steps(kf('env-arrive'));
+    const insert = steps(kf('packet-insert'));
+    const rise = Number(arrive[0].body.match(/translateY\((\d+)px\)/)![1]);
+    const home = arrive.slice(1).find((s) => /translateY\(0\)/.test(s.body))!;
+    const hoverStep = insert.find((s) => /translateY\(-\d+px\)/.test(s.body))!;
+    const hover = Number(hoverStep.body.match(/translateY\((-\d+)px\)/)![1]);
+
+    // 1. THE HOVER POSE CLEARS THE APEX, not the throat. Clearing the throat is what the old
+    //    -36px did, and the throat is 70px below the apex -- which is exactly how the letter
+    //    came to be sitting on top of the whole lid.
+    expect(packetBottom + hover).toBeLessThanOrEqual(apex);
+
+    // 2. AND IT CLEARS IT AT EVERY FRAME OF THE ARRIVAL, not just at the end. The envelope
+    //    rises by `rise` while the letter lifts by `-hover` over the same span; the gap
+    //      apex + rise*(1-p) - (packetBottom + hover*p)
+    //    is independent of p only when rise === -hover, so assert that identity rather than
+    //    sampling a few p and hoping. With it, no easing and no frame rate can produce an
+    //    overlap. (Measured in headless Chrome: a constant 2px, t = 0..170.)
+    expect(rise).toBe(-hover);
+    expect(apex + rise - packetBottom).toBeGreaterThan(0);
+
+    // 3. the two segments have to END AT THE SAME INSTANT and share the same easing, or the
+    //    identity above holds only at the endpoints and sags in between.
+    expect((home.pct / 100) * dur('env-arrive')).toBeCloseTo((hoverStep.pct / 100) * dur('packet-insert'), 0);
+    const ease = /animation-timing-function:\s*([^;]+);/;
+    expect(arrive[0].body.match(ease)![1].trim()).toBe(insert[0].body.match(ease)![1].trim());
+
+    // 4. the envelope is never painted without its lid: the flap shares the arrival, and the
+    //    arrival no longer opens at opacity 0 (which left t=0 with no envelope in it at all).
+    expect(arrive[0].body).toMatch(/opacity:\s*1/);
+    const shipFlap = css.match(/\.ceremony\[data-stage='ship'\] \.env-flap \{([^}]*)\}/s)![1];
+    expect(shipFlap).toMatch(/env-arrive/);
+    expect(shipFlap).toMatch(/env-flap-close/);
+
+    // 5. NO Z-ORDER RULE MAY PUT THE LID BEHIND THE LETTER, at any frame. The duck is gone
+    //    outright, and every z-index the flap can take stays above .fold's.
+    expect(readCeremonyRules()).not.toMatch(/env-flap-duck/);
     const fold = Number(css.match(/\n\.fold\s*\{[^}]*z-index:\s*(\d+)/)![1]);
-    const duck = Number(css.match(/@keyframes env-flap-duck\s*\{[^}]*z-index:\s*(\d+)/)![1]);
-    const closed = Number(css.match(/@keyframes env-flap-close\s*\{[^}]*z-index:\s*(\d+)/)![1]);
+    const front = Number(css.match(/\n\.env-front\s*\{[^}]*z-index:\s*(\d+)/)![1]);
+    const base = Number(flapRule.match(/z-index:\s*(\d+)/)![1]);
+    expect(base).toBeGreaterThan(fold); // never behind the letter
+    expect(base).toBeGreaterThan(front); // still over the pocket while shutting
+    for (const name of ['env-arrive', 'env-flap-close']) {
+      for (const m of kf(name).matchAll(/z-index:\s*(\d+)/g)) {
+        expect(Number(m[1])).toBeGreaterThan(fold);
+      }
+    }
+  });
 
-    expect(duck).toBeLessThan(fold); // open: under the letter
-    expect(closed).toBeGreaterThan(front); // closing: over the pocket
-    expect(base).toBe(closed); // the fail-safe base
+  it('folds the panels in FRONT of the middle one, and turns a blank back to the viewer', () => {
+    // The tri-fold never closed over anything. @keyframes fold-up ended
+    // `rotateX(-180deg) translateZ(1px)` and fold-down `rotateX(180deg) translateZ(2px)`, but a
+    // transform list applies as R.T, so the translateZ is spent in the ROTATED frame and a local
+    // +Z lands at global -Z. Measured in Chrome: .fold-p0 z=-2, .fold-p2 z=-1, .fold-p1 z=0 --
+    // both folded panels BEHIND the untransformed middle one, which therefore painted in front
+    // and posted a sheet of readable ticket text with a crease slicing a line of type.
+    const css = readCeremonyCss();
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+    act(() => vi.advanceTimersByTime(4300)); // into the fold stage, so the panels exist
 
-    // The flap's three animations must all be in ONE rule -- `animation` is a shorthand, so a
-    // second rule replaces rather than adds -- and the close must be listed AFTER the duck, or
-    // the duck's z-index would keep winning from 590ms on and the flap would shut behind the
-    // pocket. indexOf alone is not enough to assert that: a missing duck returns -1, which is
-    // "before" everything.
-    const list = css.match(/\.ceremony\[data-stage='ship'\] \.env-flap \{([^}]*)\}/s)![1];
-    expect(list).toMatch(/env-arrive/);
-    expect(list).toMatch(/env-flap-duck/);
-    expect(list).toMatch(/env-flap-close/);
-    expect(list.indexOf('env-flap-duck')).toBeLessThan(list.indexOf('env-flap-close'));
+    // where a keyframe's end pose actually puts the panel: cos(180deg) is -1, so a positive
+    // translateZ after a half turn is a NEGATIVE global depth.
+    function endDepth(name: string): number {
+      const end = keyframes(css, name).match(/100%\s*\{([^}]*)/)![1];
+      const deg = Number(end.match(/rotateX\((-?[\d.]+)deg\)/)![1]);
+      const z = Number(end.match(/translateZ\((-?[\d.]+)px\)/)![1]);
+      return z * Math.cos((deg * Math.PI) / 180);
+    }
+    const p2 = endDepth('fold-up'); // the bottom panel, folded up first
+    const p0 = endDepth('fold-down'); // the top panel, folded down over it
+    expect(p2).toBeGreaterThan(0); // in front of the middle panel, which never moves off 0
+    expect(p0).toBeGreaterThan(p2); // and the last panel to fold is the outermost one
+
+    // the contact shadow lies ON the middle panel, so it has to be in front of that panel's own
+    // face and behind the panel casting it -- at depth 0 it fell behind the face and vanished.
+    const faceZ = Number(css.match(/\.fold-face-front\s*\{[^}]*translateZ\((-?[\d.]*\.?\d+)px\)/)![1]);
+    const contact = Number(keyframes(css, 'contact-drop').match(/translateZ\((-?[\d.]+)px\)/)![1]);
+    expect(contact).toBeGreaterThan(faceZ);
+    expect(contact).toBeLessThan(p2);
+
+    // CORRECTING THE SIGN IS NOT ENOUGH ON ITS OWN -- it renders the printed face seen from
+    // behind, i.e. mirrored, upside-down type. Each folding panel needs a real, blank back.
+    const backs = container.querySelectorAll('.fold-face-back');
+    expect(backs).toHaveLength(2); // p0 and p2; p1 never turns over
+    for (const back of backs) {
+      expect(back.textContent).toBe(''); // no type on the reverse of a folded letter
+      expect(back.querySelector('.fold-inner')).toBeNull();
+      expect(back.querySelector('.fold-back-shade')).not.toBeNull(); // blank, but not featureless
+    }
+
+    // and the back face's own flip must seat it BEHIND its front face, or the two are coplanar
+    // and which one you see is left entirely to backface-visibility with nothing underneath.
+    const backRule = css.match(/\.fold-face-back\s*\{([^}]*)\}/)![1];
+    const bDeg = Number(backRule.match(/rotate[XY]\((-?[\d.]+)deg\)/)![1]);
+    const bZ = Number(backRule.match(/translateZ\((-?[\d.]*\.?\d+)px\)/)![1]);
+    expect(bZ * Math.cos((bDeg * Math.PI) / 180)).toBeLessThan(faceZ);
+
+    // THE FLIP MUST NOT LIVE ON A FLATTENING ANCESTOR. .fold-panel used to carry
+    // `overflow: hidden`, which forces transform-style back to flat -- that is why the stated
+    // fail-safe (backface-visibility on .fold-inner) never fired once: .fold-inner had no
+    // rotation of its own left to have a backface culled. The clip belongs on the faces.
+    const panel = css.match(/\n\.fold-panel\s*\{([^}]*)\}/)![1];
+    expect(panel).toMatch(/transform-style:\s*preserve-3d/);
+    expect(panel).not.toMatch(/overflow/);
+    expect(css).toMatch(/\.fold-face\s*\{[^}]*overflow:\s*hidden/);
+    expect(css).toMatch(/\.fold-face\s*\{[^}]*backface-visibility:\s*hidden/);
+  });
+
+  it('lids the mouth at the corners: the front shoulders meet the closed flap edge exactly', () => {
+    // The band between the hinge and the throat is the mouth, and the closed flap is a triangle
+    // based on the hinge -- so outside its slope the two top corners were lidded by NOTHING and
+    // showed the cavity behind. Sampled at t=900 in Chrome: rgb(117,107,82) against rgb(226,216,189)
+    // for the pocket 14px below. A >100-level hole at each corner, held through the seal beat and
+    // the whole 1100ms ship stage -- the final image of the ceremony.
+    const css = readCeremonyCss();
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+
+    const flapRule = css.match(/\n\.env-flap\s*\{([^}]*)\}/)![1];
+    const hinge = Number(flapRule.match(/top:\s*(\d+)px/)![1]) + Number(flapRule.match(/height:\s*(\d+)px/)![1]);
+    const flapH = Number(flapRule.match(/height:\s*(\d+)px/)![1]);
+    // the flap and the SVG layers are both inset by the same bleed, so they share an x axis
+    const bleed = Number(css.match(/\n\.env-art\s*\{[^}]*left:\s*(-?\d+)px/)![1]);
+    expect(Number(flapRule.match(/left:\s*(-?\d+)px/)![1])).toBe(bleed);
+    const sceneW = Number(css.match(/\.ceremony-scene\s*\{[^}]*width:\s*(\d+)px/)![1]);
+    const boxW = sceneW - bleed * 2; // 300 user units, one per pixel
+
+    // where the closed flap's left edge has got to by the throat: it runs from the hinge to the
+    // tip in flapH of drop, covering half the box in x.
+    const pocket = container.querySelector('.env-pocket')!.getAttribute('d')!;
+    const throat = Number(pocket.match(/^M0 (\d+)/)![1]);
+    const hingeY = hinge - Number(css.match(/\n\.env-art\s*\{[^}]*top:\s*(\d+)px/)![1]); // env y 44
+    const edgeAtThroat = (boxW / 2) * ((throat - hingeY) / flapH);
+
+    const shoulders = Array.from(container.querySelectorAll('.env-shoulder')).map((s) => s.getAttribute('d')!);
+    expect(shoulders).toHaveLength(2); // one at each corner, and they are part of .env-front
+    expect(container.querySelector('.env-front .env-shoulder')).not.toBeNull();
+    // the left shoulder runs from the hinge down to the throat at exactly the flap's edge, so
+    // flap and shoulder meet along their whole length: no gap at any y in the band.
+    const [, lx, ly] = shoulders[0].match(/L([\d.]+) ([\d.]+)/)!;
+    expect(Number(ly)).toBe(throat);
+    expect(Number(lx)).toBeCloseTo(edgeAtThroat, 0);
+    expect(shoulders[0]).toMatch(new RegExp(`^M0 ${hingeY}\\b`));
+    const [, rx] = shoulders[1].match(/L([\d.]+) ([\d.]+)/)!;
+    expect(boxW - Number(rx)).toBeCloseTo(edgeAtThroat, 0); // mirrored
+
+    // and the mouth's own darkness is a shadow cast by an OPENING: it goes when the flap does,
+    // or the corners stay dark under paper that is now lying flat on them.
+    expect(css).toMatch(/@keyframes mouth-shut/);
+    const shut = css.match(/animation: mouth-shut (\.\d+)s (\.\d+)s/)!;
+    const close = css.match(/animation:[^;]*env-flap-close (\.\d+)s (\.\d+)s/)!;
+    expect(shut[1]).toBe(close[1]); // same duration
+    expect(shut[2]).toBe(close[2]); // and the same clock as the flap it belongs to
+    expect(container.querySelector('.env-cavity')).not.toBeNull();
+    expect(container.querySelector('.env-backpanel')).not.toBeNull();
   });
 
   it('puts preserve-3d only on HTML elements, never on SVG', () => {
@@ -513,8 +675,14 @@ describe('TradeCeremony', () => {
     const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
     act(() => vi.advanceTimersByTime(6000)); // through fold + envelope, so every layer exists
 
+    // Comments are stripped first. `[^{}]+` before a `{` swallows everything back to the
+    // previous `}` -- including the comment above the rule -- so any prose that happens to
+    // name a class near a preserve-3d rule was being read as part of its selector, and the
+    // assertion failed on a class the rule does not select. Strip them and the test asserts
+    // what it means: the classes that really ask for preserve-3d must land on HTML.
+    const selectors = css.replace(/\/\*[\s\S]*?\*\//g, '');
     const classes = new Set<string>();
-    for (const rule of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+    for (const rule of selectors.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
       if (!/transform-style:\s*preserve-3d/.test(rule[2])) continue;
       for (const cls of rule[1].matchAll(/\.([A-Za-z][\w-]*)/g)) classes.add(cls[1]);
     }
