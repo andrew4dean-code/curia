@@ -9,17 +9,44 @@
 /* ---- the ticket ---- */
 .ticket { position: relative; background: var(--parchment-card); border-radius: 10px 10px 4px 4px; padding: 22px 20px 30px; box-shadow: 0 12px 30px rgba(0,0,0,.35); border-top: 2px dashed var(--rule); border-bottom: 2px dashed var(--rule); transform-origin: 50% 0%; will-change: transform, opacity; }
 .ticket::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 16px; border-radius: 10px 10px 0 0; background: linear-gradient(rgba(46,40,32,.16), rgba(46,40,32,0)); pointer-events: none; }
-.ticket-head { font-family: var(--font-display); font-weight: 800; font-size: 15px; letter-spacing: .06em; text-align: center; border-bottom: 1px solid var(--rule); padding-bottom: 8px; margin-bottom: 10px; }
+/* THE HEADER MUST NEVER WRAP, and at 15px/.06em every single one of them did.
+   The box is 250px (290 scene - 20px padding each side). Measured in headless Chrome
+   against Georgia Bold -- the declared fallback in --font-display, and therefore what
+   paints on EVERY first run of this offline-first PWA, since Playfair Display is
+   fetched from Google Fonts with display=swap:
+       15px/.06em   TRADE TICKET Nº 47    257.6   OPTION 266.3   CLOSED 289.8  all wrap
+       13px/.02em   TRADE TICKET Nº 47    209.8   OPTION 216.7   CLOSED 236.1  none wrap
+   A wrapped head is 22.5px taller, so every .ticket-line moved down while the press's
+   hardcoded register did not -- the clip band opened above the text and the shaft drew
+   straight down through the printed line -- and the text jumped again mid-ceremony
+   when the webfont swapped in. 13px/.02em fits Georgia through a three-digit ticket
+   number with 4px to spare, and `nowrap` is the structural guarantee behind that
+   arithmetic: a longer title (a five-figure id, a wider face than Georgia once
+   Playfair lands) now bleeds a couple of px into the 20px padding instead of taking a
+   second line. The register is measured as well (see Press.tsx), so both ends of the
+   failure are closed, not just one. */
+.ticket-head { font-family: var(--font-display); font-weight: 800; font-size: 13px; letter-spacing: .02em; white-space: nowrap; text-align: center; border-bottom: 1px solid var(--rule); padding-bottom: 8px; margin-bottom: 10px; }
 /* `text-align: center` stays, and it is safe now only because of the ghost span: a
    partly-typed line is rendered as <span class="tl-ink">typed</span><span
    class="tl-ghost" hidden>the rest</span>, so the line box is its FINAL width from
    the first frame and the centring has nothing left to re-centre. Without the ghost
    a growing centred line slides left one half-character at a time -- paper cannot do
    that, and it is what made the text look like it was swimming under the hammer.
-   `white-space: pre-wrap` is part of the same guarantee: the ink and the ghost meet
+   `white-space: pre` is part of the same guarantee: the ink and the ghost meet
    mid-line, and under normal collapsing a run of spaces straddling that join would
-   collapse to one and the line would change width as the join moved through it. */
-.ticket-line { font-family: var(--font-mono); font-size: 14px; text-align: center; padding: 3px 0; min-height: 1.45em; white-space: pre-wrap; }
+   collapse to one and the line would change width as the join moved through it.
+   AND IT IS `pre`, NOT `pre-wrap`, WHICH IS THE OTHER HALF OF THAT PROMISE. pre-wrap
+   preserves the spaces but still breaks the line, and a real ticket line goes over:
+   the box is 250px, and at 14px mono with the inherited letter-spacing of .01em the
+   advance measures 8.54-8.57px, so 29 characters fit and 30 do not.
+   "TQQQ $107.5 CALL · exp Aug 29" is 29 and fits at 248.5px; "GOOGL $107.5 CALL · exp
+   Aug 29" is 30 and wraps at 257.1px -- any five-letter ticker with a fractional
+   strike. Rendered with the fallback face the same string comes out 48px tall instead
+   of 27px, which voids the line pitch for every line under it, and NOTHING IN THE DOM
+   SAYS SO: the wrap is invisible to every test that reads text. `pre` cannot wrap at
+   all; an over-long line now runs a few px into the 20px padding, still inside the
+   card, and the press reads its register off the live box either way. */
+.ticket-line { font-family: var(--font-mono); font-size: 14px; text-align: center; padding: 3px 0; min-height: 1.45em; white-space: pre; }
 .ticket-line[data-sign='up'] { color: var(--pl-green); }
 .ticket-line[data-sign='down'] { color: var(--pl-red); }
 /* The print-position anchor: zero-width, no ink, and it exists ONLY to be measured.
@@ -558,7 +585,18 @@
   100% { transform: rotate(-8deg) translateY(18px); }
 }
 .ceremony:not([data-stage='print']) .press { opacity: 0; transition: opacity .3s ease-out; }
-.ceremony[data-stage='print'] .ticket { transform: translateY(calc(var(--feed, 0) * -3px)); transition: transform .13s steps(2, end); }
+/* A PLATEN RATCHETS. IT DOES NOT EASE. This used to carry
+   `transition: transform .13s steps(2, end)`, while the press jumps its whole line
+   offset inside the React commit that starts the roll -- so the two disagreed for
+   130ms out of a 48ms beat. steps(2, end) holds the OLD value for 65ms and the
+   halfway value for another 65ms, so the first TWO glyphs of every line after the
+   first were struck 3px high and the third 1.5px high: about 11% of all strikes on a
+   three-line ticket, and always in the same place, at the start of a line, where it
+   is most visible. It also made the register unmeasurable -- a box read in a layout
+   effect reports the pre-transition value, so the vertical measurement would have
+   been one line behind for the whole ease. No transition: the paper steps, once, in
+   the same frame the head moves. */
+.ceremony[data-stage='print'] .ticket { transform: translateY(calc(var(--feed, 0) * -3px)); }
 
 /* ---- the settle stamp: outcome slams diagonally across the ticket, amount counts up beneath it ---- */
 .settle-ceremony[data-tone='up'] { --stamp: var(--pl-green); }

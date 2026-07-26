@@ -29,9 +29,23 @@ export const TYPE_CHAR_MS = 48;
 export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: () => void }) {
   const [stage, setStage] = useState<Stage>('print');
   const [typedCount, setTypedCount] = useState(0);
-  // the measured print column, in scene pixels. null = nothing measured yet, which
-  // parks the bar on the centre line rather than guessing.
-  const [strikeX, setStrikeX] = useState<number | null>(null);
+  // ONE BEAT OF GRACE AFTER THE LAST CHARACTER, and it is the whole fix for the most
+  // watched moment of the stage. `typing` used to be `typedCount < fullText.length`,
+  // which goes false on the SAME render that prints the final glyph -- so on that one
+  // render the strike rules stopped matching (the last letter appeared under a bar
+  // standing still), .press-arm began its 200ms fade, and `active` unmounted
+  // .tl-strike so the layout effect had no target and the carriage froze one cell to
+  // the left. Measured before the fix: "beat 60: strike=0 typing=yes / beat 61:
+  // strike=1 typing=no", carriage x identical for the last two beats. The final glyph
+  // is the one the eye is on; it got no strike, no carriage move and a dissolving arm.
+  // The typing flag is now stage-gated and released one beat LATER, by the tick that
+  // finds nothing left to print -- so the last glyph gets a full 48ms beat with the
+  // arm lit, the 44ms strike keyframe restarted, and the head measured onto it.
+  const [printDone, setPrintDone] = useState(false);
+  // the measured strike point, in scene pixels: x is the column, y is where the
+  // struck line's glyphs actually bottom out. null = nothing measured yet, which
+  // parks the bar on the centre line at the base register rather than guessing.
+  const [strike, setStrike] = useState<{ x: number; y: number } | null>(null);
   const done = useRef(false);
   const timers = useRef<number[]>([]);
   const sceneRef = useRef<HTMLDivElement | null>(null);
@@ -63,23 +77,26 @@ export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: 
     // the press types the trade onto the ticket one character at a time
     timers.current.push(
       window.setTimeout(() => {
+        // the count lives in the closure, not in a functional updater: the tick that
+        // finds the text finished has to release `printDone`, and a state updater is
+        // not the place for that side effect.
+        let count = 0;
         const interval = window.setInterval(() => {
-          setTypedCount((c) => {
-            if (c >= fullText.length) {
-              clearInterval(interval);
-              return c;
-            }
-            // A CARRIAGE RETURN COSTS NO BEAT. '\n' prints nothing, so if it ate a
-            // tick the rhythm gained a silent gap at every line break and the strike
-            // that belonged to the first letter of the new line landed one beat late
-            // -- a visible phase shift, exactly the kind of thing that reads as the
-            // machine losing the plot. Swallow the newline and print the first
-            // character of the new line on the SAME tick.
-            let n = c;
-            while (n < fullText.length && fullText[n] === '\n') n++;
-            if (n < fullText.length) n++;
-            return n;
-          });
+          if (count >= fullText.length) {
+            // ONE BEAT AFTER THE LAST GLYPH, not on it. See printDone above.
+            clearInterval(interval);
+            setPrintDone(true);
+            return;
+          }
+          // A CARRIAGE RETURN COSTS NO BEAT. '\n' prints nothing, so if it ate a
+          // tick the rhythm gained a silent gap at every line break and the strike
+          // that belonged to the first letter of the new line landed one beat late
+          // -- a visible phase shift, exactly the kind of thing that reads as the
+          // machine losing the plot. Swallow the newline and print the first
+          // character of the new line on the SAME tick.
+          while (count < fullText.length && fullText[count] === '\n') count++;
+          if (count < fullText.length) count++;
+          setTypedCount(count);
         }, TYPE_CHAR_MS);
         timers.current.push(interval);
       }, TYPE_START_MS),
@@ -95,7 +112,7 @@ export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: 
   }, []);
 
   const typedText = fullText.slice(0, typedCount);
-  const typing = stage === 'print' && typedCount < fullText.length;
+  const typing = stage === 'print' && !printDone;
   const typedLines = typedText.split('\n');
   const shownLines = stage === 'print' ? typedLines : ticket.lines;
   // one strike per PRINTED character. Newlines are free, so this counts glyphs, not
@@ -106,14 +123,29 @@ export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: 
   const glyphs = typedCount - (typedLines.length - 1);
   const lastGlyph = typedText.length > 0 ? typedText[typedText.length - 1] : '';
 
-  // REGISTRATION: measure, never compute. The bar has to land where the letter
-  // actually appears, and the only thing that knows that is layout -- Space Mono
-  // arrives from Google Fonts, so on a cold or offline first run (this is an
-  // offline-first PWA) the fallback face has a different advance and any hardcoded
+  // REGISTRATION: measure, never compute — IN BOTH AXES. The bar has to land where
+  // the letter actually appears, and the only thing that knows that is layout --
+  // Space Mono arrives from Google Fonts, so on a cold or offline first run (this is
+  // an offline-first PWA) the fallback face has a different advance and any hardcoded
   // character pitch puts the hammer visibly off the text. A layout effect, so the
   // head has moved by the time the browser paints the new glyph, not a frame later.
   // The boxes are read against each other rather than via offsetLeft/offsetParent so
   // no assumption is made about which ancestor happens to be positioned.
+  //
+  // Y IS MEASURED FOR EXACTLY THE SAME REASON X IS, and computing it while arguing
+  // that x could not be computed was the defect. The old constant (96 + 24) assumed
+  // .ticket-head was one 22.5px line box; measured in Chrome against the real 250px
+  // content box, EVERY ticket title wrapped to two lines in Georgia Bold -- the
+  // declared fallback in --font-display, and therefore the FIRST PAINT of every
+  // ceremony on this offline-first PWA, since Playfair is fetched with display=swap.
+  // "CURIA · TRADE TICKET Nº 47" 257.6px, "CURIA · OPTION TICKET Nº 47" 266.3px,
+  // "CURIA · POSITION CLOSED Nº 47" 289.8px, all in a 250px box. Every .ticket-line
+  // then sits 22.5px lower than the constant says while the head does not move, so
+  // the clip band opens ABOVE the text and the masked shaft draws straight down
+  // through the printed line -- the exact "shaft across the ticket" the band exists
+  // to prevent -- and the text jumps again mid-ceremony when the webfont swaps in.
+  // The header no longer wraps (see .ticket-head in ceremony.css) AND the register is
+  // read from the DOM, so neither end of that failure can come back.
   //
   // The element measured is the glyph JUST STRUCK, wrapped in its own span, and the
   // head is centred on it. The print-position anchor after it (a zero-width span, so
@@ -122,6 +154,10 @@ export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: 
   // the boundary of the NEXT cell -- half a character to the right of the letter it
   // is supposed to have just hit, for the whole beat that letter is on screen. Half
   // a character off is exactly the complaint, so the hammer is put on the letter.
+  // Its BOTTOM edge is the strike point: the glyph's own inline box bottoms out just
+  // under the baseline, which is where a typebar meets the paper. Being a live box it
+  // already carries the page feed (.ticket is translated up 3px per line), so the
+  // press needs no feed term of its own.
   useLayoutEffect(() => {
     const target = glyphRef.current ?? columnRef.current;
     const scene = sceneRef.current;
@@ -130,7 +166,20 @@ export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: 
     if (sceneBox.width === 0) return; // nothing laid out yet: keep the centred fallback
     const box = target.getBoundingClientRect();
     const x = box.left + box.width / 2 - sceneBox.left;
-    setStrikeX((prev) => (prev !== null && Math.abs(prev - x) < 0.25 ? prev : x));
+    const y = box.bottom - sceneBox.top;
+    // A POINT THAT IS NOT ON THE PAGE IS NOT A MEASUREMENT. The layout effect first
+    // runs at mount, and at mount the ticket is at translateY(110vh) -- the bottom of
+    // ticket-rise -- so the anchor's box is ~800px below the scene. Taking that as the
+    // register parked the bar at the very bottom of its clamp for the whole 600ms
+    // before the first character (measured: strike band y 232 instead of 120). There
+    // is no re-render in that window to correct it. Anything outside the scene is
+    // discarded and the base register stands until the paper is actually in the
+    // machine; from the first glyph on, the box is real and the head tracks it,
+    // including through the last 200ms of the rise as the sheet seats.
+    if (x < 0 || x > sceneBox.width || y < 0 || y > sceneBox.height) return;
+    setStrike((prev) =>
+      prev !== null && Math.abs(prev.x - x) < 0.25 && Math.abs(prev.y - y) < 0.25 ? prev : { x, y },
+    );
   });
 
   return (
@@ -140,7 +189,8 @@ export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: 
           striking={glyphs === 0 ? 'idle' : glyphs % 2}
           line={Math.max(0, typedLines.length - 1)}
           glyph={lastGlyph}
-          x={strikeX}
+          x={strike?.x ?? null}
+          y={strike?.y ?? null}
         />
         <div className="ticket-wrap">
           <div className="ticket" style={{ ['--feed' as string]: typedLines.length - 1 }}>

@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STAGE_MS, TYPE_CHAR_MS, TYPE_START_MS, TradeCeremony } from '../TradeCeremony';
 import type { TicketData } from '../TradeCeremony';
-import { PRESS_HOME_X, PRESS_OVERHANG, tiltForChar } from '../Press';
+import { PRESS_HOME_X, PRESS_OVERHANG, PRESS_TOP_OFFSET, tiltForChar } from '../Press';
 // @ts-expect-error -- no @types/node in this project; read the raw CSS source directly so the
 // test sees the real rules on disk, bypassing Vitest's mocked CSS-import handling (which returns
 // '' for .css imports under jsdom by default, so a normal `import` here would prove nothing).
@@ -56,33 +56,69 @@ function inked(container: HTMLElement): string[] {
 
 // jsdom has no layout: every getBoundingClientRect is 0, so the component's own guard keeps the
 // bar parked on the centre line and registration would be untestable. This stub gives the scene
-// a real width and lays the line out the way a monospace face would -- the PITCH LIVES ONLY
-// HERE. The component must never know it; it has to read the column back out of the DOM,
-// because Space Mono is a Google-hosted webfont on an offline-first PWA and the first cold run
-// gets whatever the fallback face's advance happens to be. .tl-strike is the cell occupied by
+// a real box and lays the lines out the way a real face would -- the PITCH AND THE HEADER HEIGHT
+// LIVE ONLY HERE. The component must never know either; it has to read both back out of the DOM,
+// because Playfair Display and Space Mono are Google-hosted webfonts on an offline-first PWA and
+// the first cold run gets whatever the fallback faces measure. .tl-strike is the cell occupied by
 // the glyph just struck; .print-column is the zero-width anchor sitting after it.
 const FAKE_LEFT = 46;
 const FAKE_PITCH = 8.4;
+// the vertical half of the same idea. A one-line .ticket-head is 41.5px (22.5 line box + 8
+// padding + 1 rule + 10 margin); a wrapped one is a whole line box taller. The line pitch is 27
+// and the page rolls up 3px per line as it feeds, so the PAINTED top of line n moves by 24.
+const FAKE_PAD_TOP = 22;
+const FAKE_HEAD_H = 41.5;
+const FAKE_HEAD_WRAPPED = FAKE_HEAD_H + 22.5;
+const FAKE_LINE_PITCH = 27;
+const FAKE_FEED_ROLL = 3;
+const FAKE_GLYPH_DROP = 24; // 3px padding-top + 21px line box: where a line's glyphs bottom out
+const SCENE_H = 288;
 
-function fakeRect(left: number, width: number): DOMRect {
-  return { x: left, y: 0, left, right: left + width, top: 0, bottom: 0, width, height: 0, toJSON: () => ({}) } as DOMRect;
+function fakeRect(left: number, width: number, top = 0, bottom = 0): DOMRect {
+  return {
+    x: left, y: top, left, right: left + width, top, bottom, width, height: bottom - top,
+    toJSON: () => ({}),
+  } as DOMRect;
 }
 
-function stubLayout() {
+function stubLayout(headHeight = FAKE_HEAD_H) {
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
-    if (this.classList.contains('ceremony-scene')) return fakeRect(0, 290);
-    const typed = this.closest('.ticket-line')?.querySelector('.tl-ink')?.textContent?.length ?? 0;
-    if (this.classList.contains('tl-strike')) return fakeRect(FAKE_LEFT + (typed - 1) * FAKE_PITCH, FAKE_PITCH);
-    if (this.classList.contains('print-column')) return fakeRect(FAKE_LEFT + typed * FAKE_PITCH, 0);
+    if (this.classList.contains('ceremony-scene')) return fakeRect(0, 290, 0, SCENE_H);
+    const lineEl = this.closest('.ticket-line');
+    if (!lineEl) return fakeRect(0, 0);
+    const lines = Array.from(lineEl.parentElement!.querySelectorAll('.ticket-line'));
+    const i = lines.indexOf(lineEl);
+    // only the line being struck carries these, so its index IS the current feed
+    const top = FAKE_PAD_TOP + headHeight + i * (FAKE_LINE_PITCH - FAKE_FEED_ROLL);
+    const bottom = top + FAKE_GLYPH_DROP;
+    const typed = lineEl.querySelector('.tl-ink')?.textContent?.length ?? 0;
+    if (this.classList.contains('tl-strike')) {
+      return fakeRect(FAKE_LEFT + (typed - 1) * FAKE_PITCH, FAKE_PITCH, top, bottom);
+    }
+    if (this.classList.contains('print-column')) return fakeRect(FAKE_LEFT + typed * FAKE_PITCH, 0, top, bottom);
     return fakeRect(0, 0);
   });
 }
+
+// every glyph of a ticket, newlines costing nothing -- i.e. the number of beats it takes to type
+const beatsFor = (t: TicketData) => t.lines.join('').length;
 
 // the carriage offset and the per-line feed, straight off the group that carries them
 function carrier(container: HTMLElement): { dx: number; feed: number } {
   const m = container.querySelector('.press-carrier')!.getAttribute('transform')!
     .match(/translate\((-?[\d.]+),\s*(-?[\d.]+)\)/)!;
   return { dx: Number(m[1]), feed: Number(m[2]) };
+}
+
+// the top of the clip band, in viewBox units: the strike line the whole machine is registered to
+const bandY = (container: HTMLElement) => Number(container.querySelector('#press-clip rect')!.getAttribute('y'));
+
+// the pivot the bar swings about, off the inline transform-origin
+function pivot(container: HTMLElement): { x: number; y: number } {
+  const m = (container.querySelector('.press-arm') as SVGGElement).style.transformOrigin.match(
+    /(-?[\d.]+)px\s+(-?[\d.]+)px/,
+  )!;
+  return { x: Number(m[1]), y: Number(m[2]) };
 }
 
 describe('TradeCeremony', () => {
@@ -206,21 +242,140 @@ describe('TradeCeremony', () => {
     expect(inked(container)[2]).toBe('ACC');
     expect(carrier(container).dx - dx).toBeCloseTo(FAKE_PITCH, 2);
 
-    // y: unchanged from the original assertion.
+    // y: REPOINTED AT THE MEASUREMENT. It used to read `expect(feed).toBe(2 * 24)`, which
+    // pinned the hardcoded register -- and the hardcode was the defect: 96 + 24 assumed
+    // .ticket-head was one 22.5px line box, and rendered at the real 250px content width every
+    // ticket title wrapped in Georgia Bold, the fallback that paints on a cold start. The strike
+    // line must equal the measured bottom of the struck glyph, converted from scene pixels to
+    // viewBox units, and nothing else.
+    const glyphBottom = container.querySelector('.tl-strike')!.getBoundingClientRect().bottom;
+    expect(bandY(container)).toBeCloseTo(glyphBottom + PRESS_TOP_OFFSET, 5);
+    // ...and the line is the third one, painted 24px per line below the first (27px of pitch
+    // less the 3px the page rolls up at each feed), so the measurement really did move.
+    expect(feed).toBeCloseTo(2 * 24 + (FAKE_PAD_TOP + FAKE_HEAD_H + FAKE_GLYPH_DROP + PRESS_TOP_OFFSET - 120), 5);
+
     const head = container.querySelector('.press-head')!;
     const headY = Number(head.getAttribute('y')) + feed;
     const headHeight = Number(head.getAttribute('height'));
-
     const clipRect = container.querySelector('#press-clip rect')!;
     const clipY = Number(clipRect.getAttribute('y'));
     const clipHeight = Number(clipRect.getAttribute('height'));
-
-    // 24px per line, not the 27px line pitch: the page itself rolls up 3px at every line
-    // break (`--feed * -3px` in ceremony.css), so line n is painted 3n above where it is laid
-    // out. Striking at the full pitch left the head 6px low by the third line.
-    expect(feed).toBe(2 * 24);
     expect(headY).toBeGreaterThanOrEqual(clipY);
     expect(headY + headHeight).toBeLessThanOrEqual(clipY + clipHeight);
+  });
+
+  it('reads the vertical register off the line, so a header that WRAPS cannot put the shaft through the text', () => {
+    // THE DEFECT THIS PINS. Press.tsx computed the strike line as 96 + 24, which assumes
+    // .ticket-head occupies exactly one 22.5px line box. Measured in headless Chrome against the
+    // real 250px content box in Georgia Bold -- the declared fallback in --font-display, and so
+    // the FIRST PAINT of every ceremony, because Playfair Display is fetched from Google Fonts
+    // with display=swap on an offline-first PWA:
+    //     "CURIA · TRADE TICKET Nº 47"     257.6px   wraps
+    //     "CURIA · OPTION TICKET Nº 47"    266.3px   wraps
+    //     "CURIA · POSITION CLOSED Nº 47"  289.8px   wraps
+    // Rendered: the head came out 54px tall instead of 31.5, every .ticket-line moved down 22.5px
+    // and the clip band stayed put, so the head sat 21.84px ABOVE the glyph it was striking and
+    // the masked shaft ran straight down through the printed line. Both ends are fixed -- the
+    // header no longer wraps (below) and the register is measured -- and this asserts the second:
+    // whatever height the head takes, the strike line lands on the line's own glyphs.
+    function registerWithHead(headHeight: number) {
+      stubLayout(headHeight);
+      const { container, unmount } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
+      act(() => vi.advanceTimersByTime(TYPE_START_MS));
+      for (let i = 0; i < 48; i++) act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
+      expect(inked(container)[2]).toBe('AC'); // line index 2, the worst case for register
+      const out = {
+        band: bandY(container),
+        glyphBottom: container.querySelector('.tl-strike')!.getBoundingClientRect().bottom,
+        headY: Number(container.querySelector('.press-head')!.getAttribute('y')) + carrier(container).feed,
+      };
+      unmount();
+      vi.restoreAllMocks();
+      return out;
+    }
+
+    const flat = registerWithHead(FAKE_HEAD_H);
+    const wrapped = registerWithHead(FAKE_HEAD_WRAPPED);
+
+    // the strike line IS the struck glyph's bottom edge, in both layouts
+    expect(flat.band).toBeCloseTo(flat.glyphBottom + PRESS_TOP_OFFSET, 5);
+    expect(wrapped.band).toBeCloseTo(wrapped.glyphBottom + PRESS_TOP_OFFSET, 5);
+    // and it MOVED by the whole extra line the wrapped header ate. With the register computed
+    // instead of measured both of these are the same number and this is the assertion that fails.
+    expect(wrapped.band - flat.band).toBeCloseTo(FAKE_HEAD_WRAPPED - FAKE_HEAD_H, 5);
+    // the head stays 2px inside the band it opened, so the clip never shaves it
+    expect(wrapped.headY - wrapped.band).toBeCloseTo(flat.headY - flat.band, 5);
+  });
+
+  it('does not let the ticket header wrap in the first place', () => {
+    // The other end of the same defect, and the one no jsdom test can see for itself: the wrap
+    // is invisible in the DOM. Measured in headless Chrome, Georgia Bold, 250px content box:
+    //     15px / .06em    TRADE 257.6   OPTION 266.3   CLOSED 289.8   -- all three wrap
+    //     13px / .02em    TRADE 209.8   OPTION 216.7   CLOSED 236.1   -- none wrap, 246.0 with
+    //                                                                    a three-digit number
+    // `nowrap` is the structural guarantee behind that arithmetic: a longer title than Georgia
+    // was measured at now bleeds a couple of px into the 20px padding instead of taking a second
+    // line and moving every line of the ticket out from under the press.
+    const head = readCeremonyCss().match(/\n\.ticket-head\s*\{([^}]*)\}/)![1];
+    expect(head).toMatch(/white-space:\s*nowrap/);
+    expect(Number(head.match(/font-size:\s*([\d.]+)px/)![1])).toBeLessThanOrEqual(13);
+    expect(Number(head.match(/letter-spacing:\s*([\d.]*)em/)![1])).toBeLessThanOrEqual(0.02);
+  });
+
+  it('cannot wrap a ticket line either, and so cannot void the line pitch below it', () => {
+    // .ticket-line carried `pre-wrap`, which preserves the spaces the ink/ghost join needs but
+    // still breaks the line. Measured: the box is 250px and at 14px mono with the inherited
+    // letter-spacing of .01em the advance is 8.54-8.57px, so 29 characters fit and 30 do not.
+    // "TQQQ $107.5 CALL · exp Aug 29" is 29 and fits at 248.5px; "GOOGL $107.5 CALL · exp Aug 29"
+    // is 30 and wraps at 257.1px -- any five-letter ticker with a fractional strike, which
+    // OptionSellSheet emits routinely. Rendered with the fallback face that line came out 48px
+    // tall instead of 27 and pushed the line below it 21px down. `pre` keeps the space handling
+    // and forbids the break.
+    const line = readCeremonyCss().match(/\n\.ticket-line\s*\{([^}]*)\}/)![1];
+    expect(line).toMatch(/white-space:\s*pre\s*[;}]/);
+    expect(line).not.toMatch(/pre-wrap|pre-line|normal/);
+  });
+
+  it('swings the bar about a pivot that rides the carriage in BOTH axes', () => {
+    // Press.tsx set transform-origin to `${PRESS_HOME_X + dx}px ${PIVOT_Y}px` -- x tracked the
+    // carriage, y was the constant 258 -- while the carrier translated by (dx, armOffset). So the
+    // pivot stayed put as the head went down the page and THE LEVER SHORTENED: 136px on line 0,
+    // 112 on line 1, 88 on line 2. Identical swing keyframes then drew a 35% smaller arc by line
+    // three and parked the rest pose 18.9 / 15.6 / 12.2px left of the column.
+    stubLayout();
+    const { container } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
+    act(() => vi.advanceTimersByTime(TYPE_START_MS + TYPE_CHAR_MS));
+    const headYAttr = Number(container.querySelector('.press-head')!.getAttribute('y'));
+    const first = { pivot: pivot(container), feed: carrier(container).feed };
+
+    for (let i = 0; i < 47; i++) act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
+    expect(inked(container)[2]).toBe('AC'); // two lines further down
+    const third = { pivot: pivot(container), feed: carrier(container).feed };
+
+    expect(third.feed).toBeGreaterThan(first.feed); // the head really did move down
+    // the pivot moved with it, by exactly the same amount
+    expect(third.pivot.y - first.pivot.y).toBeCloseTo(third.feed - first.feed, 5);
+    // which is the same statement as: the lever is the same length on every line
+    expect(third.pivot.y - (headYAttr + third.feed)).toBeCloseTo(first.pivot.y - (headYAttr + first.feed), 5);
+  });
+
+  it('ratchets the page feed instead of easing it under the strike', () => {
+    // `.ticket` rolled up 3px per line under `transition: transform .13s steps(2, end)` while the
+    // press jumped its whole line offset inside the React commit. Scrubbed in headless Chrome:
+    // steps(2, end) holds the OLD position for 0-64ms and the halfway one for 65-129ms, so at a
+    // 48ms beat the first THREE strikes of every line after the first landed on paper that was
+    // 3px or 1.5px out -- and a box read in a layout effect reports the pre-transition value, so
+    // it made the measured register stale as well. A platen ratchets; it does not ease.
+    const feed = readCeremonyRules().match(/\.ceremony\[data-stage='print'\] \.ticket \{([^}]*)\}/)![1];
+    expect(feed).toMatch(/transform:\s*translateY/);
+    const transition = feed.match(/transition:[^;]*/);
+    if (transition) {
+      const secs = Number(transition[0].match(/([\d.]+)m?s/)![1]);
+      const ms = /ms/.test(transition[0]) ? secs : secs * 1000;
+      expect(ms).toBeLessThan(TYPE_CHAR_MS); // at most, inside a single character beat
+    } else {
+      expect(transition).toBeNull(); // a step change: nothing to interpolate
+    }
   });
 
   it('parks the bar on the centre line until something has actually been measured', () => {
@@ -250,8 +405,9 @@ describe('TradeCeremony', () => {
     expect((ghosts[0] as HTMLElement).style.visibility).toBe('hidden');
 
     // and the join between ink and ghost must not collapse a run of spaces as it moves through
-    // the line, which would change the width after all
-    expect(readCeremonyCss()).toMatch(/\.ticket-line\s*\{[^}]*white-space:\s*pre-wrap/);
+    // the line, which would change the width after all. `pre`, not `pre-wrap` -- see the
+    // no-wrap test below for the 30-character line that made the difference.
+    expect(readCeremonyCss()).toMatch(/\.ticket-line\s*\{[^}]*white-space:\s*pre\s*[;}]/);
   });
 
   it('costs no beat to return the carriage', () => {
@@ -373,16 +529,21 @@ describe('TradeCeremony', () => {
     const arm = container.querySelector('.press-arm')!;
     act(() => vi.advanceTimersByTime(TYPE_START_MS));
 
-    // Sample data-strike after every character tick. 60 beats stays inside this fixture's 66, so
-    // every sample below is a beat that really printed something. If the attribute only ever
-    // flipped once (or never) this would regress to "strikes once at mount, then freezes" — the
-    // bug that shipped silently before — and if it flipped every third beat it would be the
-    // rejected design.
+    // Sample data-strike after every character tick, AND GO ALL THE WAY TO THE END. This used to
+    // stop at 60 of the fixture's 66 beats, six short -- which is exactly why it never saw that
+    // the LAST glyph of every ticket printed with no strike at all. The typing flag is sampled
+    // beside it now, because the strike rules in ceremony.css are gated on it
+    // (`.ceremony[data-typing='yes'] .press-arm[data-strike='0']`): a flip that happens while
+    // data-typing is 'no' matches nothing and animates nothing.
+    const total = beatsFor(longTicket); // 66 glyphs; the two newlines cost no beat
     const samples: string[] = [];
-    for (let i = 0; i < 60; i++) {
+    const typingAt: string[] = [];
+    for (let i = 0; i < total; i++) {
       act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
       samples.push(arm.getAttribute('data-strike')!);
+      typingAt.push(container.querySelector('[data-typing]')!.getAttribute('data-typing')!);
     }
+    expect(inked(container)).toEqual(longTicket.lines); // every glyph really was printed
 
     const seen = new Set(samples);
     expect(seen.has('0')).toBe(true);
@@ -390,6 +551,61 @@ describe('TradeCeremony', () => {
 
     const flips = samples.slice(1).filter((value, i) => value !== samples[i]).length;
     expect(flips).toBe(samples.length - 1); // one restart per glyph, no exceptions
+    // and every one of those beats is a beat the strike rule actually matches on
+    expect(new Set(typingAt)).toEqual(new Set(['yes']));
+  });
+
+  it('strikes the LAST glyph before anything fades, and only then lets the arm go', () => {
+    // THE DEFECT THIS PINS, and nothing anywhere asserted data-typing before. `typing` was
+    // `stage === 'print' && typedCount < fullText.length`, which goes false on the SAME render
+    // that prints the final character. Rendered in Chrome at that beat: data-typing="no",
+    // .press-arm computed opacity 0 (mid-fade), no .tl-strike element at all, and the carriage's
+    // transform-origin identical to the previous beat's -- so the most-watched glyph of the
+    // stage materialised out of nowhere under a motionless, dissolving hammer parked one
+    // character to its left. The flag is stage-gated with a one-beat grace now.
+    stubLayout();
+    const { container } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
+    const root = container.querySelector('[data-stage]')!;
+    const arm = container.querySelector('.press-arm')!;
+    const total = beatsFor(longTicket);
+
+    act(() => vi.advanceTimersByTime(TYPE_START_MS));
+    for (let i = 0; i < total - 1; i++) act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
+    const penultimate = { strike: arm.getAttribute('data-strike'), dx: carrier(container).dx };
+    expect(inked(container)[2]).toBe('ACCOUNT REF 55210-T');
+
+    // the beat that prints the final character
+    act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
+    expect(inked(container)).toEqual(longTicket.lines);
+    expect(root.getAttribute('data-typing')).toBe('yes'); // the arm is still lit
+    expect(arm.getAttribute('data-strike')).not.toBe(penultimate.strike); // and it restrikes
+    const struck = container.querySelector('.tl-strike');
+    expect(struck).not.toBeNull(); // the glyph is still wrapped, so it can be measured
+    expect(struck!.textContent).toBe('Q');
+    // and the carriage got all the way to it, instead of freezing one cell behind
+    expect(carrier(container).dx - penultimate.dx).toBeCloseTo(FAKE_PITCH, 2);
+
+    // ONE BEAT LATER -- not before -- the machine lets go
+    act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
+    expect(root.getAttribute('data-typing')).toBe('no');
+    expect(container.querySelector('.tl-strike')).toBeNull();
+    expect(inked(container)).toEqual(longTicket.lines); // nothing was un-printed by the release
+
+    // the grace is bounded by the stage, not just by the text: once the ticket is folding there
+    // is no page to strike whatever the typing clock says.
+    const elapsed = TYPE_START_MS + (total + 1) * TYPE_CHAR_MS;
+    act(() => vi.advanceTimersByTime(STAGE_MS[0][1] - elapsed + 1));
+    expect(root.getAttribute('data-stage')).toBe('fold');
+    expect(root.getAttribute('data-typing')).toBe('no');
+  });
+
+  it('gates the arm on data-typing, so the grace beat is what keeps it lit', () => {
+    // The visibility and the strike hang off the same flag, which is the reason the flag going
+    // false one beat early took the arm, the swing and the carriage with it in one go.
+    const rules = readCeremonyRules();
+    expect(rules).toMatch(/\.ceremony\[data-typing='yes'\] \.press-arm \{[^}]*opacity:\s*1/);
+    expect(rules).toMatch(/\.ceremony\[data-typing='yes'\] \.press-arm\[data-strike='0'\]/);
+    expect(rules).toMatch(/\.ceremony\[data-typing='yes'\] \.press-arm\[data-strike='1'\]/);
   });
 
   // REWRITTEN from 'draws an envelope with four distinct flaps'. That test asserted the

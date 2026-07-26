@@ -19,6 +19,19 @@
 //   svg y 33..43   the nip, where paper meets roller
 //   svg y 44..49   the rail + its two margin stops (full width, also past the card)
 //
+// VERTICAL REGISTER IS MEASURED, NOT COMPUTED -- the same rule as the horizontal, and
+// the constants below are now only the fallback for the frames before the first
+// measurement lands. TradeCeremony reads the struck glyph's own box against the
+// scene's and hands the bottom edge of it down as `y` in scene pixels; that box is
+// live, so it already carries the page feed, the header's real height, and whichever
+// face actually painted. What it replaces was a hardcoded 96 + 24 that assumed
+// .ticket-head was a single 22.5px line box -- and rendered in Chrome at the real
+// 250px content width, EVERY title wrapped to two lines in Georgia Bold (the declared
+// fallback in --font-display, hence the first paint of every ceremony on this
+// offline-first PWA): 257.6px, 266.3px, 289.8px against a 250px box. The head then
+// stayed put while every .ticket-line moved down 22.5px, so the clip band opened
+// above the text and the shaft drew straight down THROUGH the printed line.
+//
 // LINE_PITCH is the real rendered height of a `.ticket-line` (see ceremony.css),
 // not a guess: font-size 14px with the inherited body line-height of 1.5 gives a
 // 21px content line, plus the rule's own 3px top/bottom padding = 27px. Confirmed
@@ -38,10 +51,11 @@
 // FEED_ROLL is the other half of that sum, and leaving it out cost 3px of registration
 // per line. The page does not sit still while it is typed: ceremony.css rolls .ticket
 // up by `var(--feed) * -3px` at every line break, and --feed IS this `line` index. So
-// line n is PAINTED 3n px above where it is laid out, and the strike point has to come
-// down 27 - 3 = 24px per line, not 27. At 27 the head sat 3px low on line two and 6px
-// low on line three -- a fifth of a line pitch, on the very ticket shape (three lines:
-// option sells, closing trades) the app emits most.
+// line n is PAINTED 3n px above where it is laid out, and the fallback strike point has
+// to come down 27 - 3 = 24px per line, not 27. At 27 the head sat 3px low on line two
+// and 6px low on line three -- a fifth of a line pitch, on the very ticket shape (three
+// lines: option sells, closing trades) the app emits most. The roll is a step change
+// now, not a transition, so a measured y is never read mid-ease.
 //
 // The arm is clipped to a narrow band starting at the strike line so it can only
 // ever read as a typebar swinging up into the paper -- never as a shaft lying
@@ -68,9 +82,16 @@
 //
 // Because .press-carrier is INSIDE .press-arm, .press-arm's own rotation origin has
 // to follow it, or the bar would swing about a pivot the shaft no longer stands on.
-// That is the inline transform-origin below: .press-arm is a direct child of <svg>
-// with no ancestor transform, so `transform-box: view-box` resolves those lengths
-// straight into viewBox units.
+// That is the inline transform-origin below -- and it has to follow it in BOTH axes.
+// It used to read `${PRESS_HOME_X + dx}px ${PIVOT_Y}px`, a constant y, while the
+// carrier translated by (dx, armOffset): the pivot stayed at 258 while the head went
+// down with the line, so the LEVER SHORTENED, 136px on line 0 to 88px on line 3. The
+// same swing keyframes then produced a 35% smaller arc and put the rest pose 18.9 /
+// 15.6 / 12.2px left of the column -- 7px of drift, most of a character cell, across
+// a three-line ticket. `PIVOT_Y + armOffset` is the whole fix: the pivot rides the
+// carrier, so the lever is the same length on every line.
+// .press-arm is a direct child of <svg> with no ancestor transform, so
+// `transform-box: view-box` resolves those lengths straight into viewBox units.
 const LINE_PITCH = 27;
 const FEED_ROLL = 3; // keep in step with `--feed * -3px` in ceremony.css
 const LINE_STEP = LINE_PITCH - FEED_ROLL;
@@ -78,6 +99,15 @@ const LINE_GAP_OFFSET = 24;
 const BASE_STRIKE_Y = 96 + LINE_GAP_OFFSET;
 const HEAD_Y = BASE_STRIKE_Y + 2;
 const PIVOT_Y = 258;
+// scene y -> svg y. `.press` is `top: -34px` over the scene at 1 user unit per pixel
+// (see the map at the top of this file), so svg y 34 is the card's top edge.
+export const PRESS_TOP_OFFSET = 34;
+// a measured y is still clamped, for the same reason a measured x is: one wild box --
+// a mid-animation read, a zero-height line, a face that has not loaded -- must not be
+// able to walk the clip band off the machine. 60 keeps it below the platen nip (svg
+// y 43); 232 keeps the head (band + 2, 12 tall) inside the 260-unit viewBox.
+const MIN_STRIKE_Y = 60;
+const MAX_STRIKE_Y = 232;
 
 export const PRESS_VIEW_W = 350;
 export const PRESS_OVERHANG = 30;
@@ -114,6 +144,7 @@ export function Press({
   line,
   glyph,
   x,
+  y,
 }: {
   // 'idle' before the first character: it matches neither strike rule, so the bar
   // holds .press-arm's base rest pose instead of firing a strike at mount, at a page
@@ -122,9 +153,16 @@ export function Press({
   line: number;
   glyph: string;
   x: number | null;
+  // the measured strike point in scene pixels: the bottom edge of the glyph just
+  // struck. null = nothing measured yet, and only then does the line index below
+  // stand in for it.
+  y: number | null;
 }) {
-  const strikeY = BASE_STRIKE_Y + line * LINE_STEP;
-  const armOffset = line * LINE_STEP;
+  const strikeY =
+    y === null
+      ? BASE_STRIKE_Y + line * LINE_STEP
+      : Math.round(Math.min(MAX_STRIKE_Y, Math.max(MIN_STRIKE_Y, y + PRESS_TOP_OFFSET)) * 100) / 100;
+  const armOffset = Math.round((strikeY - BASE_STRIKE_Y) * 100) / 100;
   // clamped so a wild measurement can never walk the bar off the machine
   const column = x === null ? SCENE_W / 2 : Math.min(SCENE_W - 8, Math.max(8, x));
   const dx = Math.round((column + PRESS_OVERHANG - PRESS_HOME_X) * 100) / 100;
@@ -200,7 +238,7 @@ export function Press({
         className="press-arm"
         data-strike={striking}
         clipPath="url(#press-clip)"
-        style={{ transformOrigin: `${PRESS_HOME_X + dx}px ${PIVOT_Y}px` }}
+        style={{ transformOrigin: `${PRESS_HOME_X + dx}px ${PIVOT_Y + armOffset}px` }}
       >
         <g className="press-carrier" transform={`translate(${dx}, ${armOffset})`}>
           <path
