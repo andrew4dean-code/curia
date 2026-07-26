@@ -121,4 +121,5 @@
 @keyframes board-in-left { from { transform: translateX(26%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 @keyframes board-in-right { from { transform: translateX(-26%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 .board-weeks .wk { animation: wk-deal .32s cubic-bezier(.22,.9,.28,1) both; animation-delay: calc(var(--wk-i, 0) * 55ms); }
+.board-weeks .wk.live { animation: wk-deal .32s cubic-bezier(.22,.9,.28,1) calc(var(--wk-i, 0) * 55ms) both, wk-breathe 3.2s ease-in-out infinite; }
 @keyframes wk-deal { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
