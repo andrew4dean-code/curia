@@ -13,8 +13,8 @@
   --font-display: 'Playfair Display', Georgia, serif;
   --font-mono: 'Space Mono', ui-monospace, monospace;
 
-  --roll-hero: .62s;
-  --roll-detail: 1.15s;
+  --roll-hero: 1.25s;
+  --roll-detail: 1.9s;
   --flash: .75s;
   --roll-ease: cubic-bezier(.18,.71,.21,1);
   --sweep-ease: cubic-bezier(.34, 1.32, .48, 1);

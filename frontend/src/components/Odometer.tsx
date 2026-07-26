@@ -22,7 +22,7 @@ export function Odometer({ value, speed = 'hero', className, dataTestid }: Odome
             <span className="odo-reel" key={i}>
               <span
                 className="odo-strip"
-                style={{ transform: `translateY(-${d * 10}%)`, transitionDelay: `${i * 0.02}s` }}
+                style={{ transform: `translateY(-${d * 10}%)`, transitionDelay: `${i * 0.035}s` }}
               >
                 {DIGITS.map((n) => (
                   <span key={n}>{n}</span>

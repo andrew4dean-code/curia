@@ -42,13 +42,15 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onM
 
   return (
     <div>
-      <header className="board-head">
-        <button aria-label="Previous month" onClick={() => shift(-1)}>‹</button>
-        <h1>{MONTHS[month - 1]}</h1>
-        <button aria-label="Next month" onClick={() => shift(1)}>›</button>
-      </header>
-      <div className="board-score">
-        <Odometer className="board-score-amount" value={formatMoney(score)} speed="hero" dataTestid="month-score" /> collected this month
+      <div className="board-head-sticky">
+        <header className="board-head">
+          <button aria-label="Previous month" onClick={() => shift(-1)}>‹</button>
+          <h1>{MONTHS[month - 1]}</h1>
+          <button aria-label="Next month" onClick={() => shift(1)}>›</button>
+        </header>
+        <div className="board-score">
+          <Odometer className="board-score-amount" value={formatMoney(score)} speed="hero" dataTestid="month-score" /> collected this month
+        </div>
       </div>
       <div className="board-weeks" data-slide={slide} key={`${year}-${month}`}>
         {fridays.map((friday, i) => {
