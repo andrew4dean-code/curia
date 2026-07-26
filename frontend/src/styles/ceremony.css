@@ -3,7 +3,8 @@
 .ceremony-scene { position: relative; width: 290px; }
 
 /* ---- the ticket ---- */
-.ticket { position: relative; background: var(--parchment-card); border-radius: 4px; padding: 22px 20px 30px; box-shadow: 0 12px 30px rgba(0,0,0,.35); border-top: 2px dashed var(--rule); border-bottom: 2px dashed var(--rule); transform-origin: 50% 0%; will-change: transform, opacity; }
+.ticket { position: relative; background: var(--parchment-card); border-radius: 10px 10px 4px 4px; padding: 22px 20px 30px; box-shadow: 0 12px 30px rgba(0,0,0,.35); border-top: 2px dashed var(--rule); border-bottom: 2px dashed var(--rule); transform-origin: 50% 0%; will-change: transform, opacity; }
+.ticket::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 16px; border-radius: 10px 10px 0 0; background: linear-gradient(rgba(46,40,32,.16), rgba(46,40,32,0)); pointer-events: none; }
 .ticket-head { font-family: var(--font-display); font-weight: 800; font-size: 15px; letter-spacing: .06em; text-align: center; border-bottom: 1px solid var(--rule); padding-bottom: 8px; margin-bottom: 10px; }
 .ticket-line { font-family: var(--font-mono); font-size: 14px; text-align: center; padding: 3px 0; min-height: 1.45em; }
 .ticket-line[data-sign='up'] { color: var(--pl-green); }
@@ -15,10 +16,13 @@
 
 /* ---- the envelope ---- */
 .envelope { position: absolute; inset: 0; margin: auto; width: 290px; height: 170px; opacity: 0; will-change: transform, opacity; }
-.envelope-body { position: absolute; inset: 0; background: var(--parchment); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 14px 34px rgba(0,0,0,.4); }
-.envelope-body::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to top left, transparent 49%, var(--rule) 49.5%, transparent 50%), linear-gradient(to top right, transparent 49%, var(--rule) 49.5%, transparent 50%); }
-.envelope-flap { position: absolute; left: 0; right: 0; top: 0; height: 0; border-left: 145px solid transparent; border-right: 145px solid transparent; border-top: 88px solid var(--parchment-card); filter: drop-shadow(0 2px 2px rgba(0,0,0,.15)); transform-origin: 50% 0%; transform: rotateX(180deg); }
-.envelope-seal { position: absolute; left: 50%; top: 74px; transform: translateX(-50%) scale(0); width: 40px; height: 40px; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-family: var(--font-display); font-weight: 800; font-size: 20px; display: flex; align-items: center; justify-content: center; }
+.env-art { position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 14px 30px rgba(0,0,0,.38)); }
+.env-flap-hinge { transform-origin: 145px 0px; transform: rotateX(180deg); transform-style: preserve-3d; }
+/* the top flap descends to y=96 in EnvelopeArt's 290x170 viewBox (1 SVG unit ==
+   1px here, since .env-art fills .envelope exactly); the seal is centred a few
+   pixels below that tip, same as it was against the old CSS-triangle flap's
+   apex, so it reads as stamped over the point where the flap meets the body. */
+.envelope-seal { position: absolute; left: 50%; top: 82px; transform: translateX(-50%) scale(0); width: 40px; height: 40px; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-family: var(--font-display); font-weight: 800; font-size: 20px; display: flex; align-items: center; justify-content: center; }
 
 /* ---- stage: print — rise off the press with a settle, then the seal stamps ----
    the rise lives on .ticket-wrap (not .ticket) because .ticket's transform is
@@ -56,17 +60,46 @@
 .ceremony[data-stage='fold'] .fold-p0::after { animation: crease .62s .70s ease-out both; }
 @keyframes crease { 0% { opacity: 0; } 45% { opacity: .85; } 100% { opacity: .3; } }
 
+/* ---- paper shading, contact shadow and edge thickness for the folding panels ----
+   .fold-panel::after is already claimed above for the crease highlight (the `crease`
+   keyframes fade its opacity over a two-tone gradient). A second ::after rule on
+   .fold-p0/.fold-p2 would be the exact silent collision this task was warned about:
+   same specificity as the rule above, so whichever comes later in the cascade would
+   win the `background` property outright and erase the crease gradient. So the
+   paper-edge hairline below (the third addition) uses a real `.fold-edge` element
+   instead of fighting `.fold-panel` for its ::after. */
+.fold-shade { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: linear-gradient(rgba(255,255,255,.34) 0%, rgba(255,255,255,.05) 26%, rgba(46,40,32,.22) 78%, rgba(46,40,32,.44) 100%); }
+/* .fold-shade's gradient is bright at its own local top, fading to shadow at its own
+   local bottom. .fold-p2's crease is at ITS top edge (transform-origin 50% 0%), so
+   the unflipped gradient already lands bright-at-crease there and needs no change.
+   .fold-p0's crease is at ITS bottom edge (transform-origin 50% 100%) -- the opposite
+   corner -- so .fold-p0 is the one that needs the vertical flip. Flipping .fold-p2
+   instead (the more obvious-looking fix, since it is the panel that folds upward)
+   would leave both panels bright at the free edge and dark at the crease. */
+.fold-p0 .fold-shade { transform: scaleY(-1); }
+.ceremony[data-stage='fold'] .fold-p2 .fold-shade { animation: shade-roll .62s cubic-bezier(.45,0,.2,1) both; }
+.ceremony[data-stage='fold'] .fold-p0 .fold-shade { animation: shade-roll .62s .70s cubic-bezier(.45,0,.2,1) both; }
+@keyframes shade-roll { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: .34; } }
+
+/* the paper-edge hairline: a sliver lighter than the face, at each folding panel's
+   crease, so the sheet reads as having thickness rather than being a flat decal. */
+.fold-edge { position: absolute; left: 0; right: 0; height: 1px; background: rgba(255,255,255,.6); pointer-events: none; }
+.fold-p0 .fold-edge { bottom: 0; }
+.fold-p2 .fold-edge { top: 0; }
+
+/* the contact shadow: cast by the folding panels onto the middle panel beneath them,
+   tightening in as the top panel (.fold-p0) comes down to close over the stack. */
+.fold-contact { position: absolute; left: 6%; right: 6%; top: 33.333%; height: 33.334%; pointer-events: none; opacity: 0; background: radial-gradient(120% 70% at 50% 0%, rgba(46,40,32,.42), rgba(46,40,32,0) 72%); z-index: 2; }
+.ceremony[data-stage='fold'] .fold-contact { animation: contact-drop .62s .70s cubic-bezier(.45,0,.2,1) both; }
+@keyframes contact-drop { 0% { opacity: 0; transform: scaleY(.4); } 100% { opacity: 1; transform: scaleY(1); } }
+
 /* ---- stage: envelope — wraps the folded packet, flap presses shut, seal stamps ---- */
 .ceremony[data-stage='envelope'] .fold { transform: rotateX(-88deg) scaleY(0.42); opacity: 0; transition: opacity 0.3s ease-out; }
 .ceremony[data-stage='envelope'] .envelope { animation: env-appear 0.32s cubic-bezier(.25, .9, .35, 1) both; }
-.ceremony[data-stage='envelope'] .envelope-flap { animation: flap-close 0.42s 0.24s cubic-bezier(.5, 0, .3, 1) both; }
+.ceremony[data-stage='envelope'] .env-flap-hinge { animation: env-flap-close .46s .26s cubic-bezier(.5,0,.3,1) both; }
 .ceremony[data-stage='envelope'] .envelope-seal { animation: seal-stamp-env .4s .6s cubic-bezier(.3,1.5,.5,1) both, seal-dent .4s .6s ease-out both; }
 @keyframes env-appear { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
-@keyframes flap-close {
-  0% { transform: rotateX(180deg); }
-  82% { transform: rotateX(-8deg); }
-  100% { transform: rotateX(0deg); }
-}
+@keyframes env-flap-close { from { transform: rotateX(180deg); } to { transform: rotateX(0deg); } }
 /* envelope-specific variant of seal-stamp: the envelope seal is centred via
    translateX(-50%) in its base rule (unlike the ticket seal, which has no
    horizontal centring), so its stamp keyframes must carry that translateX
@@ -78,7 +111,7 @@
 /* ---- stage: ship — a small dip of anticipation, then away off the top ---- */
 .ceremony[data-stage='ship'] .fold { opacity: 0; }
 .ceremony[data-stage='ship'] .envelope { opacity: 1; }
-.ceremony[data-stage='ship'] .envelope-flap { transform: rotateX(0deg); }
+.ceremony[data-stage='ship'] .env-flap-hinge { transform: rotateX(0deg); }
 .ceremony[data-stage='ship'] .envelope-seal { transform: translateX(-50%) scale(1); }
 .ceremony[data-stage='ship'] .envelope { animation: env-ship 0.9s cubic-bezier(.5, -.08, .75, .35) both; }
 .ceremony[data-stage='ship'] { animation: dim-out 0.9s ease-in both; }
@@ -135,20 +168,22 @@
 .wheel-ceremony[data-phase='stamp'] .crest-banner { animation: banner-press 0.45s 0.15s cubic-bezier(.3,1.4,.5,1) forwards; }
 @keyframes banner-press { 0% { opacity: 0; transform: translate(-50%,-50%) rotate(-8deg) scale(1.6); } 100% { opacity: 1; transform: translate(-50%,-50%) rotate(-8deg) scale(1); } }
 
-/* ---- the press: platen roller + striking typebar ---- */
-.platen { position: absolute; left: -14px; right: -14px; top: -26px; height: 26px; border-radius: 13px; background: linear-gradient(#4a4137, #241f19 62%, #171310); box-shadow: 0 2px 5px rgba(0,0,0,.45), 0 -1px 0 rgba(255,255,255,.13) inset; z-index: 3; opacity: 0; transition: opacity 0.3s ease-out; }
-.ceremony[data-stage='print'] .platen { opacity: 1; }
-.typebar { position: absolute; left: 50%; top: 46%; width: 3px; height: 78px; margin-left: -1.5px; background: linear-gradient(var(--ink), #0f0d0a); border-radius: 2px; transform-origin: 50% 100%; opacity: 0; z-index: 2; }
-.ceremony[data-typing='yes'] .typebar { opacity: .92; }
-.ceremony[data-typing='yes'] .typebar[data-strike='0'] { animation: bar-hit-a 96ms cubic-bezier(.3,0,.2,1) both; }
-.ceremony[data-typing='yes'] .typebar[data-strike='1'] { animation: bar-hit-b 96ms cubic-bezier(.3,0,.2,1) both; }
-/* bar-hit-a / bar-hit-b are intentionally identical bodies under different
-   names: alternating the computed animation-name on each strike is what
-   forces the browser to restart the animation. Two rules sharing one
-   keyframe name compute to the same animation-name, and CSS does not
-   restart an animation whose computed value hasn't changed. */
-@keyframes bar-hit-a { 0% { transform: rotate(26deg) translateY(10px); } 55% { transform: rotate(0deg) translateY(0); } 100% { transform: rotate(22deg) translateY(8px); } }
-@keyframes bar-hit-b { 0% { transform: rotate(26deg) translateY(10px); } 55% { transform: rotate(0deg) translateY(0); } 100% { transform: rotate(22deg) translateY(8px); } }
+/* ---- the press: platen roller + striking arm (SVG, see Press.tsx) ---- */
+.press { position: absolute; left: -14px; right: -14px; top: -34px; height: 260px; overflow: visible; pointer-events: none; z-index: 3; }
+.press-arm { opacity: 0; transform-origin: 158px 258px; }
+.ceremony[data-typing='yes'] .press-arm { opacity: 1; }
+.ceremony[data-typing='yes'] .press-arm[data-strike='0'] { animation: press-hit-a 110ms cubic-bezier(.3,0,.2,1) both; }
+.ceremony[data-typing='yes'] .press-arm[data-strike='1'] { animation: press-hit-b 110ms cubic-bezier(.3,0,.2,1) both; }
+/* press-hit-a / press-hit-b alternate the arm's approach angle (not just its
+   name) so it reads as two different typebars striking, not one bar
+   twitching. They still must carry different keyframe names regardless:
+   alternating the computed animation-name on each strike is what forces the
+   browser to restart the animation. Two rules sharing one keyframe name
+   compute to the same animation-name, and CSS does not restart an animation
+   whose computed value hasn't changed. */
+@keyframes press-hit-a { 0% { transform: rotate(9deg) translateY(16px); } 52% { transform: rotate(0deg) translateY(0); } 100% { transform: rotate(7deg) translateY(13px); } }
+@keyframes press-hit-b { 0% { transform: rotate(-9deg) translateY(16px); } 52% { transform: rotate(0deg) translateY(0); } 100% { transform: rotate(-7deg) translateY(13px); } }
+.ceremony:not([data-stage='print']) .press { opacity: 0; transition: opacity .3s ease-out; }
 .ceremony[data-stage='print'] .ticket { transform: translateY(calc(var(--feed, 0) * -3px)); transition: transform .13s steps(2, end); }
 
 /* ---- the settle stamp: outcome slams diagonally across the ticket, amount counts up beneath it ---- */

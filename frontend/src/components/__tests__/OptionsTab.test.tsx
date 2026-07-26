@@ -195,4 +195,13 @@ describe('OptionsTab board', () => {
     const { container } = render(<OptionsTab snap={snapWith([base])} {...cbs} onSellWeek={vi.fn()} />);
     expect(container.querySelectorAll('.striking')).toHaveLength(0);
   });
+
+  it('pins the month controls and the total together', () => {
+    const { container } = render(<OptionsTab snap={snapWith([base])} {...cbs} onSellWeek={vi.fn()} />);
+    const sticky = container.querySelector('.board-head-sticky');
+    expect(sticky).not.toBeNull();
+    expect(sticky!.querySelector('[aria-label="Previous month"]')).not.toBeNull();
+    expect(sticky!.querySelector('[aria-label="Next month"]')).not.toBeNull();
+    expect(sticky!.querySelector('[data-testid="month-score"]')).not.toBeNull();
+  });
 });

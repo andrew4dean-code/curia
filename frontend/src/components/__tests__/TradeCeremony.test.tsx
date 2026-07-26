@@ -74,10 +74,48 @@ describe('TradeCeremony', () => {
     expect(STAGE_MS.reduce((n, [, ms]) => n + ms, 0)).toBe(8000);
   });
 
-  it('shows the press furniture while printing', () => {
+  it('draws a press with a platen, an arm and a typehead', () => {
     const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
-    expect(container.querySelector('.platen')).not.toBeNull();
-    expect(container.querySelector('.typebar')).not.toBeNull();
+    expect(container.querySelector('.press-platen')).not.toBeNull();
+    expect(container.querySelector('.press-arm')).not.toBeNull();
+    expect(container.querySelector('.press-head')).not.toBeNull();
+  });
+
+  it('clips the arm so it can never cross the ticket', () => {
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+    const arm = container.querySelector('.press-arm')!;
+    expect(arm.getAttribute('clip-path')).toMatch(/press-clip/);
+    expect(container.querySelector('#press-clip')).not.toBeNull();
+  });
+
+  it('keeps the typehead inside the clip band on the third line of a three-line ticket', () => {
+    // Regression for the defect where strikeY moved with the line index but the head's `y` was
+    // hard-coded to 112. On line three (the common case: option sells and closing trades both run
+    // three lines) strikeY landed below the head, so the clip removed it entirely and only a bare
+    // shaft remained visible.
+    const { container } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
+    act(() => vi.advanceTimersByTime(600)); // TYPE_START_MS: typing begins
+    // longTicket's first two lines plus their newlines are 47 characters (25 + 1 + 21), so the 49th
+    // typed character is the second character of the third line - comfortably inside line index 2
+    // and well within the print stage's typing window (600ms-4200ms for this fixture).
+    for (let i = 0; i < 49; i++) {
+      act(() => vi.advanceTimersByTime(48)); // TYPE_CHAR_MS
+    }
+
+    const head = container.querySelector('.press-head')!;
+    const headGroup = head.parentElement!;
+    const offsetMatch = headGroup.getAttribute('transform')?.match(/translate\(0,\s*(-?\d+(?:\.\d+)?)\)/);
+    expect(offsetMatch).toBeTruthy();
+    const offset = Number(offsetMatch![1]);
+    const headY = Number(head.getAttribute('y')) + offset;
+    const headHeight = Number(head.getAttribute('height'));
+
+    const clipRect = container.querySelector('#press-clip rect')!;
+    const clipY = Number(clipRect.getAttribute('y'));
+    const clipHeight = Number(clipRect.getAttribute('height'));
+
+    expect(headY).toBeGreaterThanOrEqual(clipY);
+    expect(headY + headHeight).toBeLessThanOrEqual(clipY + clipHeight);
   });
 
   it('the fold stage builds three panels', () => {
@@ -88,9 +126,53 @@ describe('TradeCeremony', () => {
     vi.useRealTimers();
   });
 
-  it('the typebar actually restrikes: data-strike alternates through printing, not just once', () => {
+  it('gives each folding panel a shading overlay and a contact shadow', () => {
+    vi.useFakeTimers();
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+    act(() => { vi.advanceTimersByTime(4300); });
+    expect(container.querySelectorAll('.fold-shade').length).toBeGreaterThanOrEqual(2);
+    expect(container.querySelector('.fold-contact')).not.toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('gives the folding panels a paper edge without colliding with the existing crease ::after', () => {
+    vi.useFakeTimers();
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+    act(() => { vi.advanceTimersByTime(4300); });
+    // .fold-panel::after already carries the crease highlight (see ceremony.css). The paper-edge
+    // hairline must be a real element rather than a second ::after rule on .fold-p0/.fold-p2 -- two
+    // same-specificity rules on one pseudo-element collide, and the later one silently drops the
+    // earlier rule's `background`, which would erase the crease highlight this task must not touch.
+    expect(container.querySelectorAll('.fold-edge').length).toBeGreaterThanOrEqual(2);
+    vi.useRealTimers();
+  });
+
+  it('does not let a second rule collide with .fold-panel::after, and lights both folding panels bright at their crease', () => {
+    // Read the CSS straight off disk so this pins the actual rules that ship, not a
+    // jsdom-mocked stand-in (jsdom computes no animation, so this class of bug is otherwise
+    // invisible to every test).
+    const testFilePath = new URL(import.meta.url).pathname;
+    const cssPath = testFilePath.replace(/components\/__tests__\/TradeCeremony\.test\.tsx$/, 'styles/ceremony.css');
+    const css = readFileSync(cssPath, 'utf8');
+
+    // Only one rule may declare a `background` on .fold-panel/.fold-p0/.fold-p2's ::after. A
+    // second one at equal specificity would silently overwrite the crease highlight's gradient.
+    const afterBackgroundRules = css.match(/\.fold-(?:panel|p0|p2)::after\s*\{[^}]*background/g) ?? [];
+    expect(afterBackgroundRules.length).toBe(1);
+
+    // .fold-shade's gradient is bright at its own local top, dark at its own local bottom.
+    // .fold-p2's crease is at ITS top (transform-origin 50% 0%), so it must stay unflipped to be
+    // bright at the crease. .fold-p0's crease is at ITS bottom (transform-origin 50% 100%), the
+    // opposite corner, so .fold-p0 is the one that needs the vertical flip -- flipping .fold-p2
+    // instead (an easy first-pass mistake) would leave both panels bright at the free edge and
+    // dark at the crease.
+    expect(css).toMatch(/\.fold-p0 \.fold-shade\s*\{\s*transform:\s*scaleY\(-1\)/);
+    expect(css).not.toMatch(/\.fold-p2 \.fold-shade\s*\{\s*transform:\s*scaleY\(-1\)/);
+  });
+
+  it('the arm actually restrikes: data-strike alternates through printing, not just once', () => {
     const { container } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
-    const typebar = container.querySelector('.typebar')!;
+    const arm = container.querySelector('.press-arm')!;
     act(() => vi.advanceTimersByTime(600)); // TYPE_START_MS: typing begins
 
     // Sample data-strike after every character tick across the whole print stage. If the
@@ -99,7 +181,7 @@ describe('TradeCeremony', () => {
     const samples: string[] = [];
     for (let i = 0; i < 70; i++) {
       act(() => vi.advanceTimersByTime(48)); // TYPE_CHAR_MS
-      samples.push(typebar.getAttribute('data-strike')!);
+      samples.push(arm.getAttribute('data-strike')!);
     }
 
     const seen = new Set(samples);
@@ -110,6 +192,12 @@ describe('TradeCeremony', () => {
     expect(flips).toBeGreaterThan(2);
   });
 
+  it('draws an envelope with four distinct flaps', () => {
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+    expect(container.querySelectorAll('.env-flap')).toHaveLength(4);
+    expect(container.querySelector('.env-flap-top')).not.toBeNull();
+  });
+
   it('binds data-strike=0 and data-strike=1 to two different keyframe names', () => {
     // Read the CSS straight off disk (not via a bundled import) so this pins the actual rules
     // that ship, not a jsdom-mocked stand-in.
@@ -117,8 +205,8 @@ describe('TradeCeremony', () => {
     const cssPath = testFilePath.replace(/components\/__tests__\/TradeCeremony\.test\.tsx$/, 'styles/ceremony.css');
     const css = readFileSync(cssPath, 'utf8');
 
-    const strike0 = css.match(/\.typebar\[data-strike='0'\]\s*\{\s*animation:\s*(\S+)/);
-    const strike1 = css.match(/\.typebar\[data-strike='1'\]\s*\{\s*animation:\s*(\S+)/);
+    const strike0 = css.match(/\.press-arm\[data-strike='0'\]\s*\{\s*animation:\s*(\S+)/);
+    const strike1 = css.match(/\.press-arm\[data-strike='1'\]\s*\{\s*animation:\s*(\S+)/);
 
     expect(strike0).not.toBeNull();
     expect(strike1).not.toBeNull();
