@@ -40,8 +40,13 @@ describe('OptionsTab board', () => {
       base,
     ];
     render(<OptionsTab snap={snapWith(rows)} {...cbs} onSellWeek={vi.fn()} />);
-    expect(screen.getByText('$294.70')).toBeInTheDocument();
+    expect(screen.getByTestId('month-score')).toHaveAttribute('data-value', '$294.70');
     expect(screen.getByText(/collected this month/)).toBeInTheDocument();
+  });
+
+  it('the month score rolls on an odometer', () => {
+    render(<OptionsTab snap={snapWith([base])} {...cbs} onSellWeek={vi.fn()} />);
+    expect(screen.getByTestId('month-score')).toHaveAttribute('data-value', '$148.00');
   });
 
   it('open option renders as a seal chip that opens the settle sheet', () => {

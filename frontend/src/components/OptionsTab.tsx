@@ -4,6 +4,7 @@ import { canMarkQuiet, fridaysOfMonth, monthScore, slideDirection, weekFridayFor
 import { needsSettling, optionRealizedPl, premiumCollected } from '../lib/optionsMath';
 import { expiryLabel, nextFriday, todayIso } from '../lib/time';
 import { formatMoney, formatSignedMoney } from '../lib/format';
+import { Odometer } from './Odometer';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -43,7 +44,7 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onM
         <button aria-label="Next month" onClick={() => shift(1)}>›</button>
       </header>
       <div className="board-score">
-        <span className="board-score-amount">{formatMoney(score)}</span> collected this month
+        <Odometer className="board-score-amount" value={formatMoney(score)} speed="hero" dataTestid="month-score" /> collected this month
       </div>
       <div className="board-weeks" data-slide={slide} key={`${year}-${month}`}>
         {fridays.map((friday, i) => {
