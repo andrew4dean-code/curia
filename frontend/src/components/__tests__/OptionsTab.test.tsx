@@ -112,8 +112,10 @@ describe('OptionsTab board', () => {
 
   it('a marked week holding a trade is not quiet — the trade wins, with no extra write', () => {
     const inThatWeek = { ...base, expiration: '2026-08-07', opened_at: '2026-08-03' };
-    render(<OptionsTab snap={snapWith([inThatWeek], ['2026-08-07'])} {...cbs} onSellWeek={vi.fn()} onMarkQuiet={vi.fn()} />);
+    const onClearQuiet = vi.fn();
+    render(<OptionsTab snap={snapWith([inThatWeek], ['2026-08-07'])} {...cbs} onSellWeek={vi.fn()} onMarkQuiet={vi.fn()} onClearQuiet={onClearQuiet} />);
     expect(screen.queryByText(/no trades this week/i)).toBeNull();
+    expect(onClearQuiet).not.toHaveBeenCalled();
   });
 
   it('chevrons browse months', () => {
