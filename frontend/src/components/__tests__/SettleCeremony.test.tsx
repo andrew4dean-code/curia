@@ -4,13 +4,47 @@ import { SettleCeremony } from '../SettleCeremony';
 
 const data = { word: 'EXPIRED', tone: 'up' as const, amount: '$148.00', symbol: 'TQQQ' };
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe('SettleCeremony', () => {
   it('stamps the outcome and shows the amount', () => {
     render(<SettleCeremony data={data} onDone={vi.fn()} />);
     expect(screen.getByText('EXPIRED')).toBeInTheDocument();
     expect(screen.getByTestId('settle-amount')).toHaveAttribute('data-value', '$148.00');
+  });
+
+  it('the count stage actually counts: the figure holds at zero, then winds up', () => {
+    const queue: FrameRequestCallback[] = [];
+    let clock = 0;
+    vi.useFakeTimers(); // first: the frame stubs below must outlive it
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => queue.push(cb));
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+
+    render(<SettleCeremony data={data} onDone={vi.fn()} />);
+    const amount = screen.getByTestId('settle-amount');
+    // Behind the stamp, before the amount rises into view.
+    expect(amount).toHaveTextContent('$0.00');
+    expect(amount).toHaveAttribute('data-value', '$148.00');
+    expect(queue).toHaveLength(0);
+
+    act(() => { vi.advanceTimersByTime(1300); }); // stage 'count'
+    expect(queue.length).toBeGreaterThan(0);
+
+    const seen: string[] = [];
+    for (let i = 0; i < 400 && queue.length; i++) {
+      const due = queue.splice(0);
+      clock += 16.7;
+      act(() => due.forEach((cb) => cb(clock)));
+      const now = amount.textContent ?? '';
+      if (now !== seen[seen.length - 1]) seen.push(now);
+    }
+    expect(seen.length).toBeGreaterThan(20); // it counted, it did not cut
+    expect(amount).toHaveTextContent('$148.00');
   });
 
   it('finishes and calls back', () => {

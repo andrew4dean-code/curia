@@ -46,7 +46,9 @@ export function SettleCeremony({ data, onDone }: { data: SettleData; onDone: () 
           <div className="ticket-head">CURIA · {data.symbol}</div>
           <div className="settle-stamp">{data.word}</div>
           <div className="settle-amount">
-            <Odometer value={data.amount} speed="hero" dataTestid="settle-amount" />
+            {/* The stage named 'count' has to actually count: the amount holds at zero
+                behind the stamp and winds up the moment it rises into view. */}
+            <Odometer value={data.amount} speed="hero" run={stage !== 'swing' && stage !== 'hit'} dataTestid="settle-amount" />
           </div>
           {(stage === 'certificate' || stage === 'file') && data.shares && (
             <>

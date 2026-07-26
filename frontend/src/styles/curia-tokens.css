@@ -13,21 +13,18 @@
   --font-display: 'Playfair Display', Georgia, serif;
   --font-mono: 'Space Mono', ui-monospace, monospace;
 
-  --roll-hero: 1.25s;
-  --roll-detail: 1.9s;
+  --roll-scale: 1;
   --flash: .75s;
   --roll-ease: cubic-bezier(.18,.71,.21,1);
   --sweep-ease: cubic-bezier(.34, 1.32, .48, 1);
 }
 
-/* Slot height 1.24em: Playfair Display paints taller than a 1em line box, so
-   1em slots let neighboring reel digits bleed into the visible window. */
-.odo { display: inline-flex; align-items: flex-end; line-height: 1.24; font-variant-numeric: tabular-nums; }
-.odo-reel { display: inline-block; height: 1.24em; line-height: 1.24; overflow: hidden; }
-.odo-strip { display: flex; flex-direction: column; transition: transform var(--roll-hero) var(--roll-ease); }
-.odo-detail .odo-strip { transition-duration: var(--roll-detail); }
-.odo-strip > span { height: 1.24em; line-height: 1.24; display: block; text-align: center; }
-.odo-ch { display: inline-block; line-height: 1.24; }
+/* The figure is a single text node — the whole formatted string, re-rendered as the
+   value counts. Nothing is keyed per character, so a carry that shifts a comma
+   ($980 -> $1,240) can no longer remount an element and hard-snap the number.
+   inline-block (not inline) so flash-up/flash-dn still paint a full background box;
+   min-width is set in ch by the component so a centred figure never jumps width. */
+.odo { display: inline-block; line-height: 1.24; font-variant-numeric: tabular-nums; text-align: center; white-space: nowrap; }
 
 .ticker { overflow: hidden; white-space: nowrap; background: #1F1B12; }
 .ticker-track { display: inline-block; animation: ticker-scroll 26s linear infinite; }
@@ -214,5 +211,6 @@
   --pl-flat: var(--ink-soft);
 }
 
-/* Ceremony landing: numbers wind slowly to their new totals for a few seconds. */
-.roll-slow { --roll-hero: 2.2s; --roll-detail: 2.6s; }
+/* Ceremony landing: numbers wind slowly to their new totals for a few seconds.
+   A multiplier, so the hero still lands after the detail rows do. */
+.roll-slow { --roll-scale: 1.8; }

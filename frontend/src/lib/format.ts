@@ -1,4 +1,6 @@
-const usd = new Intl.NumberFormat('en-US', {
+/** Exported so the Odometer can rebuild a figure mid-count through the very same
+ *  formatter it will land on — no hand-rolled comma logic, no drift at t=1. */
+export const usd = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
   minimumFractionDigits: 2,
