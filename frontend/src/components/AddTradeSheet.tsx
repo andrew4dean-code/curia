@@ -15,19 +15,21 @@ const fmtDate = (iso: string) => {
 export function AddTradeSheet({
   trade,
   wheels,
+  prefill,
   onDone,
   onDeleted,
   onCancel,
 }: {
   trade: Trade | null;
   wheels: Wheel[];
+  prefill?: { side: Side; symbol: string; qty: number };
   onDone: (ticket: TicketData) => Promise<void>;
   onDeleted?: () => Promise<void>;
   onCancel: () => void;
 }) {
-  const [side, setSide] = useState<Side>(trade?.side ?? 'BUY');
-  const [symbol, setSymbol] = useState(trade?.symbol ?? '');
-  const [qty, setQty] = useState(trade ? String(trade.qty) : '');
+  const [side, setSide] = useState<Side>(trade?.side ?? prefill?.side ?? 'BUY');
+  const [symbol, setSymbol] = useState(trade?.symbol ?? prefill?.symbol ?? '');
+  const [qty, setQty] = useState(trade ? String(trade.qty) : prefill ? String(prefill.qty) : '');
   const [price, setPrice] = useState(trade ? String(trade.price) : '');
   const [date, setDate] = useState(trade?.executed_at ?? todayIso());
   const [note, setNote] = useState(trade?.note ?? '');

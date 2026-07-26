@@ -58,4 +58,23 @@ describe('AddTradeSheet', () => {
     fireEvent.change(screen.getByLabelText(/^date$/i), { target: { value: '2026-08-03' } });
     expect(screen.getByText(/before your TQQQ wheel started/i)).toBeInTheDocument();
   });
+
+  it('a close-out prefill opens as a full-size sell that stays editable', () => {
+    render(
+      <AddTradeSheet
+        trade={null}
+        wheels={[]}
+        prefill={{ side: 'SELL', symbol: 'TQQQ', qty: 400 }}
+        onDone={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect((screen.getByLabelText(/side/i) as HTMLSelectElement).value).toBe('SELL');
+    expect((screen.getByLabelText(/symbol/i) as HTMLInputElement).value).toBe('TQQQ');
+    const qty = screen.getByLabelText(/shares/i) as HTMLInputElement;
+    expect(qty.value).toBe('400');
+    expect(qty.readOnly).toBe(false);
+    fireEvent.change(qty, { target: { value: '150' } });
+    expect(qty.value).toBe('150'); // a partial exit is just an edit
+  });
 });

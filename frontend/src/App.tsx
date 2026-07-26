@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import './styles/app.css';
 import { ApiError, cachedSnapshot, clearPasscode, fetchSnapshot, getPasscode, markQuietWeek, clearQuietWeek, refreshMarks } from './lib/api';
 import type { Snapshot } from './lib/api';
-import type { OptionPosition, Trade, Wheel, WheelSummary } from './lib/types';
+import type { OpenPosition, OptionPosition, Side, Trade, Wheel, WheelSummary } from './lib/types';
 import { PasscodeGate } from './components/PasscodeGate';
 import { TabBar } from './components/TabBar';
 import type { TabId } from './components/TabBar';
@@ -12,6 +12,7 @@ import { OptionsTab } from './components/OptionsTab';
 import { LedgerTab } from './components/LedgerTab';
 import { SettingsTab } from './components/SettingsTab';
 import { AddTradeSheet } from './components/AddTradeSheet';
+import { PositionSheet } from './components/PositionSheet';
 import { OptionSellSheet } from './components/OptionSellSheet';
 import { MarkSheet } from './components/MarkSheet';
 import { SettleSheet } from './components/SettleSheet';
@@ -25,7 +26,8 @@ import { TradeCeremony } from './components/TradeCeremony';
 import type { TicketData } from './components/TradeCeremony';
 
 type Sheet =
-  | { kind: 'trade'; trade: Trade | null }
+  | { kind: 'trade'; trade: Trade | null; prefill?: { side: Side; symbol: string; qty: number } }
+  | { kind: 'position'; position: OpenPosition }
   | { kind: 'optionEdit'; option: OptionPosition }
   | { kind: 'sellOption'; expiration: string }
   | { kind: 'mark'; symbol: string }
@@ -95,6 +97,7 @@ export default function App() {
     onRefresh: refresh,
     onEditTrade: (trade: Trade | null) => setSheet({ kind: 'trade', trade }),
     onMark: (symbol: string) => setSheet({ kind: 'mark', symbol }),
+    onPosition: (p: OpenPosition) => setSheet({ kind: 'position', position: p }),
     onSettleOption: (option: OptionPosition) => setSheet({ kind: 'settle', option }),
     onEditOption: (option: OptionPosition) => setSheet({ kind: 'optionEdit', option }),
     onSellWeek: (expiration: string) => setSheet({ kind: 'sellOption', expiration }),
@@ -139,7 +142,21 @@ export default function App() {
         </button>
       )}
       {sheet?.kind === 'trade' && (
-        <AddTradeSheet trade={sheet.trade} wheels={snap.wheels} onDone={onTicket} onDeleted={onDeleted} onCancel={() => setSheet(null)} />
+        <AddTradeSheet trade={sheet.trade} wheels={snap.wheels} prefill={sheet.prefill} onDone={onTicket} onDeleted={onDeleted} onCancel={() => setSheet(null)} />
+      )}
+      {sheet?.kind === 'position' && (
+        <PositionSheet
+          position={sheet.position}
+          onMark={() => setSheet({ kind: 'mark', symbol: sheet.position.symbol })}
+          onClose={() =>
+            setSheet({
+              kind: 'trade',
+              trade: null,
+              prefill: { side: 'SELL', symbol: sheet.position.symbol, qty: sheet.position.qty },
+            })
+          }
+          onCancel={() => setSheet(null)}
+        />
       )}
       {sheet?.kind === 'optionEdit' && (
         <OptionSellSheet option={sheet.option} expiration={sheet.option.expiration} wheels={snap.wheels} onDone={onTicket} onCancel={() => setSheet(null)} />

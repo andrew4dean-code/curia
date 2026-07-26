@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Snapshot } from '../lib/api';
-import type { OptionPosition, Trade, Wheel, WheelSummary } from '../lib/types';
+import type { OpenPosition, OptionPosition, Trade, Wheel, WheelSummary } from '../lib/types';
 import { computeOpenPositions } from '../lib/positions';
 import { memberOptions, summarizeWheel } from '../lib/wheelMath';
 import { optionRealizedPl } from '../lib/optionsMath';
@@ -16,6 +16,7 @@ export interface TabProps {
   onRefresh: () => Promise<void>;
   onEditTrade: (t: Trade | null) => void;
   onMark: (symbol: string) => void;
+  onPosition?: (p: OpenPosition) => void;
   onSettleOption: (o: OptionPosition) => void;
   onEditOption: (o: OptionPosition) => void;
   onSellWeek?: (expiration: string) => void;
@@ -39,6 +40,7 @@ function fmtShort(dateStr: string): string {
 export function PortfolioTab({
   snap,
   onMark,
+  onPosition,
   onFreshWheel,
   onCompleteWheel,
   onAbandonWheel,
@@ -123,7 +125,7 @@ export function PortfolioTab({
           key={p.symbol}
           className={justAdded?.kind === 'trade' && justAdded.symbol === p.symbol ? 'row stamp-in' : 'row'}
           style={rowButtonStyle}
-          onClick={() => onMark(p.symbol)}
+          onClick={() => (onPosition ? onPosition(p) : onMark(p.symbol))}
         >
           <div className="row-main">
             <div className="row-sym">{p.symbol}</div>
