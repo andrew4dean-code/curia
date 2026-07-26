@@ -51,7 +51,7 @@
 .board-score { text-align: center; font-size: 13px; color: var(--gold-label); margin: 2px 0 20px; }
 .board-score-amount { font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
 .board-weeks { display: flex; flex-direction: column; gap: 14px; }
-.wk { position: relative; overflow: hidden; background: var(--parchment-card); border: 1px solid var(--rule); border-radius: 12px; padding: 14px 16px 14px; min-height: 92px; }
+.wk { position: relative; overflow: hidden; background: var(--parchment-card); border: 1px solid rgba(201, 182, 135, .55); border-radius: 12px; padding: 14px 16px; min-height: 92px; }
 .wk-num { position: absolute; right: 10px; top: -6px; font-family: var(--font-display); font-weight: 800; font-size: 64px; color: var(--ink); opacity: .07; pointer-events: none; }
 .wk-label { font-size: 12px; letter-spacing: .07em; color: var(--ink-soft); text-transform: uppercase; }
 .wk.live .wk-label { color: var(--maroon); font-weight: 700; }
@@ -64,21 +64,23 @@
 }
 /* Past weeks recede via a sunken background, NOT opacity: the ink and the
    settled-green both sit near 4.9:1, so any fade drops them under AA. */
-.wk.past { background: var(--parchment); border-style: dashed; }
+.wk.past { background: var(--parchment); border-color: rgba(201, 182, 135, .38); }
 .wk.past .wk-num { opacity: .05; }
 .wk.past .wk-rule { opacity: .55; }
-.wk-sell { display: block; width: 100%; min-height: 44px; text-align: left; background: none; border: none; border-top: 2px dashed var(--rule); margin-top: 6px; padding: 14px 0 8px; font-family: var(--font-mono); font-size: 13px; color: var(--gold-label); }
-.wk:not(.past) .wk-sell:active { color: var(--maroon); }
+.wk-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.wk-pill { min-height: 44px; padding: 0 16px; border-radius: 999px; font-family: var(--font-mono); font-size: 13px; background: none; }
+.wk-pill-go { border: 1px solid var(--gold); color: var(--gold-label); }
+.wk-pill-ghost { border: 1px solid rgba(201, 182, 135, .5); color: var(--ink-soft); }
+.wk-pill:active { transform: scale(.97); }
 .wk-chip { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: none; padding: 8px 0; font-family: var(--font-mono); font-size: 15px; color: var(--ink); text-align: left; }
 .wk-chip:active .wk-seal { transform: scale(.92); }
 .wk-chip-text { min-width: 0; }
 .wk-seal { background: var(--maroon); color: var(--parchment); border-radius: 50%; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 16px; flex: none; box-shadow: 0 0 0 3px rgba(140, 43, 38, .16), 0 1px 3px rgba(0, 0, 0, .25); transition: transform .12s ease-out; }
 .wk-settled { display: block; width: 100%; min-height: 44px; text-align: left; background: none; border: none; font-family: var(--font-mono); font-size: 14px; padding: 12px 0 10px; }
 .wk-todo { display: inline-block; margin-left: 8px; padding: 2px 7px; border: 1px solid var(--maroon); border-radius: 999px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; color: var(--maroon); white-space: nowrap; }
-.wk-quiet { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; margin-top: 6px; border-top: 2px dashed var(--rule); padding: 14px 0 8px; font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); font-style: italic; }
+.wk-quiet { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); font-style: italic; }
 .wk-quiet-undo { min-height: 44px; padding: 0 6px; background: none; border: none; font-family: var(--font-mono); font-size: 13px; color: var(--gold-label); text-decoration: underline; }
-.wk-quiet-set { display: block; width: 100%; min-height: 44px; text-align: left; background: none; border: none; border-top: 2px dashed var(--rule); margin-top: 6px; padding: 10px 0 8px; font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); }
-.wk:not(.past) .wk-quiet-set:active, .wk:not(.past) .wk-quiet-undo:active { color: var(--maroon); }
+.wk:not(.past) .wk-quiet-undo:active { color: var(--maroon); }
 .toggle-row { display: flex; gap: 8px; margin-bottom: 12px; }
 .toggle-row button { flex: 1; text-align: center; padding: 12px 0; border-radius: 8px; font-family: var(--font-mono); font-size: 14px; border: 1px solid var(--rule); background: var(--parchment); color: var(--ink-soft); }
 .toggle-row button.on { background: var(--maroon); color: var(--parchment); border-color: var(--maroon); }

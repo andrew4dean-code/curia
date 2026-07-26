@@ -92,35 +92,37 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onM
                   )}
                 </div>
               )}
-              {onSellWeek && (
-                <button
-                  className="wk-sell"
-                  aria-label={
-                    isPast
-                      ? `log a trade for the week of ${fmtShort(friday)}`
-                      : `sell the week of ${fmtShort(friday)}`
-                  }
-                  onClick={() => onSellWeek(friday)}
-                >
-                  {isPast
-                    ? rows.length > 0
-                      ? '＋ log another for this week'
-                      : '＋ log a trade for this week'
-                    : rows.length > 0
-                      ? '＋ sell another this week'
-                      : '＋ tap to sell this week'}
-                </button>
-              )}
-              {canQuiet && onMarkQuiet && (
-                <button
-                  type="button"
-                  className="wk-quiet-set"
-                  aria-label={`didn't trade the week of ${fmtShort(friday)}`}
-                  onClick={() => onMarkQuiet(friday)}
-                >
-                  didn't trade this week
-                </button>
-              )}
+              <div className="wk-actions">
+                {onSellWeek && (
+                  <button
+                    className="wk-pill wk-pill-go"
+                    aria-label={
+                      isPast
+                        ? `log a trade for the week of ${fmtShort(friday)}`
+                        : `sell the week of ${fmtShort(friday)}`
+                    }
+                    onClick={() => onSellWeek(friday)}
+                  >
+                    {isPast
+                      ? rows.length > 0
+                        ? '＋ log another'
+                        : '＋ log a trade'
+                      : rows.length > 0
+                        ? '＋ sell another'
+                        : '＋ sell this week'}
+                  </button>
+                )}
+                {canQuiet && onMarkQuiet && (
+                  <button
+                    type="button"
+                    className="wk-pill wk-pill-ghost"
+                    aria-label={`didn't trade the week of ${fmtShort(friday)}`}
+                    onClick={() => onMarkQuiet(friday)}
+                  >
+                    didn't trade
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}
