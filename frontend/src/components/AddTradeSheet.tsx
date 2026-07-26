@@ -27,7 +27,7 @@ export function AddTradeSheet({
   trades?: Trade[];
   prefill?: { side: Side; symbol: string; qty: number };
   onDone: (ticket: TicketData) => Promise<void>;
-  onDeleted?: () => Promise<void>;
+  onDeleted?: (id?: number) => Promise<void>;
   onCancel: () => void;
 }) {
   const [side, setSide] = useState<Side>(trade?.side ?? prefill?.side ?? 'BUY');
@@ -93,7 +93,7 @@ export function AddTradeSheet({
     setBusy(true);
     try {
       await deleteTrade(trade.id);
-      await onDeleted?.();
+      await onDeleted?.(trade.id);
     } catch {
       setError('Could not delete — check your connection.');
       setBusy(false);

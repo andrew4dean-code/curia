@@ -6,8 +6,9 @@ import { computeStats } from '../lib/stats';
 import { computeOptionStats, optionRealizedPl } from '../lib/optionsMath';
 import { formatMoney, formatPct, formatSignedMoney, formatSignedPct, plColor } from '../lib/format';
 
-export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord }: TabProps) {
+export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord, strikingTradeId }: TabProps) {
   const [showEntries, setShowEntries] = useState(false);
+  const entriesVisible = showEntries || strikingTradeId != null;
   const closed = computeClosedTrades(snap.trades);
   const stats = computeStats(closed);
   const settledOptions = [...snap.options]
@@ -87,10 +88,10 @@ export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord }: TabPro
         </button>
       </div>
 
-      {showEntries && (
+      {entriesVisible && (
         <>
           {[...snap.trades].sort((a, b) => b.executed_at.localeCompare(a.executed_at) || b.id - a.id).map((t) => (
-            <div className="row" key={t.id}>
+            <div className={t.id === strikingTradeId ? 'row striking' : 'row'} key={t.id}>
               <div className="row-main">
                 <div className="row-sym">{t.symbol} <span style={{ color: t.side === 'BUY' ? 'var(--pl-up)' : 'var(--maroon)', fontSize: 12 }}>{t.side}</span></div>
                 <div className="row-sub">{t.qty} sh @ {formatMoney(t.price)} · {t.executed_at}{t.note ? ` · ${t.note}` : ''}</div>

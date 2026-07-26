@@ -50,6 +50,7 @@ export default function App() {
   const [wheelCeremony, setWheelCeremony] = useState<WheelCeremonyData | null>(null);
   const [settleCeremony, setSettleCeremony] = useState<SettleData | null>(null);
   const [justAdded, setJustAdded] = useState<{ kind: 'trade' | 'option'; id: number; symbol: string } | null>(null);
+  const [strikingTradeId, setStrikingTradeId] = useState<number | null>(null);
   const [landing, setLanding] = useState(false);
   const landingTimer = useRef<number | null>(null);
 
@@ -116,6 +117,7 @@ export default function App() {
     },
     onViewWheelRecord: (wheel: Wheel) => setSheet({ kind: 'wheelRecord', wheel }),
     justAdded,
+    strikingTradeId,
   };
 
   const onTicket = async (ticket: TicketData) => {
@@ -128,7 +130,12 @@ export default function App() {
     setLanding(false);
     setCeremony(ticket);
   };
-  const onDeleted = async () => { setSheet(null); await refresh(); };
+  const onDeleted = async (id?: number) => {
+    setSheet(null);
+    if (id == null) { await refresh(); return; }
+    setStrikingTradeId(id);
+    window.setTimeout(() => { setStrikingTradeId(null); void refresh(); }, 700);
+  };
 
   return (
     <div className={landing ? 'shell roll-slow' : 'shell'}>

@@ -17,6 +17,14 @@ const snap: Snapshot = {
   fetchedAt: new Date().toISOString(),
 };
 
+const snapWithTrades: Snapshot = {
+  ...snap,
+  trades: [
+    { id: 1, symbol: 'TQQQ', side: 'BUY', qty: 10, price: 100, fees: 0, executed_at: '2026-06-01', note: '' },
+    ...snap.trades.slice(1),
+  ],
+};
+
 const cbs = {
   onRefresh: vi.fn(),
   onEditTrade: vi.fn(),
@@ -90,5 +98,12 @@ describe('LedgerTab', () => {
     expect((fetchMock.mock.calls[0][1] as RequestInit).method).toBe('DELETE');
     confirmSpy.mockRestore();
     vi.unstubAllGlobals();
+  });
+
+  it('marks the struck row and leaves its neighbours alone', () => {
+    const { container } = render(<LedgerTab snap={snapWithTrades} {...cbs} strikingTradeId={1} />);
+    const struck = container.querySelectorAll('.striking');
+    expect(struck).toHaveLength(1);
+    expect(struck[0].textContent).toMatch(/TQQQ/);
   });
 });
