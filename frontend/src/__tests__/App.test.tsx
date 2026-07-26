@@ -246,3 +246,161 @@ describe('App strike timer race', () => {
     expect(fetchMock.mock.calls.length).toBe(callsAtUnmount);
   });
 });
+
+describe('App strike timer race across kinds', () => {
+  // A trade and a settled option, sharing strikeTimer, is the whole point of
+  // this fixture: it lets a trade delete and an option delete race each other.
+  const tradeAndOption = {
+    trades: [
+      { id: 1, symbol: 'AAA', side: 'BUY', qty: 1, price: 10, fees: 0, executed_at: '2026-01-02', note: '' },
+      { id: 2, symbol: 'BBB', side: 'BUY', qty: 1, price: 20, fees: 0, executed_at: '2026-01-01', note: '' },
+    ],
+    marks: [],
+    options: [
+      {
+        id: 1,
+        symbol: 'CCC',
+        opt_type: 'PUT',
+        strike: 50,
+        expiration: '2026-01-10',
+        contracts: 1,
+        premium: 1,
+        fees: 0,
+        opened_at: '2025-12-01',
+        note: '',
+        status: 'EXPIRED',
+        closed_at: '2026-01-10',
+        buyback_price: 0,
+        close_fees: 0,
+        assigned_trade_id: null,
+      },
+    ],
+    wheels: [],
+    quietWeeks: [],
+    fetchedAt: '2026-01-01T00:00:00.000Z',
+  };
+
+  function stubApi() {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = init?.method ?? 'GET';
+      if (method === 'GET' && url === '/api/trades') return new Response(JSON.stringify(tradeAndOption.trades), { status: 200 });
+      if (method === 'GET' && url === '/api/options') return new Response(JSON.stringify(tradeAndOption.options), { status: 200 });
+      if (method === 'GET' && (url === '/api/marks' || url === '/api/wheels' || url === '/api/quiet-weeks')) {
+        return new Response('[]', { status: 200 });
+      }
+      if (method === 'POST' && url === '/api/marks/refresh') return new Response('[]', { status: 200 });
+      if (method === 'DELETE' && /^\/api\/trades\/\d+$/.test(url)) return new Response(null, { status: 204 });
+      if (method === 'DELETE' && /^\/api\/options\/\d+$/.test(url)) return new Response(null, { status: 204 });
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  async function flush(ms = 0) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  // Unlike the single-kind race (one shared id, so only one row can ever be
+  // "the" struck one), a trade and an option are tracked by two separate ids
+  // (strikingTradeId / strikingOptionId). A broken, unshared timer wouldn't
+  // just mistime a clear — it would let BOTH ids be non-null at once, i.e.
+  // both rows struck simultaneously. So assert on the full set of struck
+  // rows, not just whichever one a plain querySelector happens to find first.
+  function strikingRows() {
+    return Array.from(document.querySelectorAll('.row.striking'));
+  }
+
+  function expectOnlyStruck(symbol: string) {
+    const rows = strikingRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].textContent).toMatch(new RegExp(symbol));
+  }
+
+  function openOptionRecord() {
+    fireEvent.click(document.querySelector('[data-opt-id="1"]') as HTMLElement);
+  }
+
+  beforeEach(() => {
+    localStorage.setItem('curia-passcode', 'test-key');
+    localStorage.setItem('curia-cache-v3', JSON.stringify(tradeAndOption));
+    // jsdom has no scrollTo; the Ledger tab switch below calls it and would
+    // otherwise spam "not implemented" errors to the console.
+    vi.stubGlobal('scrollTo', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  it("does not let a trade's stale timer cut off an option's strike", async () => {
+    stubApi();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.useFakeTimers();
+    render(<App />);
+    await flush(); // let the initial mount refresh() settle
+
+    fireEvent.click(screen.getByText('Ledger'));
+    fireEvent.click(screen.getByText(/All entries/));
+
+    fireEvent.click(screen.getAllByText('delete')[0]); // AAA trade — arms the shared 700ms timer
+    await flush();
+    expectOnlyStruck('AAA');
+
+    await flush(400); // 400ms into AAA's window — still pending
+
+    openOptionRecord();
+    fireEvent.click(screen.getByText('Delete record')); // CCC option, while AAA is still striking
+    await flush(); // the option's onOptionDeleted must cancel AAA's stale timer, not run alongside it
+    expectOnlyStruck('CCC');
+
+    // AAA's original timer would have fired ~300ms from here (700ms after AAA's
+    // delete). With an unshared timer, AAA would still be marked striking this
+    // whole time (never cancelled) and CCC would be too — two rows struck at
+    // once instead of one superseding the other.
+    await flush(300);
+    expectOnlyStruck('CCC');
+
+    // CCC's own timer (armed fresh at its own delete) should fire by now.
+    await flush(400);
+    expect(strikingRows()).toHaveLength(0);
+  });
+
+  it("does not let an option's stale timer cut off a trade's strike", async () => {
+    stubApi();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.useFakeTimers();
+    render(<App />);
+    await flush(); // let the initial mount refresh() settle
+
+    fireEvent.click(screen.getByText('Ledger'));
+
+    openOptionRecord();
+    fireEvent.click(screen.getByText('Delete record')); // CCC option — arms the shared 700ms timer
+    await flush();
+    expectOnlyStruck('CCC');
+
+    await flush(400); // 400ms into CCC's window — still pending
+
+    fireEvent.click(screen.getByText(/All entries/));
+    fireEvent.click(screen.getAllByText('delete')[0]); // AAA trade, while CCC is still striking
+    await flush(); // AAA's onDeleted must cancel CCC's stale timer, not run alongside it
+    expectOnlyStruck('AAA');
+
+    // CCC's original timer would have fired ~300ms from here (700ms after CCC's
+    // delete). With an unshared timer, CCC would still be marked striking this
+    // whole time (never cancelled) and AAA would be too — two rows struck at
+    // once instead of one superseding the other.
+    await flush(300);
+    expectOnlyStruck('AAA');
+
+    // AAA's own timer (armed fresh at its own delete) should fire by now.
+    await flush(400);
+    expect(strikingRows()).toHaveLength(0);
+  });
+});

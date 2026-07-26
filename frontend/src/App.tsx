@@ -152,6 +152,7 @@ export default function App() {
     clearStrikeTimer();
     setStrikingOptionId(id);
     strikeTimer.current = window.setTimeout(() => {
+      strikeTimer.current = null;
       setStrikingOptionId(null);
       void refresh();
     }, 700);
