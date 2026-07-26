@@ -65,4 +65,12 @@ describe('TradeCeremony', () => {
     expect(container.querySelector('.platen')).not.toBeNull();
     expect(container.querySelector('.typebar')).not.toBeNull();
   });
+
+  it('the fold stage builds three panels', () => {
+    vi.useFakeTimers();
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+    act(() => vi.advanceTimersByTime(4300));
+    expect(container.querySelectorAll('.fold-panel')).toHaveLength(3);
+    vi.useRealTimers();
+  });
 });

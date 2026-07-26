@@ -99,6 +99,20 @@ export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: 
             <div className="ticket-seal">C</div>
           </div>
         </div>
+        {stage !== 'print' && (
+          <div className="fold" aria-hidden="true">
+            {[0, 1, 2].map((n) => (
+              <div className={`fold-panel fold-p${n}`} key={n}>
+                <div className="fold-inner" style={{ transform: `translateY(-${n * 33.333}%)` }}>
+                  <div className="ticket-head">CURIA · {ticket.title} Nº {ticket.no}</div>
+                  {ticket.lines.map((l) => (
+                    <div className="ticket-line" key={l}>{l}</div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="envelope">
           <div className="envelope-flap" />
           <div className="envelope-body" />

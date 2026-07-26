@@ -37,17 +37,29 @@
   100% { opacity: 1; transform: scale(1); }
 }
 
-/* ---- stage: fold — one continuous crease, no snap from the print pose ---- */
-.ceremony[data-stage='fold'] .ticket { animation: ticket-fold 0.9s cubic-bezier(.55, 0, .25, 1) both; }
-.ceremony[data-stage='fold'] .ticket-seal { opacity: 1; }
-@keyframes ticket-fold {
-  0% { transform: translateY(0) rotateX(0) scaleY(1); opacity: 1; }
-  55% { transform: translateY(0) rotateX(-70deg) scaleY(0.96); opacity: 1; }
-  100% { transform: translateY(0) rotateX(-88deg) scaleY(0.42); opacity: 0.92; }
-}
+/* ---- stage: fold — a letter tri-fold: bottom panel up, then top panel down ----
+   the flat ticket (and its seal) is hidden outright once folding begins — the
+   fold panels below take over as the visible proxy for the page. */
+.ceremony[data-stage='fold'] .ticket, .ceremony[data-stage='envelope'] .ticket, .ceremony[data-stage='ship'] .ticket { opacity: 0; }
 
-/* ---- stage: envelope — wraps the folded ticket, flap presses shut, seal stamps ---- */
-.ceremony[data-stage='envelope'] .ticket { transform: rotateX(-88deg) scaleY(0.42); opacity: 0; transition: opacity 0.3s ease-out; }
+/* ---- the fold: three panels of the actual ticket content, clipped to thirds ---- */
+.fold { position: absolute; inset: 0; transform-style: preserve-3d; perspective: 1100px; }
+.fold-panel { position: absolute; left: 0; right: 0; height: 33.334%; overflow: hidden; background: var(--parchment-card); backface-visibility: hidden; }
+.fold-inner { position: absolute; left: 0; right: 0; top: 0; height: 300%; padding: 22px 20px; }
+.fold-p0 { top: 0; transform-origin: 50% 100%; z-index: 3; }
+.fold-p1 { top: 33.333%; z-index: 1; }
+.fold-p2 { top: 66.666%; transform-origin: 50% 0%; z-index: 2; }
+.ceremony[data-stage='fold'] .fold-p2 { animation: fold-up .62s cubic-bezier(.45,0,.2,1) both; }
+.ceremony[data-stage='fold'] .fold-p0 { animation: fold-down .62s .70s cubic-bezier(.45,0,.2,1) both; }
+@keyframes fold-up { 0% { transform: rotateX(0deg); box-shadow: 0 0 0 rgba(0,0,0,0); } 60% { box-shadow: 0 -8px 16px rgba(46,40,32,.34); } 100% { transform: rotateX(-180deg) translateZ(1px); box-shadow: 0 -3px 9px rgba(46,40,32,.26); } }
+@keyframes fold-down { 0% { transform: rotateX(0deg); } 60% { box-shadow: 0 8px 16px rgba(46,40,32,.34); } 100% { transform: rotateX(180deg) translateZ(2px); box-shadow: 0 3px 9px rgba(46,40,32,.26); } }
+.fold-panel::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0; background: linear-gradient(rgba(255,255,255,.5), rgba(46,40,32,.16)); }
+.ceremony[data-stage='fold'] .fold-p2::after { animation: crease .62s ease-out both; }
+.ceremony[data-stage='fold'] .fold-p0::after { animation: crease .62s .70s ease-out both; }
+@keyframes crease { 0% { opacity: 0; } 45% { opacity: .85; } 100% { opacity: .3; } }
+
+/* ---- stage: envelope — wraps the folded packet, flap presses shut, seal stamps ---- */
+.ceremony[data-stage='envelope'] .fold { transform: rotateX(-88deg) scaleY(0.42); opacity: 0; transition: opacity 0.3s ease-out; }
 .ceremony[data-stage='envelope'] .envelope { animation: env-appear 0.32s cubic-bezier(.25, .9, .35, 1) both; }
 .ceremony[data-stage='envelope'] .envelope-flap { animation: flap-close 0.42s 0.24s cubic-bezier(.5, 0, .3, 1) both; }
 .ceremony[data-stage='envelope'] .envelope-seal { animation: env-seal 0.32s 0.6s cubic-bezier(.3, 1.4, .5, 1) both; }
@@ -64,7 +76,7 @@
 }
 
 /* ---- stage: ship — a small dip of anticipation, then away off the top ---- */
-.ceremony[data-stage='ship'] .ticket { opacity: 0; }
+.ceremony[data-stage='ship'] .fold { opacity: 0; }
 .ceremony[data-stage='ship'] .envelope { opacity: 1; }
 .ceremony[data-stage='ship'] .envelope-flap { transform: rotateX(0deg); }
 .ceremony[data-stage='ship'] .envelope-seal { transform: translateX(-50%) scale(1); }
