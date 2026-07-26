@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './styles/app.css';
-import { ApiError, cachedSnapshot, clearPasscode, fetchSnapshot, getPasscode, refreshMarks } from './lib/api';
+import { ApiError, cachedSnapshot, clearPasscode, fetchSnapshot, getPasscode, markQuietWeek, clearQuietWeek, refreshMarks } from './lib/api';
 import type { Snapshot } from './lib/api';
 import type { OptionPosition, Trade, Wheel, WheelSummary } from './lib/types';
 import { PasscodeGate } from './components/PasscodeGate';
@@ -99,6 +99,8 @@ export default function App() {
     onEditOption: (option: OptionPosition) => setSheet({ kind: 'optionEdit', option }),
     onSellWeek: (expiration: string) => setSheet({ kind: 'sellOption', expiration }),
     onViewRecord: (option: OptionPosition) => setSheet({ kind: 'record', option }),
+    onMarkQuiet: (friday: string) => { void markQuietWeek(friday).then(() => refresh()); },
+    onClearQuiet: (friday: string) => { void clearQuietWeek(friday).then(() => refresh()); },
     onFreshWheel: () => setSheet({ kind: 'freshWheel' }),
     onCompleteWheel: (summary: WheelSummary) => setSheet({ kind: 'completeWheel', summary }),
     onAbandonWheel: (wheel: Wheel) => {
