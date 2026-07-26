@@ -64,6 +64,29 @@ describe('SettleSheet', () => {
     expect(screen.queryByLabelText(/fees/i)).toBeNull();
   });
 
+  it('assigning a put books shares as acquired', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const onDone = vi.fn().mockResolvedValue(undefined);
+    render(<SettleSheet option={csp} onDone={onDone} onEdit={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /Assigned/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Settle$/ }));
+    await waitFor(() => expect(onDone).toHaveBeenCalledOnce());
+    expect(onDone.mock.calls[0][0].shares).toMatch(/^ACQUIRED /);
+  });
+
+  it('assigning a call books shares as called away', async () => {
+    const csc: OptionPosition = { ...csp, opt_type: 'CALL' };
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const onDone = vi.fn().mockResolvedValue(undefined);
+    render(<SettleSheet option={csc} onDone={onDone} onEdit={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /Assigned/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Settle$/ }));
+    await waitFor(() => expect(onDone).toHaveBeenCalledOnce());
+    expect(onDone.mock.calls[0][0].shares).toMatch(/^CALLED AWAY /);
+  });
+
   it('settles a buyback with zero fees', async () => {
     const settle = vi.mocked(api.settleOption);
     settle.mockClear();

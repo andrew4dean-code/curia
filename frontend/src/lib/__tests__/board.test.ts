@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canMarkQuiet, fridaysOfMonth, monthScore, weekFridayFor } from '../board';
+import { canMarkQuiet, fridaysOfMonth, monthScore, slideDirection, weekFridayFor } from '../board';
 import type { OptionPosition } from '../types';
 
 let nextId = 1;
@@ -85,5 +85,17 @@ describe('canMarkQuiet', () => {
 
   it('still allows this week when today is its Friday', () => {
     expect(canMarkQuiet('2026-07-24', '2026-07-24')).toBe(true);
+  });
+});
+
+describe('slideDirection', () => {
+  it('moves left going forward and right going back', () => {
+    expect(slideDirection([2026, 7], [2026, 8])).toBe('left');
+    expect(slideDirection([2026, 8], [2026, 7])).toBe('right');
+  });
+
+  it('handles the year boundary in both directions', () => {
+    expect(slideDirection([2026, 12], [2027, 1])).toBe('left');
+    expect(slideDirection([2027, 1], [2026, 12])).toBe('right');
   });
 });

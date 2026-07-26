@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import './styles/app.css';
 import { ApiError, cachedSnapshot, clearPasscode, fetchSnapshot, getPasscode, markQuietWeek, clearQuietWeek, refreshMarks } from './lib/api';
 import type { Snapshot } from './lib/api';
-import type { OptionPosition, Trade, Wheel, WheelSummary } from './lib/types';
+import type { OpenPosition, OptionPosition, Side, Trade, Wheel, WheelSummary } from './lib/types';
 import { PasscodeGate } from './components/PasscodeGate';
 import { TabBar } from './components/TabBar';
 import type { TabId } from './components/TabBar';
@@ -12,6 +12,7 @@ import { OptionsTab } from './components/OptionsTab';
 import { LedgerTab } from './components/LedgerTab';
 import { SettingsTab } from './components/SettingsTab';
 import { AddTradeSheet } from './components/AddTradeSheet';
+import { PositionSheet } from './components/PositionSheet';
 import { OptionSellSheet } from './components/OptionSellSheet';
 import { MarkSheet } from './components/MarkSheet';
 import { SettleSheet } from './components/SettleSheet';
@@ -19,13 +20,16 @@ import { OptionRecordSheet } from './components/OptionRecordSheet';
 import { CompleteWheelSheet, FreshWheelSheet, WheelRecordSheet } from './components/WheelSheets';
 import { WheelCeremony } from './components/WheelCeremony';
 import type { WheelCeremonyData } from './components/WheelCeremony';
+import { SettleCeremony } from './components/SettleCeremony';
+import type { SettleData } from './components/SettleCeremony';
 import { summarizeWheel } from './lib/wheelMath';
 import { deleteWheel } from './lib/api';
 import { TradeCeremony } from './components/TradeCeremony';
 import type { TicketData } from './components/TradeCeremony';
 
 type Sheet =
-  | { kind: 'trade'; trade: Trade | null }
+  | { kind: 'trade'; trade: Trade | null; prefill?: { side: Side; symbol: string; qty: number } }
+  | { kind: 'position'; position: OpenPosition }
   | { kind: 'optionEdit'; option: OptionPosition }
   | { kind: 'sellOption'; expiration: string }
   | { kind: 'mark'; symbol: string }
@@ -44,9 +48,14 @@ export default function App() {
   const [sheet, setSheet] = useState<Sheet>(null);
   const [ceremony, setCeremony] = useState<TicketData | null>(null);
   const [wheelCeremony, setWheelCeremony] = useState<WheelCeremonyData | null>(null);
+  const [settleCeremony, setSettleCeremony] = useState<SettleData | null>(null);
   const [justAdded, setJustAdded] = useState<{ kind: 'trade' | 'option'; id: number; symbol: string } | null>(null);
+  const [strikingTradeId, setStrikingTradeId] = useState<number | null>(null);
   const [landing, setLanding] = useState(false);
+  const [cover, setCover] = useState(false);
   const landingTimer = useRef<number | null>(null);
+  const strikeTimer = useRef<number | null>(null);
+  const coverTimer = useRef<number | null>(null);
 
   const clearLandingTimer = useCallback(() => {
     if (landingTimer.current !== null) {
@@ -55,7 +64,25 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => clearLandingTimer, [clearLandingTimer]);
+  const clearStrikeTimer = useCallback(() => {
+    if (strikeTimer.current !== null) {
+      window.clearTimeout(strikeTimer.current);
+      strikeTimer.current = null;
+    }
+  }, []);
+
+  const clearCoverTimer = useCallback(() => {
+    if (coverTimer.current !== null) {
+      window.clearTimeout(coverTimer.current);
+      coverTimer.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => {
+    clearLandingTimer();
+    clearStrikeTimer();
+    clearCoverTimer();
+  }, [clearLandingTimer, clearStrikeTimer, clearCoverTimer]);
 
   const refresh = useCallback(async () => {
     try {
@@ -84,17 +111,39 @@ export default function App() {
         onUnlocked={(s) => {
           setSnap(s);
           setUnlocked(true);
+          setCover(true);
+          clearCoverTimer();
+          coverTimer.current = window.setTimeout(() => {
+            coverTimer.current = null;
+            setCover(false);
+          }, 900);
         }}
       />
     );
   }
   if (!snap) return <div className="empty">Loading…</div>;
 
+  const onDeleted = async (id?: number) => {
+    setSheet(null);
+    if (id == null) { await refresh(); return; }
+    // A new strike is starting: any pending clear-and-refresh timer from a
+    // prior strike is now stale (it would clear this row's strike early and
+    // refresh before its 700ms is up), so drop it and start the new one clean.
+    clearStrikeTimer();
+    setStrikingTradeId(id);
+    strikeTimer.current = window.setTimeout(() => {
+      strikeTimer.current = null;
+      setStrikingTradeId(null);
+      void refresh();
+    }, 700);
+  };
+
   const tabProps = {
     snap,
     onRefresh: refresh,
     onEditTrade: (trade: Trade | null) => setSheet({ kind: 'trade', trade }),
     onMark: (symbol: string) => setSheet({ kind: 'mark', symbol }),
+    onPosition: (p: OpenPosition) => setSheet({ kind: 'position', position: p }),
     onSettleOption: (option: OptionPosition) => setSheet({ kind: 'settle', option }),
     onEditOption: (option: OptionPosition) => setSheet({ kind: 'optionEdit', option }),
     onSellWeek: (expiration: string) => setSheet({ kind: 'sellOption', expiration }),
@@ -110,6 +159,8 @@ export default function App() {
     },
     onViewWheelRecord: (wheel: Wheel) => setSheet({ kind: 'wheelRecord', wheel }),
     justAdded,
+    strikingTradeId,
+    onDeleted,
   };
 
   const onTicket = async (ticket: TicketData) => {
@@ -122,12 +173,14 @@ export default function App() {
     setLanding(false);
     setCeremony(ticket);
   };
-  const onDeleted = async () => { setSheet(null); await refresh(); };
 
   return (
     <div className={landing ? 'shell roll-slow' : 'shell'}>
       {offline && <OfflineBanner fetchedAt={snap.fetchedAt} />}
-      <div className="tab-fade" key={tab}>
+      {/* The Options tab supplies its own entrance (the week-card deal-in)
+          and must not also get the whole-tab fade — that combination is
+          what stacked three entrance animations at once. */}
+      <div className={tab === 'options' ? undefined : 'tab-fade'} key={tab}>
         {tab === 'portfolio' && <PortfolioTab {...tabProps} />}
         {tab === 'options' && <OptionsTab {...tabProps} />}
         {tab === 'ledger' && <LedgerTab {...tabProps} />}
@@ -139,7 +192,21 @@ export default function App() {
         </button>
       )}
       {sheet?.kind === 'trade' && (
-        <AddTradeSheet trade={sheet.trade} wheels={snap.wheels} onDone={onTicket} onDeleted={onDeleted} onCancel={() => setSheet(null)} />
+        <AddTradeSheet trade={sheet.trade} wheels={snap.wheels} trades={snap.trades} prefill={sheet.prefill} onDone={onTicket} onDeleted={onDeleted} onCancel={() => setSheet(null)} />
+      )}
+      {sheet?.kind === 'position' && (
+        <PositionSheet
+          position={sheet.position}
+          onMark={() => setSheet({ kind: 'mark', symbol: sheet.position.symbol })}
+          onClose={() =>
+            setSheet({
+              kind: 'trade',
+              trade: null,
+              prefill: { side: 'SELL', symbol: sheet.position.symbol, qty: sheet.position.qty },
+            })
+          }
+          onCancel={() => setSheet(null)}
+        />
       )}
       {sheet?.kind === 'optionEdit' && (
         <OptionSellSheet option={sheet.option} expiration={sheet.option.expiration} wheels={snap.wheels} onDone={onTicket} onCancel={() => setSheet(null)} />
@@ -191,7 +258,22 @@ export default function App() {
         <MarkSheet symbol={sheet.symbol} onDone={async () => { setSheet(null); await refresh(); }} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'settle' && (
-        <SettleSheet option={sheet.option} onDone={async () => { setSheet(null); await refresh(); }} onEdit={() => setSheet({ kind: 'optionEdit', option: sheet.option })} onCancel={() => setSheet(null)} />
+        <SettleSheet
+          option={sheet.option}
+          onDone={async (c) => { setSheet(null); setSettleCeremony(c); }}
+          onDeleted={async () => { setSheet(null); await refresh(); }}
+          onEdit={() => setSheet({ kind: 'optionEdit', option: sheet.option })}
+          onCancel={() => setSheet(null)}
+        />
+      )}
+      {settleCeremony && (
+        <SettleCeremony
+          data={settleCeremony}
+          onDone={() => {
+            setSettleCeremony(null);
+            void refresh();
+          }}
+        />
       )}
       {ceremony && (
         <TradeCeremony
@@ -218,6 +300,7 @@ export default function App() {
           window.scrollTo({ top: 0 });
         }}
       />
+      {cover && <div className="book-cover" aria-hidden="true" onAnimationEnd={() => setCover(false)} />}
     </div>
   );
 }

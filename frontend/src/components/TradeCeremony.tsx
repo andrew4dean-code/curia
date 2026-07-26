@@ -9,15 +9,16 @@ export interface TicketData {
 
 type Stage = 'print' | 'fold' | 'envelope' | 'ship';
 
-const STAGE_MS: [Stage, number][] = [
-  ['print', 2500], // 1.0s rise, typewriter from 0.3s, seal stamps after the last character
-  ['fold', 950],
-  ['envelope', 850],
-  ['ship', 1000],
+export const STAGE_MS: [Stage, number][] = [
+  ['print', 4200], // 0.8s rise, typewriter from 0.6s, seal stamps after the last character
+  ['fold', 1600],
+  ['envelope', 1100],
+  ['ship', 1100],
 ];
 
-const TYPE_START_MS = 300;
-const TYPE_CHAR_MS = 22;
+const TYPE_START_MS = 600;
+const TYPE_CHAR_MS = 48;
+const STRIKE_EVERY = 3;
 
 export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: () => void }) {
   const [stage, setStage] = useState<Stage>('print');
@@ -75,20 +76,43 @@ export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: 
   const typing = stage === 'print' && typedCount < fullText.length;
   const typedLines = fullText.slice(0, typedCount).split('\n');
   const shownLines = stage === 'print' ? typedLines : ticket.lines;
+  const strike = Math.floor(typedCount / STRIKE_EVERY);
 
   return (
-    <div className="ceremony" data-stage={stage} onClick={finish}>
+    <div className="ceremony" data-stage={stage} data-typing={typing ? 'yes' : 'no'} onClick={finish}>
       <div className="ceremony-scene">
-        <div className="ticket">
-          <div className="ticket-head">CURIA · {ticket.title} Nº {ticket.no}</div>
-          {ticket.lines.map((full, i) => (
-            <div className="ticket-line" key={full}>
-              {shownLines[i] ?? ''}
-              {typing && i === typedLines.length - 1 && <span className="type-caret" />}
-            </div>
-          ))}
-          <div className="ticket-seal">C</div>
+        <div className="platen" aria-hidden="true" />
+        <div className="typebar" data-strike={strike % 2} aria-hidden="true" />
+        <div className="ticket-wrap">
+          <div className="ticket" style={{ ['--feed' as string]: typedLines.length - 1 }}>
+            <div className="ticket-head">CURIA · {ticket.title} Nº {ticket.no}</div>
+            {ticket.lines.map((full, i) => {
+              const isRealised = full.includes('realised');
+              const sign = isRealised ? (full.startsWith('−') || full.startsWith('-') ? 'down' : 'up') : undefined;
+              return (
+                <div className="ticket-line" key={full} data-sign={sign}>
+                  {shownLines[i] ?? ''}
+                  {typing && i === typedLines.length - 1 && <span className="type-caret" />}
+                </div>
+              );
+            })}
+            <div className="ticket-seal">C</div>
+          </div>
         </div>
+        {stage !== 'print' && (
+          <div className="fold" aria-hidden="true">
+            {[0, 1, 2].map((n) => (
+              <div className={`fold-panel fold-p${n}`} key={n}>
+                <div className="fold-inner" style={{ transform: `translateY(-${n * 33.333}%)` }}>
+                  <div className="ticket-head">CURIA · {ticket.title} Nº {ticket.no}</div>
+                  {ticket.lines.map((l) => (
+                    <div className="ticket-line" key={l}>{l}</div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="envelope">
           <div className="envelope-flap" />
           <div className="envelope-body" />

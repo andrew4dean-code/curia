@@ -44,3 +44,9 @@ export function monthScore(options: OptionPosition[], year: number, month1: numb
 export function canMarkQuiet(friday: string, today: string): boolean {
   return friday <= weekFridayFor(today);
 }
+
+// Which way the board should travel when the month changes. Compared as an
+// absolute month index so December -> January reads as forward, not backward.
+export function slideDirection(from: [number, number], to: [number, number]): 'left' | 'right' {
+  return to[0] * 12 + to[1] >= from[0] * 12 + from[1] ? 'left' : 'right';
+}

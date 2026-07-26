@@ -40,8 +40,13 @@ describe('OptionsTab board', () => {
       base,
     ];
     render(<OptionsTab snap={snapWith(rows)} {...cbs} onSellWeek={vi.fn()} />);
-    expect(screen.getByText('$294.70')).toBeInTheDocument();
+    expect(screen.getByTestId('month-score')).toHaveAttribute('data-value', '$294.70');
     expect(screen.getByText(/collected this month/)).toBeInTheDocument();
+  });
+
+  it('the month score rolls on an odometer', () => {
+    render(<OptionsTab snap={snapWith([base])} {...cbs} onSellWeek={vi.fn()} />);
+    expect(screen.getByTestId('month-score')).toHaveAttribute('data-value', '$148.00');
   });
 
   it('open option renders as a seal chip that opens the settle sheet', () => {
@@ -133,6 +138,25 @@ describe('OptionsTab board', () => {
     expect(onClearQuiet).not.toHaveBeenCalled();
   });
 
+  it('an empty week carries one rule and two pill actions', () => {
+    const { container } = render(
+      <OptionsTab snap={snapWith([])} {...cbs} onSellWeek={vi.fn()} onMarkQuiet={vi.fn()} />,
+    );
+    const week = container.querySelector('.wk')!;
+    expect(week.querySelectorAll('.wk-rule')).toHaveLength(1);
+    expect(week.querySelector('.wk-actions')).not.toBeNull();
+    expect(week.querySelectorAll('.wk-pill')).toHaveLength(2);
+  });
+
+  it('the quiet plate keeps its own rule and still offers the log pill', () => {
+    const { container } = render(
+      <OptionsTab snap={snapWith([], ['2026-08-07'])} {...cbs} onSellWeek={vi.fn()} onMarkQuiet={vi.fn()} onClearQuiet={vi.fn()} />,
+    );
+    const quiet = container.querySelector('.wk-quiet')!;
+    expect(quiet).not.toBeNull();
+    expect(screen.getByRole('button', { name: /log a trade for the week of Aug 7/i })).toBeInTheDocument();
+  });
+
   it('chevrons browse months', () => {
     render(<OptionsTab snap={snapWith([])} {...cbs} onSellWeek={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
@@ -146,5 +170,13 @@ describe('OptionsTab board', () => {
     expect(screen.queryByText(/left/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
     expect(screen.getByText(/left/)).toBeInTheDocument(); // current month's real live week returns
+  });
+
+  it('marks the slide direction when browsing months', () => {
+    const { container } = render(<OptionsTab snap={snapWith([])} {...cbs} onSellWeek={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
+    expect(container.querySelector('.board-weeks')?.getAttribute('data-slide')).toBe('left');
+    fireEvent.click(screen.getByRole('button', { name: 'Previous month' }));
+    expect(container.querySelector('.board-weeks')?.getAttribute('data-slide')).toBe('right');
   });
 });

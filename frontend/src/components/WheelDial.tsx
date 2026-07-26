@@ -119,7 +119,7 @@ export function WheelDial({
         style={{
           transform: `rotate(${HAND_ANGLE[stage] - 360}deg)`,
           transformOrigin: '105px 105px',
-          transition: 'transform 2.2s var(--roll-ease)',
+          transition: 'transform 1.6s var(--sweep-ease)',
         }}
       />
       <circle cx="105" cy="105" r="26" fill="var(--maroon)" />

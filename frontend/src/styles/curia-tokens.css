@@ -17,6 +17,7 @@
   --roll-detail: 1.15s;
   --flash: .75s;
   --roll-ease: cubic-bezier(.18,.71,.21,1);
+  --sweep-ease: cubic-bezier(.34, 1.32, .48, 1);
 }
 
 /* Slot height 1.24em: Playfair Display paints taller than a 1em line box, so

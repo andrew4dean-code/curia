@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import type { TabProps } from './PortfolioTab';
-import { canMarkQuiet, fridaysOfMonth, monthScore, weekFridayFor } from '../lib/board';
+import { canMarkQuiet, fridaysOfMonth, monthScore, slideDirection, weekFridayFor } from '../lib/board';
 import { needsSettling, optionRealizedPl, premiumCollected } from '../lib/optionsMath';
 import { expiryLabel, nextFriday, todayIso } from '../lib/time';
 import { formatMoney, formatSignedMoney } from '../lib/format';
+import { Odometer } from './Odometer';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -15,6 +16,11 @@ function fmtShort(dateStr: string): string {
 export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onMarkQuiet, onClearQuiet }: TabProps) {
   const now = new Date();
   const [ym, setYm] = useState<[number, number]>([now.getFullYear(), now.getMonth() + 1]);
+  // Undefined until the chevrons actually move the month: the board-in-left/
+  // right slide-in must only play on a real month change, not on first
+  // render, where the week-card deal-in (wk-deal) already carries the
+  // entrance on its own.
+  const [slide, setSlide] = useState<'left' | 'right' | undefined>(undefined);
   const [year, month] = ym;
   const fridays = fridaysOfMonth(year, month);
   const today = todayIso();
@@ -29,7 +35,9 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onM
 
   function shift(delta: number) {
     const d = new Date(year, month - 1 + delta, 1);
-    setYm([d.getFullYear(), d.getMonth() + 1]);
+    const next: [number, number] = [d.getFullYear(), d.getMonth() + 1];
+    setSlide(slideDirection(ym, next));
+    setYm(next);
   }
 
   return (
@@ -40,9 +48,9 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onM
         <button aria-label="Next month" onClick={() => shift(1)}>›</button>
       </header>
       <div className="board-score">
-        <span className="board-score-amount">{formatMoney(score)}</span> collected this month
+        <Odometer className="board-score-amount" value={formatMoney(score)} speed="hero" dataTestid="month-score" /> collected this month
       </div>
-      <div className="board-weeks">
+      <div className="board-weeks" data-slide={slide} key={`${year}-${month}`}>
         {fridays.map((friday, i) => {
           const rows = byWeek.get(friday) ?? [];
           const isPast = friday < today;
@@ -55,7 +63,7 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onM
               : `${expiryLabel(friday)} left`
             : '';
           return (
-            <div key={friday} className={`wk${isPast ? ' past' : ''}${isLive ? ' live' : ''}`}>
+            <div key={friday} className={`wk${isPast ? ' past' : ''}${isLive ? ' live' : ''}`} style={{ ['--wk-i' as string]: Math.min(i, 4) }}>
               <span className="wk-num" aria-hidden="true">{i + 1}</span>
               <div className="wk-label">
                 Week {i + 1} · Fri {fmtShort(friday)}
@@ -92,35 +100,37 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onM
                   )}
                 </div>
               )}
-              {onSellWeek && (
-                <button
-                  className="wk-sell"
-                  aria-label={
-                    isPast
-                      ? `log a trade for the week of ${fmtShort(friday)}`
-                      : `sell the week of ${fmtShort(friday)}`
-                  }
-                  onClick={() => onSellWeek(friday)}
-                >
-                  {isPast
-                    ? rows.length > 0
-                      ? '＋ log another for this week'
-                      : '＋ log a trade for this week'
-                    : rows.length > 0
-                      ? '＋ sell another this week'
-                      : '＋ tap to sell this week'}
-                </button>
-              )}
-              {canQuiet && onMarkQuiet && (
-                <button
-                  type="button"
-                  className="wk-quiet-set"
-                  aria-label={`didn't trade the week of ${fmtShort(friday)}`}
-                  onClick={() => onMarkQuiet(friday)}
-                >
-                  didn't trade this week
-                </button>
-              )}
+              <div className="wk-actions">
+                {onSellWeek && (
+                  <button
+                    className="wk-pill wk-pill-go"
+                    aria-label={
+                      isPast
+                        ? `log a trade for the week of ${fmtShort(friday)}`
+                        : `sell the week of ${fmtShort(friday)}`
+                    }
+                    onClick={() => onSellWeek(friday)}
+                  >
+                    {isPast
+                      ? rows.length > 0
+                        ? '＋ log another'
+                        : '＋ log a trade'
+                      : rows.length > 0
+                        ? '＋ sell another'
+                        : '＋ sell this week'}
+                  </button>
+                )}
+                {canQuiet && onMarkQuiet && (
+                  <button
+                    type="button"
+                    className="wk-pill wk-pill-ghost"
+                    aria-label={`didn't trade the week of ${fmtShort(friday)}`}
+                    onClick={() => onMarkQuiet(friday)}
+                  >
+                    didn't trade
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}
