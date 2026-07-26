@@ -9,7 +9,7 @@ export interface SettleData {
   shares?: string;
 }
 
-type Stage = 'swing' | 'hit' | 'count' | 'certificate';
+type Stage = 'swing' | 'hit' | 'count' | 'certificate' | 'file';
 
 export function SettleCeremony({ data, onDone }: { data: SettleData; onDone: () => void }) {
   const [stage, setStage] = useState<Stage>('swing');
@@ -22,6 +22,7 @@ export function SettleCeremony({ data, onDone }: { data: SettleData; onDone: () 
     at(1250, () => setStage('count'));
     if (data.shares) {
       at(3800, () => setStage('certificate'));
+      at(5300, () => setStage('file'));
       at(6400, finish);
     } else {
       at(3800, finish);
@@ -47,13 +48,14 @@ export function SettleCeremony({ data, onDone }: { data: SettleData; onDone: () 
           <div className="settle-amount">
             <Odometer value={data.amount} speed="hero" dataTestid="settle-amount" />
           </div>
-          {stage === 'certificate' && data.shares && (
+          {(stage === 'certificate' || stage === 'file') && data.shares && (
             <>
               <div className="cert-frame" aria-hidden="true" />
               <div className="settle-cert">{data.shares}</div>
             </>
           )}
         </div>
+        {stage === 'file' && <div className="settle-file" aria-hidden="true" />}
       </div>
     </div>
   );

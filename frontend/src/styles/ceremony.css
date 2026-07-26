@@ -167,10 +167,10 @@
 @keyframes amount-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 .settle-cert { margin-top: 14px; text-align: center; font-family: var(--font-mono); font-size: 14px; letter-spacing: .08em; color: var(--ink); }
 
-/* ---- stage: certificate — the option terms dissolve, the share line forms, an ornate border draws in ---- */
-.settle-ceremony[data-stage='certificate'] .settle-stamp { animation: stamp-dissolve .6s ease-in both; }
+/* ---- stage: certificate — the option terms dissolve, the share line forms, an ornate border draws in ----
+   the stamp-dissolve and cert-settle rules themselves live below, under
+   "stage: file" — they are shared with that stage too, see the note there. */
 @keyframes stamp-dissolve { to { opacity: 0; transform: rotate(-12deg) scale(1.25); filter: blur(3px); } }
-.settle-ceremony[data-stage='certificate'] .settle-amount { animation: cert-settle .6s ease-out both; }
 /* animation is a shorthand: this rule replaces amount-rise's animation
    outright (same specificity, later in the file wins), so opacity must be
    re-asserted here too, or it falls back to .settle-amount's base opacity: 0
@@ -180,3 +180,24 @@
 @keyframes cert-draw { 0% { clip-path: inset(0 100% 100% 0); } 50% { clip-path: inset(0 0 100% 0); } 100% { clip-path: inset(0 0 0 0); } }
 .settle-ceremony[data-stage='certificate'] .settle-cert { animation: cert-text .7s .9s ease-out both; }
 @keyframes cert-text { from { opacity: 0; letter-spacing: .3em; } to { opacity: 1; letter-spacing: .08em; } }
+
+/* ---- stage: file — the certificate stays fully drawn while it is put away ----
+   stamp-dissolve and cert-settle are written to hold their finished state only
+   while their selector matches. Scoping both to 'certificate' alone meant the
+   instant the stage advanced to 'file' the selector stopped matching, the held
+   'both' state was dropped, and the ASSIGNED stamp and dollar amount snapped
+   back to their pre-certificate look for the whole filing beat. Carrying the
+   same selector (and therefore the same computed animation value, so nothing
+   restarts) through 'file' keeps the certificate intact as it is filed away. */
+.settle-ceremony[data-stage='certificate'] .settle-stamp,
+.settle-ceremony[data-stage='file'] .settle-stamp { animation: stamp-dissolve .6s ease-in both; }
+.settle-ceremony[data-stage='certificate'] .settle-amount,
+.settle-ceremony[data-stage='file'] .settle-amount { animation: cert-settle .6s ease-out both; }
+
+/* ---- the filing sleeve: a folder lip rises from below, the certificate lifts
+   then slides down behind it and out of sight — the same beat as the trade
+   ceremony's envelope taking the folded ticket. ---- */
+.settle-file { position: absolute; left: -6px; right: -6px; bottom: -10px; height: 62px; border-radius: 6px 6px 3px 3px; background: linear-gradient(var(--parchment) 0%, var(--parchment-card) 55%); border: 1px solid var(--rule); box-shadow: 0 -3px 10px rgba(46,40,32,.18); transform-origin: 50% 100%; animation: sleeve-rise .42s cubic-bezier(.3,.9,.35,1) both; z-index: 4; }
+@keyframes sleeve-rise { from { transform: translateY(46px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.settle-ceremony[data-stage='file'] .settle-ticket { animation: cert-file 1.1s cubic-bezier(.45,0,.3,1) both; }
+@keyframes cert-file { 0% { transform: translateY(0) scale(1); opacity: 1; } 45% { transform: translateY(-8px) scale(1.02); opacity: 1; } 100% { transform: translateY(74px) scale(.86); opacity: 0; } }
