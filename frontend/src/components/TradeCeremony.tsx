@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Press } from './Press';
 
 export interface TicketData {
   no: number;
@@ -81,8 +82,7 @@ export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: 
   return (
     <div className="ceremony" data-stage={stage} data-typing={typing ? 'yes' : 'no'} onClick={finish}>
       <div className="ceremony-scene">
-        <div className="platen" aria-hidden="true" />
-        <div className="typebar" data-strike={strike % 2} aria-hidden="true" />
+        <Press striking={strike % 2} line={Math.max(0, typedLines.length - 1)} />
         <div className="ticket-wrap">
           <div className="ticket" style={{ ['--feed' as string]: typedLines.length - 1 }}>
             <div className="ticket-head">CURIA · {ticket.title} Nº {ticket.no}</div>

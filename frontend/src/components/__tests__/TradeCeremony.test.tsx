@@ -74,10 +74,18 @@ describe('TradeCeremony', () => {
     expect(STAGE_MS.reduce((n, [, ms]) => n + ms, 0)).toBe(8000);
   });
 
-  it('shows the press furniture while printing', () => {
+  it('draws a press with a platen, an arm and a typehead', () => {
     const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
-    expect(container.querySelector('.platen')).not.toBeNull();
-    expect(container.querySelector('.typebar')).not.toBeNull();
+    expect(container.querySelector('.press-platen')).not.toBeNull();
+    expect(container.querySelector('.press-arm')).not.toBeNull();
+    expect(container.querySelector('.press-head')).not.toBeNull();
+  });
+
+  it('clips the arm so it can never cross the ticket', () => {
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+    const arm = container.querySelector('.press-arm')!;
+    expect(arm.getAttribute('clip-path')).toMatch(/press-clip/);
+    expect(container.querySelector('#press-clip')).not.toBeNull();
   });
 
   it('the fold stage builds three panels', () => {
@@ -88,9 +96,9 @@ describe('TradeCeremony', () => {
     vi.useRealTimers();
   });
 
-  it('the typebar actually restrikes: data-strike alternates through printing, not just once', () => {
+  it('the arm actually restrikes: data-strike alternates through printing, not just once', () => {
     const { container } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
-    const typebar = container.querySelector('.typebar')!;
+    const arm = container.querySelector('.press-arm')!;
     act(() => vi.advanceTimersByTime(600)); // TYPE_START_MS: typing begins
 
     // Sample data-strike after every character tick across the whole print stage. If the
@@ -99,7 +107,7 @@ describe('TradeCeremony', () => {
     const samples: string[] = [];
     for (let i = 0; i < 70; i++) {
       act(() => vi.advanceTimersByTime(48)); // TYPE_CHAR_MS
-      samples.push(typebar.getAttribute('data-strike')!);
+      samples.push(arm.getAttribute('data-strike')!);
     }
 
     const seen = new Set(samples);
@@ -117,8 +125,8 @@ describe('TradeCeremony', () => {
     const cssPath = testFilePath.replace(/components\/__tests__\/TradeCeremony\.test\.tsx$/, 'styles/ceremony.css');
     const css = readFileSync(cssPath, 'utf8');
 
-    const strike0 = css.match(/\.typebar\[data-strike='0'\]\s*\{\s*animation:\s*(\S+)/);
-    const strike1 = css.match(/\.typebar\[data-strike='1'\]\s*\{\s*animation:\s*(\S+)/);
+    const strike0 = css.match(/\.press-arm\[data-strike='0'\]\s*\{\s*animation:\s*(\S+)/);
+    const strike1 = css.match(/\.press-arm\[data-strike='1'\]\s*\{\s*animation:\s*(\S+)/);
 
     expect(strike0).not.toBeNull();
     expect(strike1).not.toBeNull();

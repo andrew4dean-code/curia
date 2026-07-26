@@ -3,7 +3,8 @@
 .ceremony-scene { position: relative; width: 290px; }
 
 /* ---- the ticket ---- */
-.ticket { position: relative; background: var(--parchment-card); border-radius: 4px; padding: 22px 20px 30px; box-shadow: 0 12px 30px rgba(0,0,0,.35); border-top: 2px dashed var(--rule); border-bottom: 2px dashed var(--rule); transform-origin: 50% 0%; will-change: transform, opacity; }
+.ticket { position: relative; background: var(--parchment-card); border-radius: 10px 10px 4px 4px; padding: 22px 20px 30px; box-shadow: 0 12px 30px rgba(0,0,0,.35); border-top: 2px dashed var(--rule); border-bottom: 2px dashed var(--rule); transform-origin: 50% 0%; will-change: transform, opacity; }
+.ticket::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 16px; border-radius: 10px 10px 0 0; background: linear-gradient(rgba(46,40,32,.16), rgba(46,40,32,0)); pointer-events: none; }
 .ticket-head { font-family: var(--font-display); font-weight: 800; font-size: 15px; letter-spacing: .06em; text-align: center; border-bottom: 1px solid var(--rule); padding-bottom: 8px; margin-bottom: 10px; }
 .ticket-line { font-family: var(--font-mono); font-size: 14px; text-align: center; padding: 3px 0; min-height: 1.45em; }
 .ticket-line[data-sign='up'] { color: var(--pl-green); }
@@ -135,20 +136,22 @@
 .wheel-ceremony[data-phase='stamp'] .crest-banner { animation: banner-press 0.45s 0.15s cubic-bezier(.3,1.4,.5,1) forwards; }
 @keyframes banner-press { 0% { opacity: 0; transform: translate(-50%,-50%) rotate(-8deg) scale(1.6); } 100% { opacity: 1; transform: translate(-50%,-50%) rotate(-8deg) scale(1); } }
 
-/* ---- the press: platen roller + striking typebar ---- */
-.platen { position: absolute; left: -14px; right: -14px; top: -26px; height: 26px; border-radius: 13px; background: linear-gradient(#4a4137, #241f19 62%, #171310); box-shadow: 0 2px 5px rgba(0,0,0,.45), 0 -1px 0 rgba(255,255,255,.13) inset; z-index: 3; opacity: 0; transition: opacity 0.3s ease-out; }
-.ceremony[data-stage='print'] .platen { opacity: 1; }
-.typebar { position: absolute; left: 50%; top: 46%; width: 3px; height: 78px; margin-left: -1.5px; background: linear-gradient(var(--ink), #0f0d0a); border-radius: 2px; transform-origin: 50% 100%; opacity: 0; z-index: 2; }
-.ceremony[data-typing='yes'] .typebar { opacity: .92; }
-.ceremony[data-typing='yes'] .typebar[data-strike='0'] { animation: bar-hit-a 96ms cubic-bezier(.3,0,.2,1) both; }
-.ceremony[data-typing='yes'] .typebar[data-strike='1'] { animation: bar-hit-b 96ms cubic-bezier(.3,0,.2,1) both; }
-/* bar-hit-a / bar-hit-b are intentionally identical bodies under different
-   names: alternating the computed animation-name on each strike is what
-   forces the browser to restart the animation. Two rules sharing one
-   keyframe name compute to the same animation-name, and CSS does not
-   restart an animation whose computed value hasn't changed. */
-@keyframes bar-hit-a { 0% { transform: rotate(26deg) translateY(10px); } 55% { transform: rotate(0deg) translateY(0); } 100% { transform: rotate(22deg) translateY(8px); } }
-@keyframes bar-hit-b { 0% { transform: rotate(26deg) translateY(10px); } 55% { transform: rotate(0deg) translateY(0); } 100% { transform: rotate(22deg) translateY(8px); } }
+/* ---- the press: platen roller + striking arm (SVG, see Press.tsx) ---- */
+.press { position: absolute; left: -14px; right: -14px; top: -34px; height: 260px; overflow: visible; pointer-events: none; z-index: 3; }
+.press-arm { opacity: 0; transform-origin: 158px 258px; }
+.ceremony[data-typing='yes'] .press-arm { opacity: 1; }
+.ceremony[data-typing='yes'] .press-arm[data-strike='0'] { animation: press-hit-a 110ms cubic-bezier(.3,0,.2,1) both; }
+.ceremony[data-typing='yes'] .press-arm[data-strike='1'] { animation: press-hit-b 110ms cubic-bezier(.3,0,.2,1) both; }
+/* press-hit-a / press-hit-b alternate the arm's approach angle (not just its
+   name) so it reads as two different typebars striking, not one bar
+   twitching. They still must carry different keyframe names regardless:
+   alternating the computed animation-name on each strike is what forces the
+   browser to restart the animation. Two rules sharing one keyframe name
+   compute to the same animation-name, and CSS does not restart an animation
+   whose computed value hasn't changed. */
+@keyframes press-hit-a { 0% { transform: rotate(9deg) translateY(16px); } 52% { transform: rotate(0deg) translateY(0); } 100% { transform: rotate(7deg) translateY(13px); } }
+@keyframes press-hit-b { 0% { transform: rotate(-9deg) translateY(16px); } 52% { transform: rotate(0deg) translateY(0); } 100% { transform: rotate(-7deg) translateY(13px); } }
+.ceremony:not([data-stage='print']) .press { opacity: 0; transition: opacity .3s ease-out; }
 .ceremony[data-stage='print'] .ticket { transform: translateY(calc(var(--feed, 0) * -3px)); transition: transform .13s steps(2, end); }
 
 /* ---- the settle stamp: outcome slams diagonally across the ticket, amount counts up beneath it ---- */
