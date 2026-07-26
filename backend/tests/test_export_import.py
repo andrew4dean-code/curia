@@ -17,7 +17,7 @@ def test_export_import_round_trip(client):
     assert client.get("/api/trades", headers=HEADERS).json() == []
 
     result = client.post("/api/import", json={"confirm": True, **backup}, headers=HEADERS)
-    assert result.json() == {"trades": 1, "marks": 1, "options": 0, "wheels": 0}
+    assert result.json() == {"trades": 1, "marks": 1, "options": 0, "wheels": 0, "quiet_weeks": 0}
     assert client.get("/api/trades", headers=HEADERS).json()[0]["symbol"] == "AAPL"
     assert client.get("/api/marks", headers=HEADERS).json()[0]["price"] == 120
 
@@ -67,7 +67,7 @@ def test_export_import_round_trip_with_options(client):
 
     client.post("/api/import", json={"confirm": True, "version": 1}, headers=HEADERS)
     result = client.post("/api/import", json={"confirm": True, **backup}, headers=HEADERS)
-    assert result.json() == {"trades": 1, "marks": 0, "options": 1, "wheels": 0}
+    assert result.json() == {"trades": 1, "marks": 0, "options": 1, "wheels": 0, "quiet_weeks": 0}
     restored = client.get("/api/options", headers=HEADERS).json()[0]
     assert restored["status"] == "ASSIGNED"
     assert restored["buyback_price"] == 0.0
@@ -135,3 +135,26 @@ def test_pre_wheels_backup_still_imports(client):
     body = {"confirm": True, "version": 1, "trades": [], "marks": [], "options": []}
     assert client.post("/api/import", json=body, headers=HEADERS).status_code == 200
     assert client.get("/api/wheels", headers=HEADERS).json() == []
+
+
+def test_export_import_round_trips_quiet_weeks(client):
+    client.post("/api/quiet-weeks", json={"friday": "2026-07-17"}, headers=HEADERS)
+    dump = client.get("/api/export", headers=HEADERS).json()
+    assert dump["quiet_weeks"] == ["2026-07-17"]
+
+    client.delete("/api/quiet-weeks/2026-07-17", headers=HEADERS)
+    r = client.post("/api/import", json={**dump, "confirm": True}, headers=HEADERS)
+    assert r.status_code == 200
+    assert r.json()["quiet_weeks"] == 1
+    assert client.get("/api/quiet-weeks", headers=HEADERS).json() == ["2026-07-17"]
+
+
+def test_import_without_quiet_weeks_key_still_works(client):
+    # Backups taken before this feature must keep restoring.
+    client.post("/api/quiet-weeks", json={"friday": "2026-07-17"}, headers=HEADERS)
+    r = client.post("/api/import",
+                    json={"version": 1, "confirm": True, "trades": [], "marks": [],
+                          "options": [], "wheels": []},
+                    headers=HEADERS)
+    assert r.status_code == 200
+    assert client.get("/api/quiet-weeks", headers=HEADERS).json() == []

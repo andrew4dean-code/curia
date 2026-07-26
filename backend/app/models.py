@@ -64,3 +64,11 @@ class Wheel(Base):
     closed_at: Mapped[Optional[str]] = mapped_column(default=None)
     created_at: Mapped[str] = mapped_column(default=utcnow)
     updated_at: Mapped[str] = mapped_column(default=utcnow)
+
+
+class QuietWeek(Base):
+    """A week Andrew deliberately sat out — so an empty week on the board reads
+    as 'quiet on purpose' rather than 'not caught up yet'."""
+    __tablename__ = "quiet_weeks"
+    friday: Mapped[str] = mapped_column(primary_key=True)  # YYYY-MM-DD, the week's Friday
+    created_at: Mapped[str] = mapped_column(default=utcnow)

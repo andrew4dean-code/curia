@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeOptionStats, optionRealizedPl, premiumCollected } from '../optionsMath';
+import { computeOptionStats, needsSettling, optionRealizedPl, premiumCollected } from '../optionsMath';
 import type { OptionPosition } from '../types';
 
 let nextId = 1;
@@ -53,5 +53,30 @@ describe('optionsMath', () => {
     expect(s.totalKept).toBeCloseTo(260.1);
     expect(s.winRate).toBeCloseTo((2 / 3) * 100);
     expect(s.avgTake).toBeCloseTo(86.7);
+  });
+});
+
+describe('needsSettling', () => {
+  const base: OptionPosition = {
+    id: 1, symbol: 'TQQQ', opt_type: 'PUT', strike: 62, expiration: '2026-08-14',
+    contracts: 2, premium: 0.74, fees: 1.3, opened_at: '2026-08-10', note: '',
+    status: 'OPEN', closed_at: null, buyback_price: 0, close_fees: 0, assigned_trade_id: null,
+  };
+  const open = { ...base, status: 'OPEN' as const, expiration: '2026-07-17' };
+
+  it('marks an open option whose expiration has passed', () => {
+    expect(needsSettling(open, '2026-07-23')).toBe(true);
+  });
+
+  it('leaves an option expiring today alone', () => {
+    expect(needsSettling(open, '2026-07-17')).toBe(false);
+  });
+
+  it('leaves a live option alone', () => {
+    expect(needsSettling({ ...open, expiration: '2026-07-31' }, '2026-07-23')).toBe(false);
+  });
+
+  it('never marks an option that is already settled', () => {
+    expect(needsSettling({ ...open, status: 'EXPIRED', closed_at: '2026-07-17' }, '2026-07-23')).toBe(false);
   });
 });

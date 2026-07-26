@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { agoLabel, daysUntil, expiryLabel, nextFriday } from '../time';
+import { agoLabel, daysUntil, expiryLabel, nextFriday, settleDateDefault } from '../time';
 
 describe('agoLabel', () => {
   beforeEach(() => vi.useFakeTimers());
@@ -34,5 +34,19 @@ describe('expiry helpers', () => {
     expect(nextFriday()).toBe('2026-07-24');
     vi.setSystemTime(new Date(2026, 6, 27, 9, 0, 0)); // Monday
     expect(nextFriday()).toBe('2026-07-31');
+  });
+});
+
+describe('settleDateDefault', () => {
+  it('uses the expiration when it has already passed', () => {
+    expect(settleDateDefault('2026-07-17', '2026-07-23')).toBe('2026-07-17');
+  });
+
+  it('uses today when the option has not expired yet', () => {
+    expect(settleDateDefault('2026-07-31', '2026-07-23')).toBe('2026-07-23');
+  });
+
+  it('uses today on expiration day itself', () => {
+    expect(settleDateDefault('2026-07-23', '2026-07-23')).toBe('2026-07-23');
   });
 });

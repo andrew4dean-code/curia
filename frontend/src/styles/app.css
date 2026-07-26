@@ -74,6 +74,11 @@
 .wk-chip-text { min-width: 0; }
 .wk-seal { background: var(--maroon); color: var(--parchment); border-radius: 50%; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 16px; flex: none; box-shadow: 0 0 0 3px rgba(140, 43, 38, .16), 0 1px 3px rgba(0, 0, 0, .25); transition: transform .12s ease-out; }
 .wk-settled { display: block; width: 100%; min-height: 44px; text-align: left; background: none; border: none; font-family: var(--font-mono); font-size: 14px; padding: 12px 0 10px; }
+.wk-todo { display: inline-block; margin-left: 8px; padding: 2px 7px; border: 1px solid var(--maroon); border-radius: 999px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; color: var(--maroon); white-space: nowrap; }
+.wk-quiet { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; margin-top: 6px; border-top: 2px dashed var(--rule); padding: 14px 0 8px; font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); font-style: italic; }
+.wk-quiet-undo { min-height: 44px; padding: 0 6px; background: none; border: none; font-family: var(--font-mono); font-size: 13px; color: var(--gold-label); text-decoration: underline; }
+.wk-quiet-set { display: block; width: 100%; min-height: 44px; text-align: left; background: none; border: none; border-top: 2px dashed var(--rule); margin-top: 6px; padding: 10px 0 8px; font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); }
+.wk:not(.past) .wk-quiet-set:active, .wk:not(.past) .wk-quiet-undo:active { color: var(--maroon); }
 .toggle-row { display: flex; gap: 8px; margin-bottom: 12px; }
 .toggle-row button { flex: 1; text-align: center; padding: 12px 0; border-radius: 8px; font-family: var(--font-mono); font-size: 14px; border: 1px solid var(--rule); background: var(--parchment); color: var(--ink-soft); }
 .toggle-row button.on { background: var(--maroon); color: var(--parchment); border-color: var(--maroon); }
@@ -104,3 +109,4 @@
 .fresh-wheel-panel { display: block; width: 100%; text-align: center; background: var(--parchment-card); border: 2px dashed var(--rule); border-radius: 12px; padding: 22px 16px; margin: 12px 0; font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--maroon); }
 .fresh-wheel-panel small { display: block; font-family: var(--font-mono); font-size: 11px; font-weight: 400; color: var(--ink-soft); margin-top: 6px; }
 .fresh-wheel-crest { display: block; font-size: 34px; margin-bottom: 4px; }
+.sheet-note { margin: -4px 0 12px; padding: 8px 10px; border-left: 3px solid var(--gold-label); background: var(--parchment); font-family: var(--font-mono); font-size: 12px; line-height: 1.45; color: var(--ink-soft); }

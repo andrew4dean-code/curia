@@ -1,14 +1,11 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { createOption, updateOption } from '../lib/api';
+import { todayIso } from '../lib/time';
+import { wheelWindowNote } from '../lib/wheelMath';
 import { formatMoney } from '../lib/format';
-import type { OptionDraft, OptionPosition, OptionType } from '../lib/types';
+import type { OptionDraft, OptionPosition, OptionType, Wheel } from '../lib/types';
 import type { TicketData } from './TradeCeremony';
-
-const today = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
 
 function fmtDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
@@ -18,11 +15,13 @@ function fmtDate(iso: string): string {
 export function OptionSellSheet({
   expiration,
   option,
+  wheels,
   onDone,
   onCancel,
 }: {
   expiration: string;
   option?: OptionPosition | null;
+  wheels: Wheel[];
   onDone: (ticket: TicketData) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -32,13 +31,13 @@ export function OptionSellSheet({
   const [strike, setStrike] = useState(option ? String(option.strike) : '');
   const [contracts, setContracts] = useState(option ? String(option.contracts) : '1');
   const [premium, setPremium] = useState(option ? String(option.premium) : '');
-  const [fees, setFees] = useState(option ? String(option.fees) : '0');
-  const [date, setDate] = useState(option?.opened_at ?? today());
+  const [date, setDate] = useState(option?.opened_at ?? todayIso());
   const [note, setNote] = useState(option?.note ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   const take = (Number(premium) || 0) * 100 * (Number(contracts) || 0);
+  const wheelNote = wheelWindowNote(symbol, date, wheels);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -47,7 +46,7 @@ export function OptionSellSheet({
     const draft: OptionDraft = {
       symbol: symbol.trim().toUpperCase(), opt_type: optType, strike: Number(strike),
       expiration: exp, contracts: Number(contracts), premium: Number(premium),
-      fees: Number(fees) || 0, opened_at: date, note,
+      fees: 0, opened_at: date, note,
     };
     try {
       const saved = option ? await updateOption(option.id, draft) : await createOption(draft);
@@ -93,13 +92,10 @@ export function OptionSellSheet({
           <input id="os-premium" type="number" inputMode="decimal" step="any" min="0" value={premium} onChange={(e) => setPremium(e.target.value)} required />
         </div>
         <div className="field">
-          <label htmlFor="os-fees">Fees</label>
-          <input id="os-fees" type="number" inputMode="decimal" step="any" min="0" value={fees} onChange={(e) => setFees(e.target.value)} />
-        </div>
-        <div className="field">
           <label htmlFor="os-date">Date sold</label>
           <input id="os-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         </div>
+        {wheelNote && <div className="sheet-note">{wheelNote}</div>}
         <div className="field">
           <label htmlFor="os-note">Note (optional)</label>
           <input id="os-note" value={note} onChange={(e) => setNote(e.target.value)} />

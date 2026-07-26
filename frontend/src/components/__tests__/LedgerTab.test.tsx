@@ -13,6 +13,7 @@ const snap: Snapshot = {
   marks: [],
   options: [],
   wheels: [],
+  quietWeeks: [],
   fetchedAt: new Date().toISOString(),
 };
 
@@ -51,7 +52,7 @@ describe('LedgerTab', () => {
 
   it('empty ledger shows the honest empty state', () => {
     render(
-      <LedgerTab snap={{ trades: [], marks: [], options: [], wheels: [], fetchedAt: snap.fetchedAt }} {...cbs} />,
+      <LedgerTab snap={{ trades: [], marks: [], options: [], wheels: [], quietWeeks: [], fetchedAt: snap.fetchedAt }} {...cbs} />,
     );
     expect(screen.getByText(/No closed trades yet/)).toBeInTheDocument();
   });

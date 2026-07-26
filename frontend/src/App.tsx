@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './styles/app.css';
-import { ApiError, cachedSnapshot, clearPasscode, fetchSnapshot, getPasscode, refreshMarks } from './lib/api';
+import { ApiError, cachedSnapshot, clearPasscode, fetchSnapshot, getPasscode, markQuietWeek, clearQuietWeek, refreshMarks } from './lib/api';
 import type { Snapshot } from './lib/api';
 import type { OptionPosition, Trade, Wheel, WheelSummary } from './lib/types';
 import { PasscodeGate } from './components/PasscodeGate';
@@ -99,6 +99,8 @@ export default function App() {
     onEditOption: (option: OptionPosition) => setSheet({ kind: 'optionEdit', option }),
     onSellWeek: (expiration: string) => setSheet({ kind: 'sellOption', expiration }),
     onViewRecord: (option: OptionPosition) => setSheet({ kind: 'record', option }),
+    onMarkQuiet: (friday: string) => { void markQuietWeek(friday).then(() => refresh()); },
+    onClearQuiet: (friday: string) => { void clearQuietWeek(friday).then(() => refresh()); },
     onFreshWheel: () => setSheet({ kind: 'freshWheel' }),
     onCompleteWheel: (summary: WheelSummary) => setSheet({ kind: 'completeWheel', summary }),
     onAbandonWheel: (wheel: Wheel) => {
@@ -137,10 +139,10 @@ export default function App() {
         </button>
       )}
       {sheet?.kind === 'trade' && (
-        <AddTradeSheet trade={sheet.trade} onDone={onTicket} onDeleted={onDeleted} onCancel={() => setSheet(null)} />
+        <AddTradeSheet trade={sheet.trade} wheels={snap.wheels} onDone={onTicket} onDeleted={onDeleted} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'optionEdit' && (
-        <OptionSellSheet option={sheet.option} expiration={sheet.option.expiration} onDone={onTicket} onCancel={() => setSheet(null)} />
+        <OptionSellSheet option={sheet.option} expiration={sheet.option.expiration} wheels={snap.wheels} onDone={onTicket} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'record' && (
         <OptionRecordSheet option={sheet.option} onDone={async () => { setSheet(null); await refresh(); }} onCancel={() => setSheet(null)} />
@@ -183,7 +185,7 @@ export default function App() {
         />
       )}
       {sheet?.kind === 'sellOption' && (
-        <OptionSellSheet expiration={sheet.expiration} onDone={onTicket} onCancel={() => setSheet(null)} />
+        <OptionSellSheet expiration={sheet.expiration} wheels={snap.wheels} onDone={onTicket} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'mark' && (
         <MarkSheet symbol={sheet.symbol} onDone={async () => { setSheet(null); await refresh(); }} onCancel={() => setSheet(null)} />

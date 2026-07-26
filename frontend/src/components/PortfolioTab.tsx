@@ -20,6 +20,8 @@ export interface TabProps {
   onEditOption: (o: OptionPosition) => void;
   onSellWeek?: (expiration: string) => void;
   onViewRecord?: (o: OptionPosition) => void;
+  onMarkQuiet?: (friday: string) => void;
+  onClearQuiet?: (friday: string) => void;
   onFreshWheel?: () => void;
   onCompleteWheel?: (s: WheelSummary) => void;
   onAbandonWheel?: (w: Wheel) => void;

@@ -38,17 +38,19 @@ export interface Snapshot {
   marks: Mark[];
   options: OptionPosition[];
   wheels: Wheel[];
+  quietWeeks: string[];
   fetchedAt: string;
 }
 
 export async function fetchSnapshot(): Promise<Snapshot> {
-  const [trades, marks, options, wheels] = await Promise.all([
+  const [trades, marks, options, wheels, quietWeeks] = await Promise.all([
     request<Trade[]>('/api/trades'),
     request<Mark[]>('/api/marks'),
     request<OptionPosition[]>('/api/options'),
     request<Wheel[]>('/api/wheels'),
+    request<string[]>('/api/quiet-weeks'),
   ]);
-  const snap: Snapshot = { trades, marks, options, wheels, fetchedAt: new Date().toISOString() };
+  const snap: Snapshot = { trades, marks, options, wheels, quietWeeks, fetchedAt: new Date().toISOString() };
   localStorage.setItem(CACHE_STORAGE, JSON.stringify(snap));
   return snap;
 }
@@ -57,7 +59,8 @@ export function cachedSnapshot(): Snapshot | null {
   const raw = localStorage.getItem(CACHE_STORAGE);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as Snapshot;
+    const parsed = JSON.parse(raw) as Snapshot;
+    return { ...parsed, quietWeeks: parsed.quietWeeks ?? [] };
   } catch {
     localStorage.removeItem(CACHE_STORAGE);
     return null;
@@ -102,3 +105,7 @@ export const closeWheel = (id: number, closed_at?: string) =>
   });
 export const deleteWheel = (id: number) =>
   request<void>(`/api/wheels/${id}`, { method: 'DELETE' });
+export const markQuietWeek = (friday: string) =>
+  request<{ friday: string }>('/api/quiet-weeks', { method: 'POST', body: JSON.stringify({ friday }) });
+export const clearQuietWeek = (friday: string) =>
+  request<void>(`/api/quiet-weeks/${friday}`, { method: 'DELETE' });

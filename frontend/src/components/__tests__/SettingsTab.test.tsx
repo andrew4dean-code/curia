@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SettingsTab } from '../SettingsTab';
 import type { Snapshot } from '../../lib/api';
 
-const snap: Snapshot = { trades: [], marks: [], options: [], wheels: [], fetchedAt: new Date().toISOString() };
+const snap: Snapshot = { trades: [], marks: [], options: [], wheels: [], quietWeeks: [], fetchedAt: new Date().toISOString() };
 const cbs = { onRefresh: vi.fn(), onEditTrade: vi.fn(), onMark: vi.fn(), onSettleOption: vi.fn(), onEditOption: vi.fn() };
 
 describe('SettingsTab', () => {

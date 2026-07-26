@@ -10,8 +10,8 @@ const base: OptionPosition = {
   status: 'OPEN', closed_at: null, buyback_price: 0, close_fees: 0, assigned_trade_id: null,
 };
 
-function snapWith(options: OptionPosition[]): Snapshot {
-  return { trades: [], marks: [], options, wheels: [], fetchedAt: new Date().toISOString() };
+function snapWith(options: OptionPosition[], quietWeeks: string[] = []): Snapshot {
+  return { trades: [], marks: [], options, wheels: [], quietWeeks, fetchedAt: new Date().toISOString() };
 }
 
 const cbs = {
@@ -59,12 +59,13 @@ describe('OptionsTab board', () => {
     expect(onViewRecord).toHaveBeenCalledWith(settled);
   });
 
-  it('tapping an empty future week sells into that Friday; past weeks are inert', () => {
+  it('logs into past weeks as readily as future ones', () => {
     const onSellWeek = vi.fn();
     render(<OptionsTab snap={snapWith([])} {...cbs} onSellWeek={onSellWeek} />);
     fireEvent.click(screen.getByRole('button', { name: /sell the week of Aug 21/i }));
     expect(onSellWeek).toHaveBeenCalledWith('2026-08-21');
-    expect(screen.queryByRole('button', { name: /sell the week of Aug 7/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /log a trade for the week of Aug 7/i }));
+    expect(onSellWeek).toHaveBeenCalledWith('2026-08-07');
   });
 
   it('an occupied week still offers selling another option', () => {
@@ -72,6 +73,64 @@ describe('OptionsTab board', () => {
     render(<OptionsTab snap={snapWith([base])} {...cbs} onSellWeek={onSellWeek} />);
     fireEvent.click(screen.getByRole('button', { name: /sell the week of Aug 14/i }));
     expect(onSellWeek).toHaveBeenCalledWith('2026-08-14');
+  });
+
+  it('flags an open option whose expiration has passed', () => {
+    const stale = { ...base, expiration: '2026-08-07', opened_at: '2026-08-03' };
+    render(<OptionsTab snap={snapWith([stale])} {...cbs} onSellWeek={vi.fn()} />);
+    expect(screen.getByText(/needs settling/i)).toBeInTheDocument();
+  });
+
+  it('does not flag a live option or a settled one', () => {
+    const settled = { ...base, id: 4, expiration: '2026-08-07', status: 'EXPIRED' as const, closed_at: '2026-08-07' };
+    render(<OptionsTab snap={snapWith([base, settled])} {...cbs} onSellWeek={vi.fn()} />);
+    expect(screen.queryByText(/needs settling/i)).toBeNull();
+  });
+
+  it('offers the quiet mark on this week and earlier, never on a future week', () => {
+    render(<OptionsTab snap={snapWith([])} {...cbs} onSellWeek={vi.fn()} onMarkQuiet={vi.fn()} />);
+    // System time is Wed Aug 12 2026, so the live week is Fri Aug 14.
+    expect(screen.getByRole('button', { name: /didn't trade the week of Aug 7/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /didn't trade the week of Aug 14/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /didn't trade the week of Aug 21/i })).toBeNull();
+  });
+
+  it('marking a week calls back with its Friday', () => {
+    const onMarkQuiet = vi.fn();
+    render(<OptionsTab snap={snapWith([])} {...cbs} onSellWeek={vi.fn()} onMarkQuiet={onMarkQuiet} />);
+    fireEvent.click(screen.getByRole('button', { name: /didn't trade the week of Aug 7/i }));
+    expect(onMarkQuiet).toHaveBeenCalledWith('2026-08-07');
+  });
+
+  it('a marked week shows as quiet and offers to undo', () => {
+    const onClearQuiet = vi.fn();
+    render(<OptionsTab snap={snapWith([], ['2026-08-07'])} {...cbs} onSellWeek={vi.fn()} onMarkQuiet={vi.fn()} onClearQuiet={onClearQuiet} />);
+    expect(screen.getByText(/no trades this week/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /undo the quiet mark on Aug 7/i }));
+    expect(onClearQuiet).toHaveBeenCalledWith('2026-08-07');
+  });
+
+  it('a marked week holding a trade is not quiet — the trade wins, with no extra write', () => {
+    const inThatWeek = { ...base, expiration: '2026-08-07', opened_at: '2026-08-03' };
+    const onClearQuiet = vi.fn();
+    render(<OptionsTab snap={snapWith([inThatWeek], ['2026-08-07'])} {...cbs} onSellWeek={vi.fn()} onMarkQuiet={vi.fn()} onClearQuiet={onClearQuiet} />);
+    expect(screen.queryByText(/no trades this week/i)).toBeNull();
+    expect(onClearQuiet).not.toHaveBeenCalled();
+  });
+
+  it('a marked, empty week still offers its log button, wired to that week\'s Friday', () => {
+    const onSellWeek = vi.fn();
+    render(<OptionsTab snap={snapWith([], ['2026-08-07'])} {...cbs} onSellWeek={onSellWeek} onMarkQuiet={vi.fn()} onClearQuiet={vi.fn()} />);
+    expect(screen.getByText(/no trades this week/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /log a trade for the week of Aug 7/i }));
+    expect(onSellWeek).toHaveBeenCalledWith('2026-08-07');
+  });
+
+  it('logging into a marked week never clears the mark itself', () => {
+    const onClearQuiet = vi.fn();
+    render(<OptionsTab snap={snapWith([], ['2026-08-07'])} {...cbs} onSellWeek={vi.fn()} onMarkQuiet={vi.fn()} onClearQuiet={onClearQuiet} />);
+    fireEvent.click(screen.getByRole('button', { name: /log a trade for the week of Aug 7/i }));
+    expect(onClearQuiet).not.toHaveBeenCalled();
   });
 
   it('chevrons browse months', () => {
