@@ -52,8 +52,10 @@ export default function App() {
   const [justAdded, setJustAdded] = useState<{ kind: 'trade' | 'option'; id: number; symbol: string } | null>(null);
   const [strikingTradeId, setStrikingTradeId] = useState<number | null>(null);
   const [landing, setLanding] = useState(false);
+  const [cover, setCover] = useState(false);
   const landingTimer = useRef<number | null>(null);
   const strikeTimer = useRef<number | null>(null);
+  const coverTimer = useRef<number | null>(null);
 
   const clearLandingTimer = useCallback(() => {
     if (landingTimer.current !== null) {
@@ -69,10 +71,18 @@ export default function App() {
     }
   }, []);
 
+  const clearCoverTimer = useCallback(() => {
+    if (coverTimer.current !== null) {
+      window.clearTimeout(coverTimer.current);
+      coverTimer.current = null;
+    }
+  }, []);
+
   useEffect(() => () => {
     clearLandingTimer();
     clearStrikeTimer();
-  }, [clearLandingTimer, clearStrikeTimer]);
+    clearCoverTimer();
+  }, [clearLandingTimer, clearStrikeTimer, clearCoverTimer]);
 
   const refresh = useCallback(async () => {
     try {
@@ -101,6 +111,12 @@ export default function App() {
         onUnlocked={(s) => {
           setSnap(s);
           setUnlocked(true);
+          setCover(true);
+          clearCoverTimer();
+          coverTimer.current = window.setTimeout(() => {
+            coverTimer.current = null;
+            setCover(false);
+          }, 900);
         }}
       />
     );
@@ -281,6 +297,7 @@ export default function App() {
           window.scrollTo({ top: 0 });
         }}
       />
+      {cover && <div className="book-cover" aria-hidden="true" onAnimationEnd={() => setCover(false)} />}
     </div>
   );
 }

@@ -101,6 +101,45 @@ describe('App landing timer race', () => {
   });
 });
 
+describe('App cover', () => {
+  const emptySnapshot = { trades: [], marks: [], options: [], wheels: [], quietWeeks: [], fetchedAt: '2026-01-01T00:00:00.000Z' };
+
+  function stubApi() {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = init?.method ?? 'GET';
+      if (method === 'GET' && (url === '/api/trades' || url === '/api/marks' || url === '/api/options' || url === '/api/wheels' || url === '/api/quiet-weeks')) {
+        return new Response('[]', { status: 200 });
+      }
+      if (method === 'POST' && url === '/api/marks/refresh') {
+        return new Response('[]', { status: 200 });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  function renderUnlockedApp() {
+    localStorage.setItem('curia-passcode', 'test-key');
+    localStorage.setItem('curia-cache-v3', JSON.stringify(emptySnapshot));
+    stubApi();
+    render(<App />);
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  it('the app is present and interactive the moment it unlocks, cover or no cover', async () => {
+    renderUnlockedApp();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Options' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Options' }));
+    expect(screen.getByRole('button', { name: 'Next month' })).toBeInTheDocument();
+  });
+});
+
 describe('App strike timer race', () => {
   const twoTrades = {
     trades: [
