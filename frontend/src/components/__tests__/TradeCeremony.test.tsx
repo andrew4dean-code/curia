@@ -126,6 +126,50 @@ describe('TradeCeremony', () => {
     vi.useRealTimers();
   });
 
+  it('gives each folding panel a shading overlay and a contact shadow', () => {
+    vi.useFakeTimers();
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+    act(() => { vi.advanceTimersByTime(4300); });
+    expect(container.querySelectorAll('.fold-shade').length).toBeGreaterThanOrEqual(2);
+    expect(container.querySelector('.fold-contact')).not.toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('gives the folding panels a paper edge without colliding with the existing crease ::after', () => {
+    vi.useFakeTimers();
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+    act(() => { vi.advanceTimersByTime(4300); });
+    // .fold-panel::after already carries the crease highlight (see ceremony.css). The paper-edge
+    // hairline must be a real element rather than a second ::after rule on .fold-p0/.fold-p2 -- two
+    // same-specificity rules on one pseudo-element collide, and the later one silently drops the
+    // earlier rule's `background`, which would erase the crease highlight this task must not touch.
+    expect(container.querySelectorAll('.fold-edge').length).toBeGreaterThanOrEqual(2);
+    vi.useRealTimers();
+  });
+
+  it('does not let a second rule collide with .fold-panel::after, and lights both folding panels bright at their crease', () => {
+    // Read the CSS straight off disk so this pins the actual rules that ship, not a
+    // jsdom-mocked stand-in (jsdom computes no animation, so this class of bug is otherwise
+    // invisible to every test).
+    const testFilePath = new URL(import.meta.url).pathname;
+    const cssPath = testFilePath.replace(/components\/__tests__\/TradeCeremony\.test\.tsx$/, 'styles/ceremony.css');
+    const css = readFileSync(cssPath, 'utf8');
+
+    // Only one rule may declare a `background` on .fold-panel/.fold-p0/.fold-p2's ::after. A
+    // second one at equal specificity would silently overwrite the crease highlight's gradient.
+    const afterBackgroundRules = css.match(/\.fold-(?:panel|p0|p2)::after\s*\{[^}]*background/g) ?? [];
+    expect(afterBackgroundRules.length).toBe(1);
+
+    // .fold-shade's gradient is bright at its own local top, dark at its own local bottom.
+    // .fold-p2's crease is at ITS top (transform-origin 50% 0%), so it must stay unflipped to be
+    // bright at the crease. .fold-p0's crease is at ITS bottom (transform-origin 50% 100%), the
+    // opposite corner, so .fold-p0 is the one that needs the vertical flip -- flipping .fold-p2
+    // instead (an easy first-pass mistake) would leave both panels bright at the free edge and
+    // dark at the crease.
+    expect(css).toMatch(/\.fold-p0 \.fold-shade\s*\{\s*transform:\s*scaleY\(-1\)/);
+    expect(css).not.toMatch(/\.fold-p2 \.fold-shade\s*\{\s*transform:\s*scaleY\(-1\)/);
+  });
+
   it('the arm actually restrikes: data-strike alternates through printing, not just once', () => {
     const { container } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
     const arm = container.querySelector('.press-arm')!;

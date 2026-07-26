@@ -110,8 +110,11 @@ export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: 
                     <div className="ticket-line" key={l}>{l}</div>
                   ))}
                 </div>
+                <div className="fold-shade" />
+                {n !== 1 && <div className="fold-edge" />}
               </div>
             ))}
+            <div className="fold-contact" aria-hidden="true" />
           </div>
         )}
         <div className="envelope">

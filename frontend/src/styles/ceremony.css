@@ -60,6 +60,39 @@
 .ceremony[data-stage='fold'] .fold-p0::after { animation: crease .62s .70s ease-out both; }
 @keyframes crease { 0% { opacity: 0; } 45% { opacity: .85; } 100% { opacity: .3; } }
 
+/* ---- paper shading, contact shadow and edge thickness for the folding panels ----
+   .fold-panel::after is already claimed above for the crease highlight (the `crease`
+   keyframes fade its opacity over a two-tone gradient). A second ::after rule on
+   .fold-p0/.fold-p2 would be the exact silent collision this task was warned about:
+   same specificity as the rule above, so whichever comes later in the cascade would
+   win the `background` property outright and erase the crease gradient. So the
+   paper-edge hairline below (the third addition) uses a real `.fold-edge` element
+   instead of fighting `.fold-panel` for its ::after. */
+.fold-shade { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: linear-gradient(rgba(255,255,255,.34) 0%, rgba(255,255,255,.05) 26%, rgba(46,40,32,.22) 78%, rgba(46,40,32,.44) 100%); }
+/* .fold-shade's gradient is bright at its own local top, fading to shadow at its own
+   local bottom. .fold-p2's crease is at ITS top edge (transform-origin 50% 0%), so
+   the unflipped gradient already lands bright-at-crease there and needs no change.
+   .fold-p0's crease is at ITS bottom edge (transform-origin 50% 100%) -- the opposite
+   corner -- so .fold-p0 is the one that needs the vertical flip. Flipping .fold-p2
+   instead (the more obvious-looking fix, since it is the panel that folds upward)
+   would leave both panels bright at the free edge and dark at the crease. */
+.fold-p0 .fold-shade { transform: scaleY(-1); }
+.ceremony[data-stage='fold'] .fold-p2 .fold-shade { animation: shade-roll .62s cubic-bezier(.45,0,.2,1) both; }
+.ceremony[data-stage='fold'] .fold-p0 .fold-shade { animation: shade-roll .62s .70s cubic-bezier(.45,0,.2,1) both; }
+@keyframes shade-roll { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: .34; } }
+
+/* the paper-edge hairline: a sliver lighter than the face, at each folding panel's
+   crease, so the sheet reads as having thickness rather than being a flat decal. */
+.fold-edge { position: absolute; left: 0; right: 0; height: 1px; background: rgba(255,255,255,.6); pointer-events: none; }
+.fold-p0 .fold-edge { bottom: 0; }
+.fold-p2 .fold-edge { top: 0; }
+
+/* the contact shadow: cast by the folding panels onto the middle panel beneath them,
+   tightening in as the top panel (.fold-p0) comes down to close over the stack. */
+.fold-contact { position: absolute; left: 6%; right: 6%; top: 33.333%; height: 33.334%; pointer-events: none; opacity: 0; background: radial-gradient(120% 70% at 50% 0%, rgba(46,40,32,.42), rgba(46,40,32,0) 72%); z-index: 2; }
+.ceremony[data-stage='fold'] .fold-contact { animation: contact-drop .62s .70s cubic-bezier(.45,0,.2,1) both; }
+@keyframes contact-drop { 0% { opacity: 0; transform: scaleY(.4); } 100% { opacity: 1; transform: scaleY(1); } }
+
 /* ---- stage: envelope — wraps the folded packet, flap presses shut, seal stamps ---- */
 .ceremony[data-stage='envelope'] .fold { transform: rotateX(-88deg) scaleY(0.42); opacity: 0; transition: opacity 0.3s ease-out; }
 .ceremony[data-stage='envelope'] .envelope { animation: env-appear 0.32s cubic-bezier(.25, .9, .35, 1) both; }
