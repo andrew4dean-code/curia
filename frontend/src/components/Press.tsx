@@ -25,7 +25,7 @@
 //   * Everything below the nip is the machine, painted opaque over the sheet (`.press` is
 //     z-index 3 over `.ticket-wrap`), so the part of the sheet still wrapped round the platen
 //     is hidden by the machine rather than by a clip on the paper. That is why the body has to
-//     be as tall as it is: see MACHINE_H.
+//     be as tall as it is: see PRESS_VIEW_H.
 //   * The arm is painted ON the machine at every frame of its swing, so it is never a severed
 //     stub in mid-air and there is never a gap between arm and body.
 //
@@ -63,11 +63,12 @@ export const PRESS_HOME_X = PRESS_VIEW_W / 2; // 175 == the scene's centre line
 const SCENE_W = PRESS_VIEW_W - PRESS_OVERHANG * 2; // 290, and .ceremony-scene agrees
 
 // The bar. Authored AT CONTACT -- the untransformed pose is the strike -- so the head's top
-// edge is the one number that matters and it is 1.5px BELOW the nip, not flush with it: the
+// edge is the one number that matters and it is 2px BELOW the nip, not flush with it: the
 // per-character tilt rotates the slug about its own contact point, and at the largest tilt
-// (8 degrees, see tiltForChar) a 16px-wide head lifts a corner 16/2 * sin(8deg) = 1.11px. 1.5
-// keeps even that corner below the nip, so no part of the arm is ever painted on the page.
-const HEAD_TOP = 1.5;
+// (8 degrees, see tiltForChar) a 16px-wide head lifts a corner 16/2 * sin(8deg) = 1.11px. 2
+// keeps even that corner 0.89px below the nip, so no part of the arm is ever painted on the
+// page -- measured across the whole swing and every tilt, not reasoned about.
+const HEAD_TOP = 2;
 const HEAD_W = 16;
 const HEAD_H = 14;
 // The bar's rotation centre. It is NOT a real lever pivot: a type bar swings in a plane

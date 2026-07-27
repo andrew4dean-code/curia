@@ -184,7 +184,7 @@
    the platen. It used to start at translateY(110vh) and fly in from off-screen, which is not
    a thing paper does in a typewriter. .6s, so the sheet is seated at the instant typing
    starts (TYPE_START_MS = 600). */
-.ceremony[data-stage='print'] .ticket-wrap { animation: sheet-load .6s cubic-bezier(.2, .85, .3, 1) both; }
+.ceremony[data-stage='print'] .ticket-wrap { animation: sheet-load .6s cubic-bezier(.45, .06, .3, 1) both; }
 @keyframes sheet-load {
   0% { transform: translateY(150px); }
   78% { transform: translateY(-7px); }
@@ -635,11 +635,19 @@
   0% { transform: translateY(var(--sheet-from, 0px)); }
   100% { transform: translateY(0); }
 }
+/* THE MACHINE LEAVES OPAQUE, AND ONLY FADES ONCE IT IS PAST THE PAGE. A straight
+   fade-in-place was tried first and rendered badly: for the whole 260ms the sheet's lower half
+   showed THROUGH a semi-transparent platen and body, which reads as a dissolve, not as a page
+   coming out of a press. Sliding it down opaque means the paper is revealed by the machine
+   physically clearing it. 125px at 55% already puts the nip (scene 170) at 295, past the
+   sheet's bottom edge at 288, so nothing is ever revealed through translucency; the last 45%
+   is the machine leaving the frame. */
 .ceremony[data-print='eject'] .press,
-.ceremony[data-print='clear'] .press { animation: press-withdraw .26s cubic-bezier(.4,0,.75,.4) both; }
+.ceremony[data-print='clear'] .press { animation: press-withdraw .3s cubic-bezier(.45,0,.7,.5) both; }
 @keyframes press-withdraw {
   0% { transform: translateY(0); opacity: 1; }
-  100% { transform: translateY(96px); opacity: 0; }
+  55% { transform: translateY(125px); opacity: 1; }
+  100% { transform: translateY(200px); opacity: 0; }
 }
 
 /* ---- the settle stamp: outcome slams diagonally across the ticket, amount counts up beneath it ---- */

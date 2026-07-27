@@ -1,8 +1,8 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { STAGE_MS, TYPE_CHAR_MS, TYPE_START_MS, TradeCeremony } from '../TradeCeremony';
+import { EJECT_MS, SEAL_FLOOR_MS, STAGE_MS, TYPE_CHAR_MS, TYPE_START_MS, TradeCeremony } from '../TradeCeremony';
 import type { TicketData } from '../TradeCeremony';
-import { PRESS_HOME_X, PRESS_OVERHANG, PRESS_TOP_OFFSET, tiltForChar } from '../Press';
+import { NIP_Y, PRESS_HOME_X, PRESS_OVERHANG, PRESS_VIEW_H, tiltForChar } from '../Press';
 // @ts-expect-error -- no @types/node in this project; read the raw CSS source directly so the
 // test sees the real rules on disk, bypassing Vitest's mocked CSS-import handling (which returns
 // '' for .css imports under jsdom by default, so a normal `import` here would prove nothing).
@@ -63,16 +63,20 @@ function inked(container: HTMLElement): string[] {
 // the glyph just struck; .print-column is the zero-width anchor sitting after it.
 const FAKE_LEFT = 46;
 const FAKE_PITCH = 8.4;
-// the vertical half of the same idea. A one-line .ticket-head is 41.5px (22.5 line box + 8
-// padding + 1 rule + 10 margin); a wrapped one is a whole line box taller. The line pitch is 27
-// and the page rolls up 3px per line as it feeds, so the PAINTED top of line n moves by 24.
-const FAKE_PAD_TOP = 22;
-const FAKE_HEAD_H = 41.5;
-const FAKE_HEAD_WRAPPED = FAKE_HEAD_H + 22.5;
+// The vertical half of the same idea, and the numbers are the ones headless Chrome actually
+// reports for this stylesheet at 375x667 with the Georgia/monospace fallbacks: 2px dashed
+// border + 22px padding above a 38.5px head block (19.5 line box + 8 padding + 1 rule + 10
+// margin), then 27px per line. So line n's block box bottoms out 89.5 + 27n below the sheet's
+// own top edge. A WRAPPED head is one whole line box taller.
+const FAKE_PAD_TOP = 24;
+const FAKE_HEAD_H = 38.5;
+const FAKE_HEAD_WRAPPED = FAKE_HEAD_H + 19.5;
 const FAKE_LINE_PITCH = 27;
-const FAKE_FEED_ROLL = 3;
-const FAKE_GLYPH_DROP = 24; // 3px padding-top + 21px line box: where a line's glyphs bottom out
 const SCENE_H = 288;
+// how far line n's box bottoms out below the sheet's own top edge -- the ONLY vertical fact in
+// the whole model, and the component is not allowed to know it: it reads it off the DOM.
+const dropFor = (n: number, headHeight = FAKE_HEAD_H) =>
+  FAKE_PAD_TOP + headHeight + (n + 1) * FAKE_LINE_PITCH;
 
 function fakeRect(left: number, width: number, top = 0, bottom = 0): DOMRect {
   return {
@@ -81,16 +85,22 @@ function fakeRect(left: number, width: number, top = 0, bottom = 0): DOMRect {
   } as DOMRect;
 }
 
+// The sheet's box is reported with top 0 and the line boxes at their LAID-OUT offsets, with no
+// feed term anywhere -- which is exactly the shape of the real thing. The component computes
+// the feed as `line.bottom - sheet.top`, a difference between two boxes on the same transformed
+// element, so the transform cancels and the number it gets back is pure layout. (jsdom applies
+// no transforms at all, so that cancellation is proved in a browser, not here; what this stub
+// pins is that the component asks layout the right question.)
 function stubLayout(headHeight = FAKE_HEAD_H) {
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
     if (this.classList.contains('ceremony-scene')) return fakeRect(0, 290, 0, SCENE_H);
+    if (this.classList.contains('ticket')) return fakeRect(0, 290, 0, SCENE_H);
     const lineEl = this.closest('.ticket-line');
     if (!lineEl) return fakeRect(0, 0);
     const lines = Array.from(lineEl.parentElement!.querySelectorAll('.ticket-line'));
-    const i = lines.indexOf(lineEl);
-    // only the line being struck carries these, so its index IS the current feed
-    const top = FAKE_PAD_TOP + headHeight + i * (FAKE_LINE_PITCH - FAKE_FEED_ROLL);
-    const bottom = top + FAKE_GLYPH_DROP;
+    const bottom = dropFor(lines.indexOf(lineEl), headHeight);
+    const top = bottom - FAKE_LINE_PITCH;
+    if (lineEl === this) return fakeRect(20, 250, top, bottom);
     const typed = lineEl.querySelector('.tl-ink')?.textContent?.length ?? 0;
     if (this.classList.contains('tl-strike')) {
       return fakeRect(FAKE_LEFT + (typed - 1) * FAKE_PITCH, FAKE_PITCH, top, bottom);
@@ -103,15 +113,25 @@ function stubLayout(headHeight = FAKE_HEAD_H) {
 // every glyph of a ticket, newlines costing nothing -- i.e. the number of beats it takes to type
 const beatsFor = (t: TicketData) => t.lines.join('').length;
 
-// the carriage offset and the per-line feed, straight off the group that carries them
-function carrier(container: HTMLElement): { dx: number; feed: number } {
+// The carriage offset, and the arm's VERTICAL term beside it -- which must be zero on every
+// line, forever. That second number is the whole flip in one place.
+function carrier(container: HTMLElement): { dx: number; dy: number } {
   const m = container.querySelector('.press-carrier')!.getAttribute('transform')!
     .match(/translate\((-?[\d.]+),\s*(-?[\d.]+)\)/)!;
-  return { dx: Number(m[1]), feed: Number(m[2]) };
+  return { dx: Number(m[1]), dy: Number(m[2]) };
 }
 
-// the top of the clip band, in viewBox units: the strike line the whole machine is registered to
-const bandY = (container: HTMLElement) => Number(container.querySelector('#press-clip rect')!.getAttribute('y'));
+// how far down the sheet is sitting, in scene pixels, straight off the inline custom property
+function sheetFeed(container: HTMLElement): number {
+  const style = (container.querySelector('.ticket-wrap .ticket') as HTMLElement).style;
+  return Number(style.getPropertyValue('--sheet').replace('px', ''));
+}
+
+// where the line currently being typed bottoms out, IN SCENE PIXELS: the sheet's own offset
+// plus the line's offset within the sheet. This is the strike point, and invariant 1 is that it
+// is the same number for every line index.
+const strikeY = (container: HTMLElement, line: number, headHeight = FAKE_HEAD_H) =>
+  sheetFeed(container) + dropFor(line, headHeight);
 
 // the pivot the bar swings about, off the inline transform-origin
 function pivot(container: HTMLElement): { x: number; y: number } {
@@ -191,104 +211,182 @@ describe('TradeCeremony', () => {
     expect(container.querySelector('.press-head')).not.toBeNull();
   });
 
-  it('clips the arm so it can never cross the ticket, and fades the shaft out before the cut', () => {
+  it('has NO clip and NO mask on the arm: nothing is authored above the nip in the first place', () => {
+    // REWRITTEN, AND IT NOW ASSERTS THE OPPOSITE OF WHAT IT USED TO. The old test pinned a clip
+    // band and a fade mask -- the machinery that existed only because the machine was upside
+    // down: the platen sat at the TOP and the sheet hung DOWN from it, so the arm had to reach
+    // up across the printed page to get anywhere near the strike point, and then be cut and
+    // faded to hide the fact. What that produced was a severed dark stub floating in mid-page
+    // attached to nothing, which the owner rejected three times.
+    // The platen is at the BOTTOM now. The page is above the nip, the arm is below it, and the
+    // two cannot meet -- so there is nothing to hide and no clip to hide it with. A clip
+    // reappearing here means the geometry has gone wrong again.
     const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
-    const arm = container.querySelector('.press-arm')!;
-    expect(arm.getAttribute('clip-path')).toMatch(/press-clip/);
-    expect(container.querySelector('#press-clip')).not.toBeNull();
-
-    // The clip alone ends the bar in a hard horizontal cut across the ticket, which is the
-    // thing that reads as a stick. The shaft fades out above that edge instead -- and the fade
-    // must FINISH before the cut, or the guillotine line is still there at reduced opacity.
-    const shaft = container.querySelector('.press-shaft')!;
-    expect(shaft.getAttribute('mask')).toMatch(/arm-fade/);
-    const fadeEnd = Number(container.querySelector('#arm-fade-g')!.getAttribute('y2'));
-    const band = container.querySelector('#press-clip rect')!;
-    const bandBottom = Number(band.getAttribute('y')) + Number(band.getAttribute('height'));
-    // the fade is authored in the carrier's local space (line 0 here, so the two agree)
-    expect(fadeEnd).toBeLessThan(bandBottom);
+    const press = container.querySelector('.press')!;
+    expect(press.querySelector('clipPath')).toBeNull();
+    expect(press.querySelector('mask')).toBeNull();
+    for (const el of press.querySelectorAll('*')) {
+      expect(el.getAttribute('clip-path')).toBeNull();
+      expect(el.getAttribute('mask')).toBeNull();
+    }
+    expect(readCeremonyRules()).not.toMatch(/press-clip|arm-fade/);
   });
 
-  it('lands the head on the live print column, and keeps it inside the clip band on the third line', () => {
-    // REWRITTEN. The original only checked y: it was the regression test for strikeY moving with
-    // the line index while the head's `y` stayed hard-coded, which clipped the head away entirely
-    // on line three. Both halves of registration are asserted now, because the arm used to strike
-    // at a FIXED x while .ticket-line is centre-aligned and grows rightward -- the hammer never
-    // landed where the letter appeared. The x assertions are the new half; the y assertions are
-    // the original ones, kept verbatim in intent and re-pointed at .press-carrier (the head's
-    // parent is now the per-character tilt group, so the feed offset is read one level up).
+  it('authors every part of the press at or below the nip, so the arm can never paint on the page', () => {
+    // INVARIANT 2, pinned structurally. svg y 0 IS the nip (see .press { top } and NIP_Y), so
+    // "no part of the press is ever painted above the nip" reduces to two facts: nothing is
+    // drawn at a negative y, and the swing only ever moves the arm DOWN from its authored pose.
+    // Measured in headless Chrome to confirm the arithmetic: the arm's bounding box tops out at
+    // scene y 170.89 at full contact with the largest tilt (8 degrees) against a nip at 170.
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+    const press = container.querySelector('.press')!;
+    expect(press.getAttribute('viewBox')).toBe(`0 0 350 ${PRESS_VIEW_H}`);
+
+    // the head is the topmost thing the press draws, and it is held clear of the nip by more
+    // than the tilt can lift a corner: 16/2 * sin(8deg) = 1.11px
+    const head = container.querySelector('.press-head')!;
+    const headTop = Number(head.getAttribute('y'));
+    const lift = (Number(head.getAttribute('width')) / 2) * Math.sin((8 * Math.PI) / 180);
+    expect(headTop).toBeGreaterThan(lift);
+    // and 8 degrees really is the most any character can ask for
+    let worst = 0;
+    for (let code = 32; code < 127; code++) worst = Math.max(worst, Math.abs(tiltForChar(String.fromCharCode(code))));
+    expect(worst).toBe(8);
+
+    // nothing else in the drawing reaches above y = 0 either. Circles are checked as cy - r.
+    for (const el of press.querySelectorAll('rect, circle')) {
+      const y = el.tagName === 'circle'
+        ? Number(el.getAttribute('cy')) - Number(el.getAttribute('r'))
+        : Number(el.getAttribute('y'));
+      expect(y).toBeGreaterThanOrEqual(0);
+    }
+
+    // and the swing never lifts it: every keyframe pose is a translateY DOWN from contact.
+    const body = keyframes(readCeremonyCss(), 'press-hit-a');
+    const ys = Array.from(body.matchAll(/translateY\((-?[\d.]+)px\)/g)).map((m) => Number(m[1]));
+    expect(ys.length).toBeGreaterThan(3);
+    expect(Math.min(...ys)).toBe(0); // contact is the highest pose there is
+    expect(Math.max(...ys)).toBeGreaterThan(40); // and rest is a long way down inside the basket
+  });
+
+  it('reaches the machine at both ends of the swing, so it is never a stub floating in mid-air', () => {
+    // INVARIANT 3, and THE defect the owner rejected three times. The arm is drawn on top of an
+    // opaque machine body that covers the whole viewBox from the nip down, so "visually
+    // continuous with the machine" is the statement that the arm's own extent lies inside the
+    // body's -- at contact AND at rest. Rest is the deeper of the two: the base transform drops
+    // the arm 56px, and the shaft's base has to still be behind the front shell after that.
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+    const bodyRect = container.querySelector('.press-body rect')!;
+    const bodyTop = Number(bodyRect.getAttribute('y'));
+    const bodyBottom = bodyTop + Number(bodyRect.getAttribute('height'));
+
+    // the shaft runs from under the head down to the pivot
+    const shaft = container.querySelector('.press-shaft')!.getAttribute('d')!;
+    const shaftYs = Array.from(shaft.matchAll(/[ML][\d.]+ ([\d.]+)/g)).map((m) => Number(m[1]));
+    const shaftBase = Math.max(...shaftYs);
+
+    const css = readCeremonyCss();
+    const rest = Number(
+      css.match(/\n\.press-arm \{[^}]*transform:[^;]*translateY\(([\d.]+)px\)/)![1],
+    );
+    // at rest the base is pushed further down still, and it must not come out below the machine
+    expect(shaftBase + rest).toBeLessThanOrEqual(bodyBottom);
+    // ...and it must be behind the front shell rather than standing on open machine
+    const front = container.querySelector('.press-front-face')!.getAttribute('d')!;
+    const shellTop = Number(front.match(/Q-?[\d.]+ ([\d.]+)/)![1]);
+    expect(shaftBase).toBeGreaterThan(shellTop);
+    // at contact the head's top is inside the platen's band, which is the top of the machine
+    const platen = container.querySelector('.press-platen rect')!;
+    const platenTop = Number(platen.getAttribute('y'));
+    const platenBottom = platenTop + Number(platen.getAttribute('height'));
+    const headTop = Number(container.querySelector('.press-head')!.getAttribute('y'));
+    expect(headTop).toBeGreaterThanOrEqual(platenTop);
+    expect(headTop).toBeLessThan(platenBottom);
+  });
+
+  it('THE STRIKE Y IS THE SAME ON EVERY LINE: the sheet ratchets to the nip, the bar does not move', () => {
+    // INVARIANT 1, and the reason the whole machine was turned the right way up. The press used
+    // to carry the register: the arm, its clip band and its pivot were all pushed down 24px per
+    // line to chase the text, and every one of those three had to agree with the sheet's own
+    // 3px-per-line roll or the hammer landed off the glyph. It is the sheet that moves now. The
+    // bar has no vertical term at all, and the line being typed is brought TO it.
     stubLayout();
     const { container } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
     act(() => vi.advanceTimersByTime(TYPE_START_MS));
-    // 25 beats finish line one and 21 finish line two (their line breaks cost nothing), so beat
-    // 48 is the second character of the third line -- comfortably inside line index 2 and well
-    // within the print stage's typing window (600ms-4200ms for this fixture).
-    for (let i = 0; i < 48; i++) {
-      act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
-    }
+
+    // line 0 -- one beat in, so there is a struck glyph to measure the column off
+    act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
+    expect(inked(container)[0]).toBe('S');
+    const line0 = { strike: strikeY(container, 0), dy: carrier(container).dy, feed: sheetFeed(container) };
+
+    // line 1 -- 25 beats finish line one (its line break costs no beat), one more starts line two
+    for (let i = 0; i < 26; i++) act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
+    expect(inked(container)[1]).toBe('ST');
+    const line1 = { strike: strikeY(container, 1), dy: carrier(container).dy, feed: sheetFeed(container) };
+
+    // line 2
+    for (let i = 0; i < 21; i++) act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
+    expect(inked(container)[2]).toBe('AC');
+    expect(inked(container)[1]).toBe(longTicket.lines[1]); // line one really did finish
+    const line2 = { strike: strikeY(container, 2), dy: carrier(container).dy, feed: sheetFeed(container) };
+
+    // ONE NUMBER, THREE LINES. Break it by giving the arm a per-line offset again, or by making
+    // the feed anything other than one full line pitch, and all three of these diverge.
+    expect(line0.strike).toBeCloseTo(NIP_Y, 5);
+    expect(line1.strike).toBeCloseTo(NIP_Y, 5);
+    expect(line2.strike).toBeCloseTo(NIP_Y, 5);
+
+    // the arm carries no vertical term on any of them
+    expect([line0.dy, line1.dy, line2.dy]).toEqual([0, 0, 0]);
+
+    // and the sheet stepped by EXACTLY ONE LINE PITCH each time -- a ratchet, not a 3px roll
+    // against a 27px pitch, which is what the two halves of the old model disagreed by.
+    expect(line0.feed - line1.feed).toBeCloseTo(FAKE_LINE_PITCH, 5);
+    expect(line1.feed - line2.feed).toBeCloseTo(FAKE_LINE_PITCH, 5);
+  });
+
+  it('lands the head on the live print column, and tracks it character by character', () => {
+    // The horizontal half of registration, unchanged by the flip and unchanged here: the arm
+    // used to strike at a FIXED x while .ticket-line is centre-aligned and grows rightward, so
+    // the hammer never landed where the letter appeared. Space Mono is a Google-hosted webfont
+    // on an offline-first PWA, so a hardcoded character pitch is wrong on every cold start.
+    stubLayout();
+    const { container } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
+    act(() => vi.advanceTimersByTime(TYPE_START_MS));
+    for (let i = 0; i < 48; i++) act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
     expect(inked(container)[2]).toBe('AC');
 
-    // x: the head's centre sits on the centre of the cell the letter just landed in -- the
-    // second cell of the line here, i.e. FAKE_LEFT + 1.5 advances -- in scene pixels. Measuring
-    // the anchor AFTER the ink instead would put it half a character to the right of the letter
-    // it had just struck, for the whole beat that letter was on screen.
-    const { dx, feed } = carrier(container);
-    const headSceneX = PRESS_HOME_X + dx - PRESS_OVERHANG;
-    expect(headSceneX).toBeCloseTo(FAKE_LEFT + 1.5 * FAKE_PITCH, 1);
+    // the head's centre sits on the centre of the cell the letter just landed in -- the second
+    // cell of the line here, i.e. FAKE_LEFT + 1.5 advances -- in scene pixels. Measuring the
+    // anchor AFTER the ink instead would put it half a character right of the letter it had
+    // just struck, for the whole beat that letter was on screen.
+    const { dx } = carrier(container);
+    expect(PRESS_HOME_X + dx - PRESS_OVERHANG).toBeCloseTo(FAKE_LEFT + 1.5 * FAKE_PITCH, 1);
 
-    // and it TRACKS: one more character moves the carriage by exactly one measured advance,
-    // which the component never knew and could not have hardcoded.
     act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
     expect(inked(container)[2]).toBe('ACC');
     expect(carrier(container).dx - dx).toBeCloseTo(FAKE_PITCH, 2);
-
-    // y: REPOINTED AT THE MEASUREMENT. It used to read `expect(feed).toBe(2 * 24)`, which
-    // pinned the hardcoded register -- and the hardcode was the defect: 96 + 24 assumed
-    // .ticket-head was one 22.5px line box, and rendered at the real 250px content width every
-    // ticket title wrapped in Georgia Bold, the fallback that paints on a cold start. The strike
-    // line must equal the measured bottom of the struck glyph, converted from scene pixels to
-    // viewBox units, and nothing else.
-    const glyphBottom = container.querySelector('.tl-strike')!.getBoundingClientRect().bottom;
-    expect(bandY(container)).toBeCloseTo(glyphBottom + PRESS_TOP_OFFSET, 5);
-    // ...and the line is the third one, painted 24px per line below the first (27px of pitch
-    // less the 3px the page rolls up at each feed), so the measurement really did move.
-    expect(feed).toBeCloseTo(2 * 24 + (FAKE_PAD_TOP + FAKE_HEAD_H + FAKE_GLYPH_DROP + PRESS_TOP_OFFSET - 120), 5);
-
-    const head = container.querySelector('.press-head')!;
-    const headY = Number(head.getAttribute('y')) + feed;
-    const headHeight = Number(head.getAttribute('height'));
-    const clipRect = container.querySelector('#press-clip rect')!;
-    const clipY = Number(clipRect.getAttribute('y'));
-    const clipHeight = Number(clipRect.getAttribute('height'));
-    expect(headY).toBeGreaterThanOrEqual(clipY);
-    expect(headY + headHeight).toBeLessThanOrEqual(clipY + clipHeight);
   });
 
-  it('reads the vertical register off the line, so a header that WRAPS cannot put the shaft through the text', () => {
-    // THE DEFECT THIS PINS. Press.tsx computed the strike line as 96 + 24, which assumes
-    // .ticket-head occupies exactly one 22.5px line box. Measured in headless Chrome against the
-    // real 250px content box in Georgia Bold -- the declared fallback in --font-display, and so
-    // the FIRST PAINT of every ceremony, because Playfair Display is fetched from Google Fonts
-    // with display=swap on an offline-first PWA:
-    //     "CURIA · TRADE TICKET Nº 47"     257.6px   wraps
-    //     "CURIA · OPTION TICKET Nº 47"    266.3px   wraps
-    //     "CURIA · POSITION CLOSED Nº 47"  289.8px   wraps
-    // Rendered: the head came out 54px tall instead of 31.5, every .ticket-line moved down 22.5px
-    // and the clip band stayed put, so the head sat 21.84px ABOVE the glyph it was striking and
-    // the masked shaft ran straight down through the printed line. Both ends are fixed -- the
-    // header no longer wraps (below) and the register is measured -- and this asserts the second:
-    // whatever height the head takes, the strike line lands on the line's own glyphs.
+  it('absorbs a header that WRAPS into the sheet feed, without moving the strike point at all', () => {
+    // REWRITTEN AGAINST THE NEW MODEL. The defect this used to guard was real: the press
+    // computed its strike line as 96 + 24, which assumed .ticket-head was one 22.5px line box,
+    // and every ticket title wrapped to two lines in Georgia Bold -- the declared fallback in
+    // --font-display, and therefore the FIRST PAINT of every ceremony, since Playfair Display
+    // is fetched from Google Fonts with display=swap. The head came out a whole line box taller,
+    // every .ticket-line moved down, the clip band stayed put, and the shaft drew straight
+    // through the printed line.
+    // With the machine the right way up that class of failure cannot express itself: a taller
+    // header pushes the line further down THE SHEET, and the feed simply carries the sheet less
+    // far up. The strike point is a fixed scene y either way. So this now asserts the stronger
+    // statement -- the register does not move, and the feed is what changed.
     function registerWithHead(headHeight: number) {
       stubLayout(headHeight);
       const { container, unmount } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
       act(() => vi.advanceTimersByTime(TYPE_START_MS));
       for (let i = 0; i < 48; i++) act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
       expect(inked(container)[2]).toBe('AC'); // line index 2, the worst case for register
-      const out = {
-        band: bandY(container),
-        glyphBottom: container.querySelector('.tl-strike')!.getBoundingClientRect().bottom,
-        headY: Number(container.querySelector('.press-head')!.getAttribute('y')) + carrier(container).feed,
-      };
+      const out = { strike: strikeY(container, 2, headHeight), feed: sheetFeed(container) };
       unmount();
       vi.restoreAllMocks();
       return out;
@@ -297,14 +395,11 @@ describe('TradeCeremony', () => {
     const flat = registerWithHead(FAKE_HEAD_H);
     const wrapped = registerWithHead(FAKE_HEAD_WRAPPED);
 
-    // the strike line IS the struck glyph's bottom edge, in both layouts
-    expect(flat.band).toBeCloseTo(flat.glyphBottom + PRESS_TOP_OFFSET, 5);
-    expect(wrapped.band).toBeCloseTo(wrapped.glyphBottom + PRESS_TOP_OFFSET, 5);
-    // and it MOVED by the whole extra line the wrapped header ate. With the register computed
-    // instead of measured both of these are the same number and this is the assertion that fails.
-    expect(wrapped.band - flat.band).toBeCloseTo(FAKE_HEAD_WRAPPED - FAKE_HEAD_H, 5);
-    // the head stays 2px inside the band it opened, so the clip never shaves it
-    expect(wrapped.headY - wrapped.band).toBeCloseTo(flat.headY - flat.band, 5);
+    // the strike point is the nip, in both layouts, to the pixel
+    expect(flat.strike).toBeCloseTo(NIP_Y, 5);
+    expect(wrapped.strike).toBeCloseTo(NIP_Y, 5);
+    // and the whole extra line the wrapped header ate came out of the FEED, not the register
+    expect(flat.feed - wrapped.feed).toBeCloseTo(FAKE_HEAD_WRAPPED - FAKE_HEAD_H, 5);
   });
 
   it('does not let the ticket header wrap in the first place', () => {
@@ -336,46 +431,45 @@ describe('TradeCeremony', () => {
     expect(line).not.toMatch(/pre-wrap|pre-line|normal/);
   });
 
-  it('swings the bar about a pivot that rides the carriage in BOTH axes', () => {
-    // Press.tsx set transform-origin to `${PRESS_HOME_X + dx}px ${PIVOT_Y}px` -- x tracked the
-    // carriage, y was the constant 258 -- while the carrier translated by (dx, armOffset). So the
-    // pivot stayed put as the head went down the page and THE LEVER SHORTENED: 136px on line 0,
-    // 112 on line 1, 88 on line 2. Identical swing keyframes then drew a 35% smaller arc by line
-    // three and parked the rest pose 18.9 / 15.6 / 12.2px left of the column.
+  it('swings the bar about a pivot whose height is a CONSTANT, so the lever cannot change length', () => {
+    // REWRITTEN. Press.tsx set transform-origin to `${PRESS_HOME_X + dx}px ${PIVOT_Y}px` -- x
+    // tracked the carriage, y was a constant 258 -- while the carrier translated by
+    // (dx, armOffset). The pivot stayed put as the head went down the page and THE LEVER
+    // SHORTENED: 136px on line 0, 112 on line 1, 88 on line 2, so identical swing keyframes drew
+    // a 35% smaller arc by line three. The fix at the time was to make the pivot ride the line
+    // too. The fix now is that NOTHING rides the line: the head does not move down the page, so
+    // the pivot has nothing to follow and the lever is one length by construction.
     stubLayout();
     const { container } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
     act(() => vi.advanceTimersByTime(TYPE_START_MS + TYPE_CHAR_MS));
-    const headYAttr = Number(container.querySelector('.press-head')!.getAttribute('y'));
-    const first = { pivot: pivot(container), feed: carrier(container).feed };
+    const first = pivot(container);
 
     for (let i = 0; i < 47; i++) act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
-    expect(inked(container)[2]).toBe('AC'); // two lines further down
-    const third = { pivot: pivot(container), feed: carrier(container).feed };
+    expect(inked(container)[2]).toBe('AC'); // two lines further down the sheet
+    const third = pivot(container);
 
-    expect(third.feed).toBeGreaterThan(first.feed); // the head really did move down
-    // the pivot moved with it, by exactly the same amount
-    expect(third.pivot.y - first.pivot.y).toBeCloseTo(third.feed - first.feed, 5);
-    // which is the same statement as: the lever is the same length on every line
-    expect(third.pivot.y - (headYAttr + third.feed)).toBeCloseTo(first.pivot.y - (headYAttr + first.feed), 5);
+    expect(third.y).toBe(first.y); // the pivot did not move at all
+    expect(third.x).not.toBe(first.x); // ...while the carriage plainly did
+    // the lever: pivot to head, the same on both
+    const headY = Number(container.querySelector('.press-head')!.getAttribute('y'));
+    expect(third.y - headY).toBe(first.y - headY);
   });
 
-  it('ratchets the page feed instead of easing it under the strike', () => {
+  it('ratchets the sheet feed instead of easing it under the strike', () => {
     // `.ticket` rolled up 3px per line under `transition: transform .13s steps(2, end)` while the
     // press jumped its whole line offset inside the React commit. Scrubbed in headless Chrome:
     // steps(2, end) holds the OLD position for 0-64ms and the halfway one for 65-129ms, so at a
     // 48ms beat the first THREE strikes of every line after the first landed on paper that was
     // 3px or 1.5px out -- and a box read in a layout effect reports the pre-transition value, so
     // it made the measured register stale as well. A platen ratchets; it does not ease.
-    const feed = readCeremonyRules().match(/\.ceremony\[data-stage='print'\] \.ticket \{([^}]*)\}/)![1];
-    expect(feed).toMatch(/transform:\s*translateY/);
-    const transition = feed.match(/transition:[^;]*/);
-    if (transition) {
-      const secs = Number(transition[0].match(/([\d.]+)m?s/)![1]);
-      const ms = /ms/.test(transition[0]) ? secs : secs * 1000;
-      expect(ms).toBeLessThan(TYPE_CHAR_MS); // at most, inside a single character beat
-    } else {
-      expect(transition).toBeNull(); // a step change: nothing to interpolate
-    }
+    // The rule is scoped to .ticket-wrap now, so the settle ceremony's .settle-ticket (which
+    // shares the .ticket class and has no wrapper) keeps its own transform.
+    const rules = readCeremonyRules();
+    const feed = rules.match(/\.ticket-wrap \.ticket \{([^}]*translateY[^}]*)\}/)![1];
+    expect(feed).toMatch(/transform:\s*translateY\(var\(--sheet/);
+    expect(feed).not.toMatch(/transition/);
+    // and the 3px-per-line roll it replaces is gone outright, not left beside it
+    expect(rules).not.toMatch(/--feed/);
   });
 
   it('parks the bar on the centre line until something has actually been measured', () => {
@@ -429,26 +523,63 @@ describe('TradeCeremony', () => {
     expect(container.querySelector('.press-arm')!.getAttribute('data-strike')).toBe('1');
   });
 
-  it('does not swing at a page with nothing on it yet', () => {
-    // The arm is on screen from the first frame -- the machine is there before the paper is --
-    // but the print stage opens with the ticket still flying up into the platen, and a strike
-    // then is a strike at nothing. data-strike="idle" matches neither strike rule, so the bar
-    // just sits at rest until there is a character to hit.
+  it('parks the bar at rest INSIDE the machine before typing starts, never lit and motionless in mid-air', () => {
+    // INVARIANT 5, and it was measured broken in the live app: `.press-arm` declared opacity 0
+    // with `.ceremony[data-typing='yes'] .press-arm { opacity: 1 }` on top -- and data-typing is
+    // 'yes' from ceremony MOUNT, so what actually shipped was a fully lit bar with
+    // `animation: none` hanging over an empty page for the whole 600ms pre-roll. A stick, parked
+    // in the air, before a single character had been typed.
+    // The bar is a part of the machine now: always visible, at rest down in the basket, painted
+    // on an opaque body. So the fix is asserted at both ends -- nothing gates its visibility,
+    // and its resting pose is a long way below the nip.
     const { container } = render(<TradeCeremony ticket={longTicket} onDone={vi.fn()} />);
     const arm = container.querySelector('.press-arm')!;
-    expect(arm.getAttribute('data-strike')).toBe('idle');
+    expect(arm.getAttribute('data-strike')).toBe('idle'); // matches neither strike rule
     act(() => vi.advanceTimersByTime(TYPE_START_MS + TYPE_CHAR_MS));
     expect(arm.getAttribute('data-strike')).toBe('1');
 
+    const css = readCeremonyCss();
+    const base = css.match(/\n\.press-arm \{([^}]*)\}/)![1];
+    expect(base).not.toMatch(/opacity/); // nothing to fade in, nothing to be caught half-faded
+    expect(readCeremonyRules()).not.toMatch(/\[data-typing='yes'\] \.press-arm \{[^}]*opacity/);
+
+    // rest is deep in the basket: below the platen, which is the top 46px of the machine
+    const restDrop = Number(base.match(/translateY\(([\d.]+)px\)/)![1]);
+    const platen = container.querySelector('.press-platen rect')!;
+    const platenBottom = Number(platen.getAttribute('y')) + Number(platen.getAttribute('height'));
+    const headTop = Number(container.querySelector('.press-head')!.getAttribute('y'));
+    expect(headTop + restDrop).toBeGreaterThan(platenBottom);
+
     // and the parked pose has to BE the rest pose, or the first strike starts with a jump --
     // the same defect as the old press-hit-a/press-hit-b handover, just at the top of the stage.
+    const rest = keyframes(css, 'press-hit-a').match(/0%\s*\{\s*transform:\s*([^;]+);/)![1].trim();
+    expect(base.match(/transform:\s*([^;]+);/)![1].trim()).toBe(rest);
+  });
+
+  it('pins the nip: the CSS top, the TS constant and the viewBox are one coordinate system', () => {
+    // svg y 0 has to BE the nip, or every "nothing above the nip" statement in this file is
+    // about a different line than the one the sheet is registered to. Three things have to
+    // agree: .press { top } in the stylesheet, NIP_Y in Press.tsx (which the feed is computed
+    // from), and a viewBox that is 1:1 with CSS pixels in BOTH axes so a user unit is a pixel.
     const css = readCeremonyCss();
-    const base = css.match(/\n\.press-arm\s*\{[^}]*transform:\s*([^;]+);/)![1].trim();
-    const rest = css
-      .match(/@keyframes press-hit-a\s*\{([^@]*?)\n\}/)![1]
-      .match(/0%\s*\{\s*transform:\s*([^;]+);/)![1]
-      .trim();
-    expect(base).toBe(rest);
+    const press = css.match(/\n\.press \{([^}]*)\}/)![1];
+    expect(Number(press.match(/top:\s*(-?[\d.]+)px/)![1])).toBe(NIP_Y);
+    expect(Number(press.match(/height:\s*([\d.]+)px/)![1])).toBe(PRESS_VIEW_H);
+    const bleed = Number(press.match(/left:\s*-([\d.]+)px/)![1]);
+    expect(bleed).toBe(PRESS_OVERHANG);
+    const sceneW = Number(css.match(/\.ceremony-scene \{[^}]*width:\s*(\d+)px/)![1]);
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+    const viewBox = container.querySelector('.press')!.getAttribute('viewBox')!.split(' ').map(Number);
+    expect(viewBox[2]).toBe(sceneW + bleed * 2);
+    expect(viewBox[3]).toBe(PRESS_VIEW_H);
+
+    // THE MACHINE HAS TO BE TALL ENOUGH TO HIDE THE WRAPPED PART OF THE SHEET. There is no clip
+    // on the paper -- the body is simply opaque over it -- so the drawing must reach from the
+    // nip down past the sheet's own bottom edge at the moment line 0 is at the nip. That is
+    // (sheet height - line 0's drop) below the nip, and it does not depend on NIP_Y: moving the
+    // nip moves the sheet with it. Measured in Chrome: 288 - 89.5 = 198.5px.
+    const sheetH = Number(css.match(/\.ticket-wrap \.ticket \{[^}]*min-height:\s*(\d+)px/)![1]);
+    expect(PRESS_VIEW_H).toBeGreaterThanOrEqual(sheetH - dropFor(0));
   });
 
   it('gives the same letter the same face every time it is struck', () => {
@@ -599,13 +730,94 @@ describe('TradeCeremony', () => {
     expect(root.getAttribute('data-typing')).toBe('no');
   });
 
-  it('gates the arm on data-typing, so the grace beat is what keeps it lit', () => {
-    // The visibility and the strike hang off the same flag, which is the reason the flag going
-    // false one beat early took the arm, the swing and the carriage with it in one go.
+  it('gates only the STRIKE on data-typing, never the arm itself', () => {
+    // The visibility and the strike used to hang off the same flag, which is why the flag going
+    // false one beat early took the arm, the swing and the carriage with it in one go -- and why
+    // the arm was a lit stick for the whole pre-roll. The strike still needs the gate (a swing
+    // at a page with nothing on it is a swing at nothing); the arm does not.
     const rules = readCeremonyRules();
-    expect(rules).toMatch(/\.ceremony\[data-typing='yes'\] \.press-arm \{[^}]*opacity:\s*1/);
     expect(rules).toMatch(/\.ceremony\[data-typing='yes'\] \.press-arm\[data-strike='0'\]/);
     expect(rules).toMatch(/\.ceremony\[data-typing='yes'\] \.press-arm\[data-strike='1'\]/);
+    expect(rules).not.toMatch(/\.ceremony\[data-typing='yes'\] \.press-arm \{/);
+  });
+
+  it('rolls the sheet clear of the machine and leaves it exactly where the fold expects it', () => {
+    // INVARIANT 4, AND THE HANDOFF. .fold is inset:0 over the scene and its panels are thirds of
+    // it, so the fold stage draws the page at its LAID-OUT position -- translateY(0). The sheet
+    // spends the whole print stage displaced downward (that displacement is what puts each line
+    // on the nip), so something has to put it back, and that something is the eject: one roll of
+    // the platen the instant the last character is struck. If it did not happen, the page would
+    // jump by a whole feed at 4200ms as the fold took over.
+    stubLayout();
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+    const root = container.querySelector('[data-stage]')!;
+    const sheet = container.querySelector('.ticket-wrap .ticket') as HTMLElement;
+
+    act(() => vi.advanceTimersByTime(TYPE_START_MS + TYPE_CHAR_MS));
+    expect(root.getAttribute('data-print')).toBe('type');
+    expect(sheetFeed(container)).toBeGreaterThan(0); // down inside the press, line 0 at the nip
+
+    // Type it out ONE BEAT PER act(), because that is what a browser does. Advancing the whole
+    // run inside a single act() lets React batch every tick into one render, so the sheet never
+    // visits the intermediate lines at all -- which is a fair model of a dropped frame but not
+    // of normal playback, and it is not what is being tested here.
+    for (let i = 1; i < beatsFor(ticket); i++) act(() => vi.advanceTimersByTime(TYPE_CHAR_MS));
+    expect(inked(container)).toEqual(ticket.lines);
+    const lastLine = sheetFeed(container);
+    expect(lastLine).toBeCloseTo(NIP_Y - dropFor(ticket.lines.length - 1), 5);
+
+    act(() => vi.advanceTimersByTime(TYPE_CHAR_MS)); // the grace beat: the platen lets go
+    expect(root.getAttribute('data-print')).toBe('eject');
+    expect(sheetFeed(container)).toBe(0);
+    // ...starting from exactly where the sheet was on the previous painted frame, so the
+    // roll-out has no jump in it. Both come off the same `feed` state, so --sheet-from is the
+    // previous --sheet by construction, however the beats happen to batch.
+    expect(Number(sheet.style.getPropertyValue('--sheet-from').replace('px', ''))).toBeCloseTo(lastLine, 5);
+
+    // on to the fold boundary: TYPE_START_MS plus one beat per glyph plus the grace beat is
+    // where we are now, so run out the rest of the 4200ms print stage and one tick over.
+    const elapsed = TYPE_START_MS + (beatsFor(ticket) + 1) * TYPE_CHAR_MS;
+    act(() => vi.advanceTimersByTime(STAGE_MS[0][1] - elapsed + 1));
+    expect(root.getAttribute('data-stage')).toBe('fold');
+    expect(root.getAttribute('data-print')).toBe('clear');
+    expect(sheetFeed(container)).toBe(0); // still home when the fold panels take over
+
+    // and the press goes with it: the machine cannot still be lying over the bottom third of
+    // the page when the seal presses into it.
+    const rules = readCeremonyRules();
+    expect(rules).toMatch(/\[data-print='eject'\] \.press,\s*\.ceremony\[data-print='clear'\] \.press \{ animation: press-withdraw/);
+    const withdraw = keyframes(readCeremonyCss(), 'press-withdraw');
+    const drop = Number(withdraw.match(/100%\s*\{[^}]*translateY\(([\d.]+)px\)/)![1]);
+    const sheetH = Number(readCeremonyCss().match(/\.ticket-wrap \.ticket \{[^}]*min-height:\s*(\d+)px/)![1]);
+    expect(NIP_Y + drop).toBeGreaterThan(sheetH); // the nip ends up below the page entirely
+  });
+
+  it('stamps the seal AFTER the final character, on the longest ticket as well as the shortest', () => {
+    // INVARIANT 6, and it was measured wrong before: the seal carried a hardcoded 3.72s delay,
+    // tuned against a two-line trade, while a full three-line option ticket types until ~3720ms.
+    // On those the wax pressed onto the page before its own last glyph. Both the eject and the
+    // seal hang off printDone now, so the ordering is structural rather than arithmetic.
+    for (const fixture of [ticket, longTicket]) {
+      const { container, unmount } = render(<TradeCeremony ticket={fixture} onDone={vi.fn()} />);
+      const root = container.querySelector('[data-stage]')!;
+      // one beat short of the end: the last character is not down yet
+      act(() => vi.advanceTimersByTime(TYPE_START_MS + TYPE_CHAR_MS * beatsFor(fixture)));
+      expect(inked(container)).toEqual(fixture.lines);
+      expect(root.getAttribute('data-print')).not.toBe('clear');
+
+      act(() => vi.advanceTimersByTime(TYPE_CHAR_MS)); // the grace beat releases the sheet
+      expect(root.getAttribute('data-print')).toBe('eject');
+      act(() => vi.advanceTimersByTime(SEAL_FLOOR_MS)); // ...and well past any floor
+      expect(root.getAttribute('data-print')).toBe('clear');
+      unmount();
+    }
+
+    // the wax is bound to that state, not to a stopwatch
+    const rules = readCeremonyRules();
+    expect(rules).toMatch(/\.ceremony\[data-print='clear'\] \.ticket-seal \{ animation: seal-stamp/);
+    expect(rules).not.toMatch(/\[data-stage='print'\] \.ticket-seal/);
+    // and the eject is never instant: the platen has to be seen to turn
+    expect(EJECT_MS).toBeGreaterThan(100);
   });
 
   // REWRITTEN from 'draws an envelope with four distinct flaps'. That test asserted the
@@ -1009,39 +1221,66 @@ describe('TradeCeremony', () => {
     expect(anchor).not.toMatch(/animation/);
   });
 
-  it('draws a machine wider than the paper: platen knobs and a rail that overhang the card', () => {
+  it('draws a machine wider than the paper, and opaque across all of it below the nip', () => {
     // "The typewriter stick still looks fake." A bare tapered shaft behind a card is a stick; a
-    // platen with end knobs and a rail running past both edges of the paper is a machine. The
-    // silhouette is the deliverable here, not typehead detail.
+    // platen with end knobs, a basket, a comb and keys running past both edges of the paper is a
+    // machine. The silhouette is the deliverable here, not typehead detail.
     const css = readCeremonyCss();
     const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
-
     const sceneW = Number(css.match(/\.ceremony-scene\s*\{[^}]*width:\s*(\d+)px/)![1]);
-    const bleed = Number(css.match(/\n\.press\s*\{[^}]*left:\s*-(\d+)px/)![1]);
-    const viewW = Number(container.querySelector('.press')!.getAttribute('viewBox')!.split(' ')[2]);
-    // one user unit must stay one CSS pixel, or every measured y in Press.tsx is void
-    expect(viewW).toBe(sceneW + bleed * 2);
-    expect(bleed).toBe(PRESS_OVERHANG);
+    const bleed = PRESS_OVERHANG;
 
     // both knobs, and both of them project past the card
     const knobs = Array.from(container.querySelectorAll('.press-knob'));
     expect(knobs).toHaveLength(2);
     const edges = knobs.map((k) => {
       const c = k.querySelector('circle')!;
-      const cx = Number(c.getAttribute('cx'));
-      const r = Number(c.getAttribute('r'));
-      return [cx - r - bleed, cx + r - bleed]; // in scene pixels
+      return [Number(c.getAttribute('cx')) - Number(c.getAttribute('r')) - bleed,
+        Number(c.getAttribute('cx')) + Number(c.getAttribute('r')) - bleed];
     });
     expect(Math.min(...edges.map((e) => e[0]))).toBeLessThan(0);
     expect(Math.max(...edges.map((e) => e[1]))).toBeGreaterThan(sceneW);
 
-    // the rail runs the full width, also past the card, and carries two margin stops
-    const rail = container.querySelector('.press-rail rect')!;
-    expect(Number(rail.getAttribute('x')) - bleed).toBeLessThan(0);
-    expect(Number(rail.getAttribute('x')) + Number(rail.getAttribute('width')) - bleed).toBeGreaterThan(sceneW);
-    expect(container.querySelectorAll('.press-stop')).toHaveLength(2);
+    // THE BODY IS WHAT REPLACES THE CLIP. The part of the sheet still wrapped round the platen
+    // has to be out of sight, and it is hidden by an opaque machine rather than by cutting the
+    // paper -- so the body has to span the paper's full width, edge to edge, with no seam a
+    // parchment sliver could show through. In scene pixels the paper is 0..sceneW.
+    const body = container.querySelector('.press-body rect')!;
+    expect(Number(body.getAttribute('x')) - bleed).toBeLessThanOrEqual(0);
+    expect(Number(body.getAttribute('x')) + Number(body.getAttribute('width')) - bleed)
+      .toBeGreaterThanOrEqual(sceneW);
+    // the platen covers the band above the body's top edge, so the two overlap rather than meet
+    const platen = container.querySelector('.press-platen rect')!;
+    expect(Number(platen.getAttribute('y'))).toBe(0); // its top edge IS the nip
+    const platenBottom = Number(platen.getAttribute('height'));
+    expect(Number(body.getAttribute('y'))).toBeLessThan(platenBottom);
+    expect(Number(platen.getAttribute('x')) - bleed).toBeLessThanOrEqual(0);
+    expect(Number(platen.getAttribute('x')) + Number(platen.getAttribute('width')) - bleed)
+      .toBeGreaterThanOrEqual(sceneW);
 
-    // and the nip, the shadow where the sheet passes under the roller
-    expect(container.querySelector('.press-nip')).not.toBeNull();
+    // the furniture that makes it read as a typewriter rather than a black bar
+    expect(container.querySelector('.press-nip-line')).not.toBeNull();
+    expect(container.querySelector('.press-ribbon')).not.toBeNull();
+    expect(container.querySelectorAll('.press-basket-bars rect').length).toBeGreaterThan(6);
+    expect(container.querySelectorAll('.press-comb rect').length).toBeGreaterThan(10);
+    expect(container.querySelectorAll('.press-keys circle').length).toBeGreaterThan(15);
+  });
+
+  it('feeds the sheet UP out of the machine at the start instead of flying it in from off-screen', () => {
+    // The old load was `ticket-rise` from translateY(110vh) -- the page arrived from below the
+    // fold of the viewport, which is not a thing paper does in a typewriter and was only ever
+    // possible because the sheet hung DOWN from a platen at the top. It starts inside the
+    // machine now: below the nip, hidden by the opaque body, and rolls up into position by the
+    // time the first character is struck.
+    const css = readCeremonyCss();
+    expect(css).not.toMatch(/ticket-rise/);
+    const load = css.match(/\.ceremony\[data-stage='print'\] \.ticket-wrap \{ animation: sheet-load ([\d.]+)s/)!;
+    expect(Number(load[1]) * 1000).toBeLessThanOrEqual(TYPE_START_MS); // seated before typing
+    const body = keyframes(css, 'sheet-load');
+    const start = Number(body.match(/0%\s*\{[^}]*translateY\(([\d.]+)px\)/)![1]);
+    expect(body).toMatch(/100%\s*\{[^}]*translateY\(0\)/);
+    // far enough down that the sheet's top edge starts below the nip: at that instant the sheet
+    // sits `feed` below home, so its top edge is at feed + start, and the nip is NIP_Y.
+    expect(NIP_Y - dropFor(0) + start).toBeGreaterThan(NIP_Y);
   });
 });

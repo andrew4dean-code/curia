@@ -21,7 +21,9 @@ type Stage = 'print' | 'fold' | 'envelope' | 'ship';
 type Print = 'type' | 'eject' | 'clear';
 
 export const STAGE_MS: [Stage, number][] = [
-  ['print', 4200], // 0.8s rise, typewriter from 0.6s, seal stamps after the last character
+  // 0.6s to feed the sheet up into the machine, typewriter from 0.6s, then the platen rolls the
+  // page clear and the seal stamps -- both hung off the last character, not off this clock.
+  ['print', 4200],
   ['fold', 1600],
   ['envelope', 1100],
   ['ship', 1100],
@@ -30,7 +32,7 @@ export const STAGE_MS: [Stage, number][] = [
 export const TYPE_START_MS = 600;
 export const TYPE_CHAR_MS = 48;
 // how long the platen takes to roll the finished sheet clear of the machine
-export const EJECT_MS = 200;
+export const EJECT_MS = 210;
 // The seal will not press before this, so a short two-line trade keeps the unhurried beat it
 // has always had between the last character and the wax. A LONG ticket overrides it: the seal
 // is scheduled off the eject, never off the clock, so it can no longer stamp before the final
