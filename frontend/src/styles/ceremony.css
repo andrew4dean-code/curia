@@ -278,10 +278,57 @@
    leaves which one you see entirely to backface-visibility, with nothing underneath
    it -- exactly the single-mechanism fragility this file avoids for the flap. */
 .fold-face-back { transform: rotateX(180deg) translateZ(.5px); }
-.fold-inner { position: absolute; left: 0; right: 0; top: 0; height: 300%; padding: 22px 20px; }
+/* THE BOX HAS TO MATCH THE CARD'S, BORDER AND ALL. .ticket is `border-top/bottom: 2px
+   dashed` + `padding: 22px 20px 30px` under border-box sizing, so its first line of type
+   starts 24px down. .fold-inner had the padding but not the border, so at the print->fold
+   handoff the whole page of type jumped UP 2.20px in one frame (measured: head top 24.00 ->
+   21.80) -- which is most of why the seam read as the card being SWAPPED rather than folded.
+   The border is transparent because the visible perforation is drawn by the outer faces
+   below, where it can sit on the packet's real outer edges instead of on every third. */
+.fold-inner { position: absolute; left: 0; right: 0; top: 0; height: 300%; padding: 22px 20px; border-top: 2px solid transparent; border-bottom: 2px solid transparent; }
 .fold-p0 { top: 0; transform-origin: 50% 100%; z-index: 3; }
 .fold-p1 { top: 33.333%; z-index: 1; }
 .fold-p2 { top: 66.666%; transform-origin: 50% 0%; z-index: 2; }
+/* THE CARD'S OWN CHROME, ON THE PANELS THAT OWN ITS OUTER EDGES. p0 carries the ticket's
+   top corners and its top perforation; p2 carries the bottom pair. Written on the FACE and
+   as a pseudo-element rather than as a real border on .fold-face or .fold-panel: both of
+   those are sized `inset: 0` / `height: 33.334%` under border-box, so a real border would
+   shrink the box the type is positioned inside and re-open the 2px jump this rule exists to
+   close. .fold-face already carries overflow:hidden, so the radius clips the parchment. */
+.fold-p0 .fold-face-front, .fold-p0 .fold-face-back { border-radius: 10px 10px 0 0; }
+.fold-p2 .fold-face-front, .fold-p2 .fold-face-back { border-radius: 0 0 4px 4px; }
+.fold-p0 .fold-face-front::before, .fold-p2 .fold-face-front::before { content: ''; position: absolute; left: 0; right: 0; height: 0; pointer-events: none; }
+.fold-p0 .fold-face-front::before { top: 0; border-top: 2px dashed var(--rule); }
+.fold-p2 .fold-face-front::before { bottom: 0; border-bottom: 2px dashed var(--rule); }
+/* the head gradient off .ticket::before, on the panel that holds the ticket's top edge */
+.fold-p0 .fold-face-front::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 16px; border-radius: 10px 10px 0 0; pointer-events: none; background: linear-gradient(rgba(46,40,32,.16), rgba(46,40,32,0)); }
+/* THE WAX, ON THE PANEL. Same box as .ticket-seal in scene coordinates: the ticket is
+   scene 0..288 and the seal 260..304, p2 is 192..288, so bottom:-16px and right:14px put it
+   byte-on-top of where the flat card had it. .55px of Z is between the printed face (.5px)
+   and the crease highlight (.6px), so the wax sits ON the paper and still takes the crease's
+   lighting over it; backface-visibility culls it as p2 turns over.
+   TWO TIERS, and the split is what lets the wax keep the SAME keyframes it had on the card:
+   the mount owns the depth (a `transform` the stamp must not overwrite -- a scale() in the
+   keyframes would drop the translateZ, put the seal at z 0 and bury it behind the printed
+   face at .5px), the wax owns the stamp. Same shape as .fold-panel > .fold-face. */
+.fold-seal { position: absolute; right: 14px; bottom: -16px; width: 44px; height: 44px; transform: translateZ(.55px); backface-visibility: hidden; }
+.fold-seal-wax { position: absolute; inset: 0; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-family: var(--font-display); font-weight: 800; font-size: 22px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,.35), 0 0 0 7px rgba(46,40,32,.09); }
+/* THE STAMP IS PICKED UP MID-SQUASH, NOT RESTARTED. The delay is inline and NEGATIVE, set
+   from the same constants that schedule the wax on the card (see sealCarryMs in
+   TradeCeremony.tsx), so on a short trade -- where the wax landed 700ms before the fold --
+   the animation is already filled at 100% and the packet simply shows a finished seal, while
+   on the longest option ticket -- where the wax is only 38% of the way into its squash when
+   the fold starts -- the packet picks the squash up on the exact frame the card handed it
+   over. That is the release valve: a seal still pressing at 4200ms is no longer truncated. */
+.ceremony .fold-seal-wax { animation: seal-stamp .46s cubic-bezier(.3,1.5,.5,1) both, seal-dent .46s ease-out both; }
+/* THE FLAT CARD'S DROP SHADOW, HANDED OVER RATHER THAN DROPPED. .ticket casts
+   `0 12px 30px rgba(0,0,0,.35)` down and out to both flanks; the fold panels cast nothing at
+   0% of fold-up, so ~15000px of soft shadow disappeared in the seam frame. This is the same
+   shadow on the same 290x288 box, faded out across the first fold as the panels' own
+   crease shadows take over. It is NOT put on .fold-p0/.fold-p2 directly: p0's downward
+   offset would paint a dark band across the top of p1, which the flat card never had. */
+.fold-cast { position: absolute; inset: 0; z-index: 0; pointer-events: none; border-radius: 10px 10px 4px 4px; transform: translateZ(-1px); box-shadow: 0 12px 30px rgba(0,0,0,.35); animation: cast-fade .62s cubic-bezier(.4,0,.6,1) both; }
+@keyframes cast-fade { 0% { opacity: 1; } 100% { opacity: 0; } }
 /* Every fold-stage animation below is carried through 'envelope' and 'ship' by
    listing those stages in the same rule. It is not decoration: the packet is no
    longer thrown away when the envelope arrives, it is the thing that goes IN. These
@@ -360,7 +407,12 @@
 
 /* the paper-edge hairline: a sliver lighter than the face, at each folding panel's
    crease, so the sheet reads as having thickness rather than being a flat decal. */
-.fold-edge { position: absolute; left: 0; right: 0; height: 1px; background: rgba(255,255,255,.6); pointer-events: none; }
+/* THE EDGE IS NOT THERE BEFORE THE PAPER BENDS. Both hairlines used to be at full opacity
+   on the fold stage's first frame, which put two creases on a sheet that had not been folded
+   -- part of what made the seam read as a different card being swapped in. 80ms is short
+   enough that the thickness is present before either panel has visibly moved. */
+.fold-edge { position: absolute; left: 0; right: 0; height: 1px; background: rgba(255,255,255,.6); pointer-events: none; animation: edge-in .08s linear both; }
+@keyframes edge-in { 0% { opacity: 0; } 100% { opacity: 1; } }
 .fold-p0 .fold-edge { bottom: 0; }
 .fold-p2 .fold-edge { top: 0; }
 /* on the reverse the crease is at the opposite end of the face from the printed side */

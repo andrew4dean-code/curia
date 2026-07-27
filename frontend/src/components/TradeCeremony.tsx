@@ -38,6 +38,25 @@ export const EJECT_MS = 210;
 // is scheduled off the eject, never off the clock, so it can no longer stamp before the final
 // character the way a fixed 3.72s delay did on a full three-line option ticket.
 export const SEAL_FLOOR_MS = 3500;
+// how long the wax takes to press, in ms. Duplicated from `seal-stamp`'s duration in
+// ceremony.css the same way NIP_Y is duplicated from `.press { top }`, and pinned by the suite.
+export const SEAL_MS = 460;
+
+// THE PRINT STAGE'S CLOCK, WRITTEN DOWN ONCE. Everything after the last character hangs off
+// printDone, and printDone is a pure function of how many glyphs the ticket has -- newlines
+// cost no beat (see the interval below). These three are exported so a test can assert the
+// whole exit sequence still fits inside the print stage's 4200ms box for every ticket shape
+// the app can emit; that budget used to exist only in a comment.
+export function glyphCount(ticket: TicketData): number {
+  return ticket.lines.join('').length;
+}
+export function printDoneMs(ticket: TicketData): number {
+  return TYPE_START_MS + (glyphCount(ticket) + 1) * TYPE_CHAR_MS;
+}
+export function sealStartMs(ticket: TicketData): number {
+  const doneAt = printDoneMs(ticket);
+  return doneAt + Math.max(EJECT_MS, SEAL_FLOOR_MS - doneAt);
+}
 // There is no STRIKE_EVERY any more, and its absence is the point. It was 3, which
 // meant TWO OF EVERY THREE CHARACTERS APPEARED WITH NO STRIKE AT ALL: the bar swung
 // for one glyph and then two more glyphs printed themselves out of nowhere while it
@@ -145,13 +164,23 @@ export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: 
     if (!printDone) return;
     setPrint('eject');
     // glyphs, not characters: newlines cost no beat (see the interval above)
-    const printDoneAt = TYPE_START_MS + (ticket.lines.join('').length + 1) * TYPE_CHAR_MS;
-    const wait = Math.max(EJECT_MS, SEAL_FLOOR_MS - printDoneAt);
+    const wait = sealStartMs(ticket) - printDoneMs(ticket);
     const t = window.setTimeout(() => setPrint('clear'), wait);
     timers.current.push(t);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [printDone]);
+
+  // WHERE THE WAX HAD GOT TO WHEN THE FOLD TOOK IT. Both instants are fixed by constants --
+  // the seal is scheduled off printDone (see the effect above) and the fold begins at
+  // STAGE_MS[0] -- so this is a pure function of the ticket's glyph count and needs no clock,
+  // which is the whole reason it can be trusted in a test and in a virtual-time harness alike.
+  // It is applied as a NEGATIVE animation-delay on the folded packet's seal, so the stamp is
+  // picked up exactly where the flat card left it: <= -460ms means the wax had already
+  // finished and the packet shows it at rest; -174ms (the longest option ticket) means the
+  // packet takes over a squash that is 38% done and finishes it. Clamped at 0 so a ticket long
+  // enough that the wax has not landed by 4200 simply stamps on the folded packet instead.
+  const sealCarryMs = Math.min(0, sealStartMs(ticket) - STAGE_MS[0][1]);
 
   const typedText = fullText.slice(0, typedCount);
   const typing = stage === 'print' && !printDone;
@@ -333,8 +362,30 @@ export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: 
                       <div className="fold-edge" />
                     </div>
                   )}
+                  {/* THE WAX TRAVELS. The seal used to be rendered only inside .ticket, and
+                      .ticket is set to opacity 0 the instant the fold begins -- so the stamp
+                      that had just been pressed into the page was deleted at the seam (600ms
+                      of visible wax on a two-line trade, ~100ms on the longest option). It is
+                      a child of the PANEL, not of .fold-inner: the faces carry overflow:hidden
+                      to clip each third, and the seal overhangs the ticket's bottom edge by
+                      16px, so inside a face its lower third would be cut off. As a sibling of
+                      the faces it keeps the exact box it had on the flat card (scene
+                      232..276 x 260..304) and is carried up by the fold instead of vanishing.
+                      translateZ + backface-visibility put it just in front of the printed face
+                      and cull it the moment the panel turns over, so the wax goes face-down
+                      into the packet the way it would on real paper. */}
+                  {n === 2 && (
+                    <div className="fold-seal">
+                      <div className="fold-seal-wax" style={{ animationDelay: `${sealCarryMs}ms, ${sealCarryMs}ms` }}>
+                        C
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
+              {/* the flat card's own drop shadow, carried across the print->fold seam and
+                  handed over to the panels' own fold shadows as the first fold takes it. */}
+              <div className="fold-cast" />
               <div className="fold-contact" />
             </div>
           )}
