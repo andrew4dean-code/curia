@@ -176,18 +176,27 @@
    half on paper that did not, which is what a wax seal is for. */
 .envelope-seal { position: absolute; left: 50%; top: 172px; z-index: 8; transform: translateX(-50%) scale(0); opacity: 0; width: 40px; height: 40px; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-family: var(--font-display); font-weight: 800; font-size: 20px; display: flex; align-items: center; justify-content: center; }
 
-/* ---- stage: print — rise off the press with a settle, then the seal stamps ----
-   the rise lives on .ticket-wrap (not .ticket) because .ticket's transform is
-   also driven by the page-feed rule below; keeping them on separate elements
-   means neither the ticket-rise animation nor the feed transition ever have to
-   fight over the same computed transform. */
-.ceremony[data-stage='print'] .ticket-wrap { animation: ticket-rise 0.8s cubic-bezier(.22, .9, .28, 1) both; }
-.ceremony[data-stage='print'] .ticket-seal { animation: seal-stamp .46s 3.72s cubic-bezier(.3,1.5,.5,1) both, seal-dent .46s 3.72s ease-out both; }
-@keyframes ticket-rise {
-  0% { transform: translateY(110vh); }
-  82% { transform: translateY(-10px); }
+/* ---- stage: print — the sheet is fed UP into the machine, typed, then rolled clear ----
+   The load lives on .ticket-wrap and the feed on .ticket, one element each, so the two
+   never have to fight over the same computed transform. The sheet starts 150px BELOW its
+   seated position, which is well inside the machine (the press body is opaque from the nip
+   down), so the ceremony opens on the machine alone and the paper's top edge climbs out of
+   the platen. It used to start at translateY(110vh) and fly in from off-screen, which is not
+   a thing paper does in a typewriter. .6s, so the sheet is seated at the instant typing
+   starts (TYPE_START_MS = 600). */
+.ceremony[data-stage='print'] .ticket-wrap { animation: sheet-load .6s cubic-bezier(.2, .85, .3, 1) both; }
+@keyframes sheet-load {
+  0% { transform: translateY(150px); }
+  78% { transform: translateY(-7px); }
   100% { transform: translateY(0); }
 }
+/* THE SEAL IS SCHEDULED OFF THE LAST CHARACTER, NOT OFF A STOPWATCH. It used to carry a
+   hardcoded 3.72s delay, tuned against one ticket shape -- and a full three-line option
+   ticket types until ~3720ms, so on those the wax pressed onto the page BEFORE its final
+   glyph. data-print goes to 'clear' only once the sheet has rolled out of the machine, which
+   is itself hung off printDone (see TradeCeremony.tsx), so "the seal lands after the final
+   character" is now true by construction for every ticket length. */
+.ceremony[data-print='clear'] .ticket-seal { animation: seal-stamp .46s cubic-bezier(.3,1.5,.5,1) both, seal-dent .46s ease-out both; }
 @keyframes seal-stamp { 0% { opacity: 0; transform: scale(1.9) rotate(-9deg); } 45% { opacity: 1; transform: scale(.88) rotate(2.5deg); } 70% { transform: scale(1.06) rotate(-1deg); } 100% { opacity: 1; transform: scale(1) rotate(0deg); } }
 @keyframes seal-dent { 0% { box-shadow: 0 2px 6px rgba(0,0,0,.35), 0 0 0 0 rgba(46,40,32,0); } 45% { box-shadow: 0 1px 3px rgba(0,0,0,.4), 0 0 0 13px rgba(46,40,32,.20); } 100% { box-shadow: 0 2px 6px rgba(0,0,0,.35), 0 0 0 7px rgba(46,40,32,.09); } }
 
@@ -530,21 +539,33 @@
 .wheel-ceremony[data-phase='stamp'] .crest-banner { animation: banner-press 0.45s 0.15s cubic-bezier(.3,1.4,.5,1) forwards; }
 @keyframes banner-press { 0% { opacity: 0; transform: translate(-50%,-50%) rotate(-8deg) scale(1.6); } 100% { opacity: 1; transform: translate(-50%,-50%) rotate(-8deg) scale(1); } }
 
-/* ---- the press: platen roller, rail + margin stops, striking arm (SVG, see Press.tsx) ----
-   -30px each side, not -14px: the machine has to be WIDER than the paper or it reads
-   as a stick behind a card rather than a card in a machine. The scene is 290px in a
-   375px viewport, so there is (375-290)/2 = 42.5px of margin each side and a 30px
-   bleed fits with room to spare. The viewBox is 350 wide to match (see Press.tsx),
-   so one user unit is still exactly one CSS pixel in both axes. */
-.press { position: absolute; left: -30px; right: -30px; top: -34px; height: 260px; overflow: visible; pointer-events: none; z-index: 3; }
-/* The home pivot is the base of the shaft on the scene's centre line; Press.tsx sets an
-   inline transform-origin that tracks the carriage, so this is the value the bar swings
-   about only before the first measurement lands. The base `transform` is THE REST POSE,
-   identical to 0%/100% of the strike: before the first character (data-strike="idle")
-   no strike rule matches, and an arm with no animation must still be parked below the
-   line rather than standing at the contact pose on top of an empty page. */
-.press-arm { opacity: 0; transform: rotate(-8deg) translateY(18px); transform-origin: 175px 258px; transition: opacity .2s ease-out; }
-.ceremony[data-typing='yes'] .press-arm { opacity: 1; }
+/* ---- the press: THE MACHINE IS THE RIGHT WAY UP ----------------------------------
+   `top: 170px` is the NIP -- where paper meets roller -- and it is duplicated from NIP_Y in
+   Press.tsx (a CSS `top` cannot be written from a TS constant without an inline style, and an
+   inline style here would fight the withdraw animation's transform; the suite pins the two
+   together instead). The viewBox is 350x210 over a 350x210 box, so ONE USER UNIT IS ONE CSS
+   PIXEL IN BOTH AXES and svg y 0 is exactly this line. Everything the press draws is at or
+   below it; the sheet stands up out of it.
+   -30px each side, not -14px: the machine has to be WIDER than the paper or it reads as a
+   stick behind a card rather than a card in a machine. The scene is 290px in a 375px viewport,
+   so there is (375-290)/2 = 42.5px of margin each side and a 30px bleed fits with room to
+   spare. */
+.press { position: absolute; left: -30px; right: -30px; top: 170px; height: 210px; overflow: visible; pointer-events: none; z-index: 3; }
+/* THE BAR IS PART OF THE MACHINE AND IT IS ALWAYS VISIBLE. It used to be opacity 0 with the
+   typing flag fading it in -- which, since data-typing is 'yes' from ceremony mount, meant it
+   actually sat at opacity 1 with `animation: none` for the whole 600ms pre-roll: a lit, dead
+   stick in mid-air over an empty page, before a single character had been typed. Now it rests
+   INSIDE the basket, below the nip, on top of an opaque machine body, so a motionless frame
+   reads as a part parked in a machine rather than a stick parked in the air.
+   The base `transform` IS the rest pose, byte-identical to 0%/100% of the strike, so the first
+   swing does not start with a teleport. Press.tsx authors the bar AT CONTACT (the untransformed
+   pose is the strike), so rest is a translate DOWN into the basket plus a small rotation -- a
+   type bar swings in a plane perpendicular to the front view, so from the front it mostly
+   rises; a pure rotation big enough to drop the head into the basket would swing it 116px
+   sideways. transform-origin's y is a CONSTANT now. It used to have to track the line, because
+   the whole assembly moved down the page and a fixed pivot made the lever shorten from 136px to
+   88px across three lines. Nothing moves down the page any more. */
+.press-arm { transform: rotate(-7deg) translateY(56px); transform-origin: 175px 152px; }
 .ceremony[data-typing='yes'] .press-arm[data-strike='0'] { animation: press-hit-a 44ms linear both; }
 .ceremony[data-typing='yes'] .press-arm[data-strike='1'] { animation: press-hit-b 44ms linear both; }
 /* THE BAR RETURNS TO REST, and 0% and 100% are the identical pose so that it returns
@@ -571,32 +592,55 @@
    second touch, then settling. A single ease across the whole swing smeared all four
    of those into one drifting motion. */
 @keyframes press-hit-a {
-  0% { transform: rotate(-8deg) translateY(18px); animation-timing-function: cubic-bezier(.5,0,.9,.55); }
+  0% { transform: rotate(-7deg) translateY(56px); animation-timing-function: cubic-bezier(.5,0,.9,.55); }
   26% { transform: rotate(0deg) translateY(0px); animation-timing-function: cubic-bezier(.2,.8,.4,1); }
-  44% { transform: rotate(-3deg) translateY(6px); animation-timing-function: cubic-bezier(.5,0,.8,.5); }
-  58% { transform: rotate(-1deg) translateY(1px); animation-timing-function: cubic-bezier(.2,.7,.3,1); }
-  100% { transform: rotate(-8deg) translateY(18px); }
+  44% { transform: rotate(-2.4deg) translateY(19px); animation-timing-function: cubic-bezier(.5,0,.8,.5); }
+  58% { transform: rotate(-.9deg) translateY(7px); animation-timing-function: cubic-bezier(.2,.7,.3,1); }
+  100% { transform: rotate(-7deg) translateY(56px); }
 }
 @keyframes press-hit-b {
-  0% { transform: rotate(-8deg) translateY(18px); animation-timing-function: cubic-bezier(.5,0,.9,.55); }
+  0% { transform: rotate(-7deg) translateY(56px); animation-timing-function: cubic-bezier(.5,0,.9,.55); }
   26% { transform: rotate(0deg) translateY(0px); animation-timing-function: cubic-bezier(.2,.8,.4,1); }
-  44% { transform: rotate(-3deg) translateY(6px); animation-timing-function: cubic-bezier(.5,0,.8,.5); }
-  58% { transform: rotate(-1deg) translateY(1px); animation-timing-function: cubic-bezier(.2,.7,.3,1); }
-  100% { transform: rotate(-8deg) translateY(18px); }
+  44% { transform: rotate(-2.4deg) translateY(19px); animation-timing-function: cubic-bezier(.5,0,.8,.5); }
+  58% { transform: rotate(-.9deg) translateY(7px); animation-timing-function: cubic-bezier(.2,.7,.3,1); }
+  100% { transform: rotate(-7deg) translateY(56px); }
 }
-.ceremony:not([data-stage='print']) .press { opacity: 0; transition: opacity .3s ease-out; }
-/* A PLATEN RATCHETS. IT DOES NOT EASE. This used to carry
-   `transition: transform .13s steps(2, end)`, while the press jumps its whole line
-   offset inside the React commit that starts the roll -- so the two disagreed for
-   130ms out of a 48ms beat. steps(2, end) holds the OLD value for 65ms and the
-   halfway value for another 65ms, so the first TWO glyphs of every line after the
-   first were struck 3px high and the third 1.5px high: about 11% of all strikes on a
-   three-line ticket, and always in the same place, at the start of a line, where it
-   is most visible. It also made the register unmeasurable -- a box read in a layout
-   effect reports the pre-transition value, so the vertical measurement would have
-   been one line behind for the whole ease. No transition: the paper steps, once, in
-   the same frame the head moves. */
-.ceremony[data-stage='print'] .ticket { transform: translateY(calc(var(--feed, 0) * -3px)); }
+.ceremony:not([data-stage='print']) .press { opacity: 0; }
+
+/* ---- the feed: A PLATEN RATCHETS. IT DOES NOT EASE. ----
+   ONE feed, in real pixels, replacing two disagreeing halves of the old model: a
+   `--feed * -3px` roll on the sheet and a hardcoded LINE_PITCH of 27 inside the press, which
+   were different numbers for the same motion and cost 3px of registration per line. --sheet is
+   MEASURED (see TradeCeremony.tsx) as whatever offset puts the line currently being typed onto
+   the nip, so a step between two lines is exactly one real line pitch and every line's strike
+   point is the same scene y.
+   No transition, and that is deliberate: this used to carry `transition: transform .13s
+   steps(2, end)` while the press jumped its whole line offset inside the React commit, so the
+   two disagreed for 130ms out of a 48ms beat and the first strikes of every line after the
+   first landed 3px high. The paper steps, once, in the frame the line changes.
+   Scoped to .ticket-wrap so the settle ceremony's .settle-ticket, which shares the .ticket
+   class, is untouched. */
+.ticket-wrap .ticket { transform: translateY(var(--sheet, 0px)); }
+
+/* ---- the eject: the last character is struck, the platen rolls the sheet clear, and the
+   press withdraws, leaving the finished page standing alone where the fold expects it ----
+   The sheet ends at translateY(0) -- its laid-out position, which is exactly where .fold's
+   panels are pinned (inset:0 over the scene) -- so the handoff into the fold stage is a
+   straight swap with nothing to reconcile.
+   Both stages are listed on one rule rather than written twice, so the computed animation
+   value is identical across them and nothing restarts when data-print advances. */
+.ceremony[data-print='eject'] .ticket,
+.ceremony[data-print='clear'] .ticket { animation: sheet-eject .2s cubic-bezier(.25,.9,.3,1) both; }
+@keyframes sheet-eject {
+  0% { transform: translateY(var(--sheet-from, 0px)); }
+  100% { transform: translateY(0); }
+}
+.ceremony[data-print='eject'] .press,
+.ceremony[data-print='clear'] .press { animation: press-withdraw .26s cubic-bezier(.4,0,.75,.4) both; }
+@keyframes press-withdraw {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(96px); opacity: 0; }
+}
 
 /* ---- the settle stamp: outcome slams diagonally across the ticket, amount counts up beneath it ---- */
 .settle-ceremony[data-tone='up'] { --stamp: var(--pl-green); }

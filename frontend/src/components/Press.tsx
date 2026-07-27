@@ -1,275 +1,299 @@
-// THE PRESS: platen roller, paper rail, and one swinging typebar.
+// THE PRESS -- and the whole point of this file is that the machine is the RIGHT WAY UP.
 //
-// SILHOUETTE FIRST. The owner's complaint has twice been about a "stick": a bare
-// tapered shaft with nothing around it reads as an abstract line, not as a
-// typewriter. So the machine is now drawn wider than the card it prints on --
-// the platen's end knobs and the rail both project past the paper, which is the
-// single strongest cue that there is a machine behind the page. The scene is
-// 290px inside a 375px viewport, i.e. 42.5px of margin each side, so PRESS_OVERHANG
-// of 30px each side fits with room to spare.
+// It used to sit at the top of the scene with the sheet hanging DOWN out of it. That put the
+// strike point and the printed text in two different places and forced two requirements that
+// cannot both be met: "don't draw across the ticket" (so the arm was clipped, and became a
+// severed stub floating in mid-page attached to nothing) versus "show a bar swinging from the
+// machine" (so it had to reach the machine, and then it lay across the type). Every round
+// traded one for the other. The owner rejected it three times.
 //
-//   viewBox 0 0 350 260, drawn into a box that is `left:-30px; right:-30px` over the
-//   290px scene and 260px tall (see ceremony.css), so 1 user unit == 1px in BOTH
-//   axes and nothing is stretched. `top:-34px` puts svg y=34 on the card's top edge.
+// A REAL TYPEWRITER. The platen is at the BOTTOM. The sheet wraps around it and stands UP out
+// of the machine. Where the paper meets the roller is the NIP, and the nip is at ONE FIXED
+// SCENE Y forever. The line being typed sits AT the nip; everything already typed has rolled
+// UP above it; nothing is ever typed above it. When a line finishes, the whole sheet steps up
+// by exactly one line pitch and the next line arrives at the nip. The bar swings up from
+// inside the machine, strikes at the nip, and drops back into the basket.
 //
-//       scene x = svg x - PRESS_OVERHANG        scene y = svg y - 34
+// WHAT THAT BUYS, AND WHAT MUST NOT BE UNDONE BY ACCIDENT:
+//   * The arm strikes at ONE constant y for every line index, so there is no per-line vertical
+//     registration to drift. BASE_STRIKE_Y, the 24-per-line offsets, the measured-y feed into
+//     the arm and the per-line pivot tracking are all GONE. The arm has no vertical term left.
+//   * The arm can never cross finished text, because finished text is above the nip and the
+//     arm lives below it. THERE IS NO CLIP AND NO MASK ANYWHERE IN THIS FILE. #press-clip and
+//     #arm-fade are deleted, not weakened. If a clip ever looks necessary again, the geometry
+//     has gone wrong -- fix the geometry.
+//   * Everything below the nip is the machine, painted opaque over the sheet (`.press` is
+//     z-index 3 over `.ticket-wrap`), so the part of the sheet still wrapped round the platen
+//     is hidden by the machine rather than by a clip on the paper. That is why the body has to
+//     be as tall as it is: see MACHINE_H.
+//   * The arm is painted ON the machine at every frame of its swing, so it is never a severed
+//     stub in mid-air and there is never a gap between arm and body.
 //
-//   svg y  5..35   the platen body            (scene -29..1, above the card)
-//   svg y  1..39   the end knobs              (scene x -29..9 and 281..319: past the card)
-//   svg y 33..43   the nip, where paper meets roller
-//   svg y 44..49   the rail + its two margin stops (full width, also past the card)
+// COORDINATES. `.press` is `left:-30px; right:-30px; top: NIP_Y; height: PRESS_VIEW_H` over the
+// 290px scene, with a viewBox of the same numbers, so ONE USER UNIT IS ONE CSS PIXEL IN BOTH
+// AXES and svg y 0 IS THE NIP:
 //
-// VERTICAL REGISTER IS MEASURED, NOT COMPUTED -- the same rule as the horizontal, and
-// the constants below are now only the fallback for the frames before the first
-// measurement lands. TradeCeremony reads the struck glyph's own box against the
-// scene's and hands the bottom edge of it down as `y` in scene pixels; that box is
-// live, so it already carries the page feed, the header's real height, and whichever
-// face actually painted. What it replaces was a hardcoded 96 + 24 that assumed
-// .ticket-head was a single 22.5px line box -- and rendered in Chrome at the real
-// 250px content width, EVERY title wrapped to two lines in Georgia Bold (the declared
-// fallback in --font-display, hence the first paint of every ceremony on this
-// offline-first PWA): 257.6px, 266.3px, 289.8px against a 250px box. The head then
-// stayed put while every .ticket-line moved down 22.5px, so the clip band opened
-// above the text and the shaft drew straight down THROUGH the printed line.
+//       scene x = svg x - PRESS_OVERHANG        scene y = svg y + NIP_Y
 //
-// LINE_PITCH is the real rendered height of a `.ticket-line` (see ceremony.css),
-// not a guess: font-size 14px with the inherited body line-height of 1.5 gives a
-// 21px content line, plus the rule's own 3px top/bottom padding = 27px. Confirmed
-// by rendering three stacked `.ticket-line` elements in a real browser and reading
-// their bounding rects: consecutive lines land exactly 27px apart. (Every line now
-// holds its final width from frame 0 via the hidden ghost span in TradeCeremony, so
-// a partly-typed line is exactly as tall as a finished one -- before that, an empty
-// line fell back to `min-height: 1.45em` = 20.3px and every line below it shifted
-// 0.7px the moment it got its first character.)
+//   svg y   0        THE NIP. Nothing above this line is ever painted by this file.
+//   svg y   0..46    the platen cylinder, its top edge tangent to the paper
+//   svg y   2..46    the two end knobs, projecting past the paper on both sides
+//   svg y  44..56    the ribbon
+//   svg y  30..148   the type basket well, where the bars live
+//   svg y 146..210   the front shell, with the comb the bars rise through and the key tops
 //
-// LINE_GAP_OFFSET pushes the strike point from the *top* of the current line down
-// past that line's own glyphs, landing in the gap before the next line starts:
-// 3px padding-top + 21px line content = 24px is exactly where this line's text ends
-// and its bottom padding begins. That's "just under the baseline" without yet
-// touching the next line.
-//
-// FEED_ROLL is the other half of that sum, and leaving it out cost 3px of registration
-// per line. The page does not sit still while it is typed: ceremony.css rolls .ticket
-// up by `var(--feed) * -3px` at every line break, and --feed IS this `line` index. So
-// line n is PAINTED 3n px above where it is laid out, and the fallback strike point has
-// to come down 27 - 3 = 24px per line, not 27. At 27 the head sat 3px low on line two
-// and 6px low on line three -- a fifth of a line pitch, on the very ticket shape (three
-// lines: option sells, closing trades) the app emits most. The roll is a step change
-// now, not a transition, so a measured y is never read mid-ease.
-//
-// The arm is clipped to a narrow band starting at the strike line so it can only
-// ever read as a typebar swinging up into the paper -- never as a shaft lying
-// across the ticket. The head is authored 2px BELOW the top of that band, not flush
-// with it: the per-character tilt rotates the head about its own contact point, and
-// a head sitting flush on the clip edge would have a corner shaved off by the clip
-// at every non-zero tilt.
-//
-// The whole assembly is translated down by the same per-line offset that drives
-// strikeY, so the head stays locked to the top of the clip band at every line index.
-// That translate lives on an inner <g> (.press-carrier), not on .press-arm itself,
-// because the swing animation sets a CSS `transform` on .press-arm and a CSS
-// transform on an element overrides any SVG `transform` attribute on that same
-// element -- nesting keeps the two from fighting.
-//
-// REGISTRATION. .press-carrier also carries the horizontal carriage offset, so the
-// head lands on the column the text is actually at. The x it is given is MEASURED
-// from the live DOM (TradeCeremony reads the struck glyph's own box against the
-// scene's) and never computed from a character pitch: Space Mono is fetched from
-// Google Fonts and this is an offline-first PWA, so on a cold or offline first run
-// the fallback monospace has a completely different advance and every hardcoded
-// pitch would put the hammer visibly off the text. `x === null` means "nothing
-// measured yet" and parks the arm on the scene's centre line.
-//
-// Because .press-carrier is INSIDE .press-arm, .press-arm's own rotation origin has
-// to follow it, or the bar would swing about a pivot the shaft no longer stands on.
-// That is the inline transform-origin below -- and it has to follow it in BOTH axes.
-// It used to read `${PRESS_HOME_X + dx}px ${PIVOT_Y}px`, a constant y, while the
-// carrier translated by (dx, armOffset): the pivot stayed at 258 while the head went
-// down with the line, so the LEVER SHORTENED, 136px on line 0 to 88px on line 3. The
-// same swing keyframes then produced a 35% smaller arc and put the rest pose 18.9 /
-// 15.6 / 12.2px left of the column -- 7px of drift, most of a character cell, across
-// a three-line ticket. `PIVOT_Y + armOffset` is the whole fix: the pivot rides the
-// carrier, so the lever is the same length on every line.
-// .press-arm is a direct child of <svg> with no ancestor transform, so
-// `transform-box: view-box` resolves those lengths straight into viewBox units.
-const LINE_PITCH = 27;
-const FEED_ROLL = 3; // keep in step with `--feed * -3px` in ceremony.css
-const LINE_STEP = LINE_PITCH - FEED_ROLL;
-const LINE_GAP_OFFSET = 24;
-const BASE_STRIKE_Y = 96 + LINE_GAP_OFFSET;
-const HEAD_Y = BASE_STRIKE_Y + 2;
-const PIVOT_Y = 258;
-// scene y -> svg y. `.press` is `top: -34px` over the scene at 1 user unit per pixel
-// (see the map at the top of this file), so svg y 34 is the card's top edge.
-export const PRESS_TOP_OFFSET = 34;
-// a measured y is still clamped, for the same reason a measured x is: one wild box --
-// a mid-animation read, a zero-height line, a face that has not loaded -- must not be
-// able to walk the clip band off the machine. 60 keeps it below the platen nip (svg
-// y 43); 232 keeps the head (band + 2, 12 tall) inside the 260-unit viewBox.
-const MIN_STRIKE_Y = 60;
-const MAX_STRIKE_Y = 232;
+// NIP_Y is duplicated in ceremony.css as `.press { top: ... }` and the test suite pins the two
+// together; there is no way to write a CSS `top` from a TS constant without an inline style,
+// and an inline style on `.press` would fight the withdraw animation's transform.
+export const NIP_Y = 170;
 
+// The machine has to cover the sheet from the nip down to the sheet's own bottom edge, or the
+// part of the page that is supposed to be wrapped around the platen shows below the machine.
+// That distance is NOT a free choice: at the moment line 0 is at the nip the sheet extends
+// (sheet height - line 0's drop) below it, i.e. 288 - 89.5 = 198.5px, MEASURED in headless
+// Chrome (the ticket is pinned to 288px so the fold packet is a third of it; line 0's box
+// bottoms out 89.5px below the ticket's top edge: 2px border + 22 padding + 28.5 head +
+// 10 margin + 27 line). It does not depend on NIP_Y -- moving the nip moves the sheet with it.
+// 210 leaves 11.5px of margin, and the margin can only grow: a taller header pushes line 0 down,
+// which REDUCES the feed and lifts the sheet's bottom edge.
 export const PRESS_VIEW_W = 350;
+export const PRESS_VIEW_H = 210;
 export const PRESS_OVERHANG = 30;
 export const PRESS_HOME_X = PRESS_VIEW_W / 2; // 175 == the scene's centre line
 const SCENE_W = PRESS_VIEW_W - PRESS_OVERHANG * 2; // 290, and .ceremony-scene agrees
 
-// Per-character tilt of the type slug, derived from the character code, so the same
-// letter always presents the same face. This is what used to be a two-keyframe
-// alternation (press-hit-a leaned one way, press-hit-b the other) -- and alternating
-// the ARM's rest angle is precisely what made the machine look random: the arm never
-// came back to the same place twice. The arm's swing is now identical for every
-// character and only the slug at the tip differs. It rotates about its own contact
-// point, so a tilt can never move the print position.
+// The bar. Authored AT CONTACT -- the untransformed pose is the strike -- so the head's top
+// edge is the one number that matters and it is 1.5px BELOW the nip, not flush with it: the
+// per-character tilt rotates the slug about its own contact point, and at the largest tilt
+// (8 degrees, see tiltForChar) a 16px-wide head lifts a corner 16/2 * sin(8deg) = 1.11px. 1.5
+// keeps even that corner below the nip, so no part of the arm is ever painted on the page.
+const HEAD_TOP = 1.5;
+const HEAD_W = 16;
+const HEAD_H = 14;
+// The bar's rotation centre. It is NOT a real lever pivot: a type bar swings in a plane
+// perpendicular to the front view, so from the front it mostly RISES. A pure rotation big
+// enough to drop the head into the basket would swing it 116px sideways. The rest pose is
+// therefore a large translateY with a small rotation about this point (see press-hit in
+// ceremony.css), which puts the head at svg y ~58 -- inside the basket, clear of the platen.
+const PIVOT_Y = 152;
+const SHAFT_TOP = HEAD_TOP + HEAD_H; // the shaft starts where the head ends
+
+// Per-character tilt of the type slug, derived from the character code, so the same letter
+// always presents the same face. This is what used to be a two-keyframe alternation (one
+// leaning each way) -- and alternating the ARM's rest angle is precisely what made the machine
+// look random: it never came back to the same place twice. The swing is identical for every
+// character now and only the slug at the tip differs. It rotates about its own contact point,
+// so a tilt can never move the print position.
 export function tiltForChar(glyph: string): number {
   const code = glyph.charCodeAt(0);
   if (!Number.isFinite(code)) return 0;
-  const mag = 4 + (code % 5); // 4..8 degrees; never 0, or that character would show no face at all
+  const mag = 4 + (code % 5); // 4..8 degrees; never 0, or that character would show no face
   return code % 2 === 0 ? mag : -mag;
 }
 
 function Knob({ cx }: { cx: number }) {
   return (
     <g className="press-knob">
-      <circle cx={cx} cy="20" r="19" fill="url(#platen-knob)" />
-      <circle cx={cx} cy="20" r="18.2" fill="none" stroke="#0d0b09" strokeWidth="1.4" opacity=".75" />
-      <circle cx={cx} cy="20" r="7.5" fill="#191510" />
-      <circle cx={cx} cy="20" r="2.6" fill="#5a5245" />
+      <circle cx={cx} cy="24" r="22" fill="url(#platen-knob)" />
+      <circle cx={cx} cy="24" r="21" fill="none" stroke="#0d0b09" strokeWidth="1.6" opacity=".8" />
+      <circle cx={cx} cy="24" r="8.5" fill="#191510" />
+      <circle cx={cx} cy="24" r="3" fill="#5f5648" />
     </g>
   );
 }
 
+// The rest of the type bars, at rest, low in the basket. They are short tips rather than whole
+// bars on purpose: the ACTIVE bar tracks the carriage horizontally (the column is measured off
+// the live DOM), so a fan of full-length bars fixed at the centre would visibly disagree with
+// it every time the carriage moved. Tips read as "the other bars, down in the basket" and have
+// no angle to disagree about. The arc is lowest in the middle, as a real basket is.
+function BasketBars() {
+  const bars = [];
+  for (let i = -6; i <= 6; i++) {
+    const x = PRESS_HOME_X + i * 18.5;
+    const lift = Math.abs(i) * 2.6; // the outer bars sit higher, following the basket's curve
+    bars.push(
+      <rect
+        key={i}
+        className="press-rest-bar"
+        x={x - 3.4}
+        y={124 - lift}
+        width="6.8"
+        height={26 + lift}
+        rx="2.4"
+        fill="url(#arm-steel)"
+        opacity=".92"
+      />,
+    );
+  }
+  return <g className="press-basket-bars">{bars}</g>;
+}
+
 export function Press({
   striking,
-  line,
   glyph,
   x,
-  y,
 }: {
-  // 'idle' before the first character: it matches neither strike rule, so the bar
-  // holds .press-arm's base rest pose instead of firing a strike at mount, at a page
-  // that is still flying up into the platen with nothing printed on it yet.
+  // 'idle' before the first character: it matches neither strike rule, so the bar holds its
+  // base rest pose -- down in the basket -- instead of firing a strike at a page that has not
+  // arrived yet. The arm is VISIBLE the whole time either way; it is a part of the machine,
+  // parked inside it, not something that appears out of nowhere at the first keystroke.
   striking: number | 'idle';
-  line: number;
   glyph: string;
+  // the carriage column, in scene pixels, measured off the live DOM. null = nothing measured
+  // yet, which parks the bar on the scene's centre line.
   x: number | null;
-  // the measured strike point in scene pixels: the bottom edge of the glyph just
-  // struck. null = nothing measured yet, and only then does the line index below
-  // stand in for it.
-  y: number | null;
 }) {
-  const strikeY =
-    y === null
-      ? BASE_STRIKE_Y + line * LINE_STEP
-      : Math.round(Math.min(MAX_STRIKE_Y, Math.max(MIN_STRIKE_Y, y + PRESS_TOP_OFFSET)) * 100) / 100;
-  const armOffset = Math.round((strikeY - BASE_STRIKE_Y) * 100) / 100;
   // clamped so a wild measurement can never walk the bar off the machine
   const column = x === null ? SCENE_W / 2 : Math.min(SCENE_W - 8, Math.max(8, x));
   const dx = Math.round((column + PRESS_OVERHANG - PRESS_HOME_X) * 100) / 100;
   const tilt = tiltForChar(glyph);
 
   return (
-    <svg className="press" viewBox={`0 0 ${PRESS_VIEW_W} 260`} preserveAspectRatio="none" aria-hidden="true">
+    <svg
+      className="press"
+      viewBox={`0 0 ${PRESS_VIEW_W} ${PRESS_VIEW_H}`}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
       <defs>
         <linearGradient id="platen-face" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0" stopColor="#14110e" />
-          <stop offset="0.18" stopColor="#3b342b" />
+          <stop offset="0.16" stopColor="#3b342b" />
           <stop offset="0.46" stopColor="#4e4639" />
-          <stop offset="0.78" stopColor="#2a251e" />
+          <stop offset="0.8" stopColor="#2a251e" />
           <stop offset="1" stopColor="#14110e" />
         </linearGradient>
-        <linearGradient id="platen-spec" x1="0" y1="0" x2="0" y2="1">
+        {/* the roll of the cylinder: bright along the top edge where the paper leaves it,
+            falling away to black underneath. Without this the platen is a flat bar. */}
+        <linearGradient id="platen-roll" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#ffffff" stopOpacity="0.30" />
-          <stop offset="0.55" stopColor="#ffffff" stopOpacity="0.04" />
-          <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
+          <stop offset="0.14" stopColor="#ffffff" stopOpacity="0.10" />
+          <stop offset="0.55" stopColor="#000000" stopOpacity="0.10" />
+          <stop offset="1" stopColor="#000000" stopOpacity="0.46" />
         </linearGradient>
-        <linearGradient id="platen-cast" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#2E2820" stopOpacity="0.34" />
-          <stop offset="1" stopColor="#2E2820" stopOpacity="0" />
-        </linearGradient>
-        {/* the nip: the hard, tight line of shadow where the sheet passes under the
-            roller. Without it the platen floats above the page instead of gripping it. */}
-        <linearGradient id="platen-nip" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#17130f" stopOpacity="0.52" />
-          <stop offset="0.35" stopColor="#17130f" stopOpacity="0.22" />
-          <stop offset="1" stopColor="#17130f" stopOpacity="0" />
-        </linearGradient>
-        <radialGradient id="platen-knob" cx="0.36" cy="0.3" r="0.82">
+        <radialGradient id="platen-knob" cx="0.36" cy="0.3" r="0.84">
           <stop offset="0" stopColor="#6f6557" />
           <stop offset="0.5" stopColor="#3a332a" />
           <stop offset="1" stopColor="#100e0b" />
         </radialGradient>
-        <linearGradient id="rail-steel" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#6a6153" />
-          <stop offset="0.45" stopColor="#2f2a22" />
-          <stop offset="1" stopColor="#14110e" />
+        <linearGradient id="press-shell" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#3a332a" />
+          <stop offset="0.42" stopColor="#241f19" />
+          <stop offset="1" stopColor="#12100c" />
+        </linearGradient>
+        <linearGradient id="press-front-face" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#4a4237" />
+          <stop offset="0.3" stopColor="#332c24" />
+          <stop offset="1" stopColor="#17140f" />
+        </linearGradient>
+        {/* the well the bars live in: dark at the bottom, so the basket has depth and the
+            raised bar reads against it */}
+        <linearGradient id="press-well" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#0b0a08" stopOpacity="0.72" />
+          <stop offset="0.62" stopColor="#0b0a08" stopOpacity="0.34" />
+          <stop offset="1" stopColor="#0b0a08" stopOpacity="0" />
         </linearGradient>
         <linearGradient id="arm-steel" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0" stopColor="#171410" />
-          <stop offset="0.45" stopColor="#5a5245" />
+          <stop offset="0.42" stopColor="#665c4c" />
+          <stop offset="0.62" stopColor="#4a4237" />
           <stop offset="1" stopColor="#171410" />
         </linearGradient>
-        <clipPath id="press-clip">
-          <rect x="0" y={strikeY} width={PRESS_VIEW_W} height="70" />
-        </clipPath>
-        {/* The clip band keeps the bar off the page, but on its own it ends the shaft
-            in a hard horizontal cut -- a guillotined line across the ticket, which is
-            precisely what reads as "a stick". The shaft is masked to fade out well
-            before that edge instead, so the bar recedes into the machine rather than
-            stopping. Authored in the CARRIER's local space (the mask is on the shaft,
-            inside the per-line translate), so these are the base constants and carry
-            no line term -- unlike the clip above, which sits outside it. */}
-        <linearGradient id="arm-fade-g" gradientUnits="userSpaceOnUse" x1="0" y1={BASE_STRIKE_Y + 16} x2="0" y2={BASE_STRIKE_Y + 62}>
-          <stop offset="0" stopColor="#ffffff" />
-          <stop offset="1" stopColor="#000000" />
+        <linearGradient id="ribbon-ink" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#241f19" />
+          <stop offset="0.5" stopColor="#0e0c09" />
+          <stop offset="1" stopColor="#2a241c" />
         </linearGradient>
-        <mask id="arm-fade" maskUnits="userSpaceOnUse" x="-260" y="0" width="870" height="320">
-          <rect x="-260" y="0" width="870" height="320" fill="url(#arm-fade-g)" />
-        </mask>
       </defs>
 
-      <rect className="press-cast" x="0" y="35" width={PRESS_VIEW_W} height="26" fill="url(#platen-cast)" />
-      <rect className="press-nip" x="22" y="33" width="306" height="10" fill="url(#platen-nip)" />
+      {/* 1. THE BODY. Opaque, and wider than the paper on both sides -- that overhang is the
+             single strongest cue that there is a machine behind the page rather than a stick
+             behind a card. It covers every pixel from the nip down, which is what keeps the
+             wrapped part of the sheet out of sight without clipping the paper. */}
+      <g className="press-body">
+        <rect x="-8" y="22" width={PRESS_VIEW_W + 16} height={PRESS_VIEW_H - 22} rx="16" fill="url(#press-shell)" />
+        <rect className="press-well" x="34" y="26" width="282" height="122" rx="10" fill="url(#press-well)" />
+      </g>
 
-      {/* the bar is painted before the machine, so the roller and the rail always
-          pass in front of it -- a typebar disappears under the platen, it never
-          crosses it. */}
+      {/* 2. THE PLATEN. Its top edge IS the nip: the sheet stands up out of it and, at that
+             line, curves away behind it. Drawn AFTER the body so the cylinder sits proud. */}
+      <g className="press-platen">
+        <rect x="18" y="0" width="314" height="46" rx="23" fill="url(#platen-face)" />
+        <rect x="18" y="0" width="314" height="46" rx="23" fill="url(#platen-roll)" />
+        {/* the hard bright line along the tangent, where paper leaves rubber */}
+        <rect className="press-nip-line" x="22" y="0" width="306" height="1.6" fill="#b9ad92" opacity=".5" />
+        <Knob cx={18} />
+        <Knob cx={332} />
+      </g>
+
+      {/* 3. THE RIBBON, sitting just under the strike point where a real one does. */}
+      <rect className="press-ribbon" x="40" y="44" width="270" height="11" rx="2" fill="url(#ribbon-ink)" opacity=".9" />
+
+      {/* 4. the other bars, at rest in the basket */}
+      <BasketBars />
+
+      {/* 5. THE STRIKING BAR. Authored at contact; ceremony.css swings it back to rest and
+             fires it forward again. The carriage offset is the ONLY transform attribute it
+             carries -- there is no vertical term any more, because the nip does not move.
+             The translate lives on an inner <g> rather than on .press-arm itself because the
+             swing sets a CSS `transform` on .press-arm, and a CSS transform overrides an SVG
+             transform ATTRIBUTE on the same element. The rotation origin follows the carriage
+             in x for the same reason it always did: the bar must swing about the point its
+             own shaft stands on. In y it is a constant now -- PIVOT_Y -- so the lever is the
+             same length on every line by construction, not by tracking. */}
       <g
         className="press-arm"
         data-strike={striking}
-        clipPath="url(#press-clip)"
-        style={{ transformOrigin: `${PRESS_HOME_X + dx}px ${PIVOT_Y + armOffset}px` }}
+        style={{ transformOrigin: `${PRESS_HOME_X + dx}px ${PIVOT_Y}px` }}
       >
-        <g className="press-carrier" transform={`translate(${dx}, ${armOffset})`}>
+        <g className="press-carrier" transform={`translate(${dx}, 0)`}>
           <path
             className="press-shaft"
-            mask="url(#arm-fade)"
-            d={`M${PRESS_HOME_X - 3} ${PIVOT_Y} L${PRESS_HOME_X - 8} 130 L${PRESS_HOME_X + 8} 130 L${PRESS_HOME_X + 3} ${PIVOT_Y} Z`}
+            d={`M${PRESS_HOME_X - 3.6} ${PIVOT_Y} L${PRESS_HOME_X - 7} ${SHAFT_TOP} L${PRESS_HOME_X + 7} ${SHAFT_TOP} L${PRESS_HOME_X + 3.6} ${PIVOT_Y} Z`}
             fill="url(#arm-steel)"
           />
-          <g className="press-tilt" transform={`rotate(${tilt} ${PRESS_HOME_X} ${HEAD_Y})`}>
-            <rect className="press-head" x={PRESS_HOME_X - 8} y={HEAD_Y} width="16" height="12" rx="3" fill="#241f19" />
-            <rect x={PRESS_HOME_X - 5} y={HEAD_Y + 3} width="10" height="6" rx="1.5" fill="#3c352c" />
+          <g className="press-tilt" transform={`rotate(${tilt} ${PRESS_HOME_X} ${HEAD_TOP})`}>
+            <rect
+              className="press-head"
+              x={PRESS_HOME_X - HEAD_W / 2}
+              y={HEAD_TOP}
+              width={HEAD_W}
+              height={HEAD_H}
+              rx="3"
+              fill="#241f19"
+            />
+            <rect x={PRESS_HOME_X - 5} y={HEAD_TOP + 3.5} width="10" height="6.5" rx="1.5" fill="#4a4237" />
           </g>
         </g>
       </g>
 
-      <g className="press-platen">
-        <rect x="20" y="5" width="310" height="30" rx="15" fill="url(#platen-face)" />
-        <rect x="34" y="8" width="282" height="11" rx="5.5" fill="url(#platen-spec)" />
-        {/* the end knobs: the platen's hubs, sticking out past the paper on both
-            sides. This is the silhouette. */}
-        <Knob cx={20} />
-        <Knob cx={330} />
-      </g>
-
-      {/* the paper rail, edge to edge and past the card on both sides, with the two
-          margin stops sitting on it where the text block begins and ends. */}
-      <g className="press-rail">
-        <rect x="0" y="44" width={PRESS_VIEW_W} height="5" rx="2.5" fill="url(#rail-steel)" />
-        <rect x="0" y="49" width={PRESS_VIEW_W} height="3" fill="#2E2820" opacity=".16" />
-        <rect className="press-stop" x="52" y="40" width="7" height="13" rx="2" fill="#241f19" />
-        <rect className="press-stop" x="291" y="40" width="7" height="13" rx="2" fill="#241f19" />
+      {/* 6. THE FRONT SHELL, painted last so the bar rises THROUGH the comb rather than
+             standing on top of the machine. The bar's base at full rest reaches svg y ~208,
+             which is behind this, so the shaft never ends in mid-air at either extreme. */}
+      <g className="press-front">
+        <path
+          className="press-front-face"
+          d={`M-8 158 Q-8 146 8 146 L${PRESS_VIEW_W - 8} 146 Q${PRESS_VIEW_W + 8} 146 ${PRESS_VIEW_W + 8} 158 L${PRESS_VIEW_W + 8} ${PRESS_VIEW_H} L-8 ${PRESS_VIEW_H} Z`}
+          fill="url(#press-front-face)"
+        />
+        <rect x="-8" y="146" width={PRESS_VIEW_W + 16} height="1.6" fill="#7a6f5c" opacity=".45" />
+        {/* the comb: the slots the bars pass through */}
+        <g className="press-comb">
+          {Array.from({ length: 21 }, (_, i) => (
+            <rect key={i} x={PRESS_HOME_X - 150 + i * 15} y="147" width="4" height="9" rx="1.6" fill="#0a0907" opacity=".72" />
+          ))}
+        </g>
+        {/* two rows of key tops. Nothing here is functional -- it is the silhouette, and the
+            silhouette is what the owner has been telling us is missing. */}
+        <g className="press-keys">
+          {Array.from({ length: 11 }, (_, i) => (
+            <circle key={`a${i}`} cx={PRESS_HOME_X - 140 + i * 28} cy="176" r="8.5" fill="#2b251e" stroke="#6b6152" strokeWidth="1.1" />
+          ))}
+          {Array.from({ length: 10 }, (_, i) => (
+            <circle key={`b${i}`} cx={PRESS_HOME_X - 126 + i * 28} cy="196" r="8.5" fill="#2b251e" stroke="#6b6152" strokeWidth="1.1" />
+          ))}
+        </g>
       </g>
     </svg>
   );
