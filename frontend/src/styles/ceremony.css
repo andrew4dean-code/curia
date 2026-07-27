@@ -102,11 +102,33 @@
 
    THE FLAP IS AN HTML DIV. As an SVG <g> it was mirrored above y=0 inside the
    viewBox and clipped away by SVG's default overflow:hidden, so the open flap was
-   never painted -- it appeared out of nowhere already half shut. Nothing between
-   .envelope-stack and .env-flap may carry `filter` (or any other grouping property):
-   filter flattens 3D subtrees, and a drop-shadow on the old .env-art is what
-   destroyed the flap's rotation even where the perspective was right. The two SVGs
-   keep their drop-shadows because they are leaves, not ancestors of the flap. */
+   never painted -- it appeared out of nowhere already half shut. Nothing inside
+   .env-flap may carry `filter` (or any other grouping property): filter flattens 3D
+   subtrees, and a drop-shadow on the old .env-art is what destroyed the flap's
+   rotation even where the perspective was right. The two SVGs keep their
+   drop-shadows because they are leaves, not ancestors of anything that rotates.
+
+   .envelope-stack IS DELIBERATELY FLAT (transform-style is left at its default) and it
+   is THE CAMERA FOR BOTH 3D SUBTREES BELOW IT. Those two facts are not in tension, and
+   confusing them is what shaded the sealed envelope backwards: `perspective` does not
+   make an element a 3D rendering context -- only `transform-style: preserve-3d` does.
+   The stack being flat means .fold and .env-flap each START a context rather than
+   extending one; the stack having a perspective means that when each of those subtrees
+   is finally flattened INTO the stack, this is the projection it is flattened under.
+   (Measured, not reasoned: deleting `perspective` here on the theory that it was inert
+   moved 20029 fold-stage pixels, 1268 of them by more than 24 levels. A preserve-3d
+   element does not flatten, so the panel geometry travels all the way up to the first
+   flat ancestor and is projected here. .fold's own 700px composes with this 520px; the
+   fold was tuned against the pair.)
+   What DID have to move is the rotation. It sat on .env-flap, which made the flap the
+   ROOT of its own context -- and a root's own transform is not part of what its
+   descendants accumulate. Both faces were therefore evaluated in a frame that never
+   turned: the inner face painted ~7690px at every frame of the stage and the outer
+   face 0 at every frame, sealed pose included (headless Chrome tint pass, t=0..1100).
+   The rotation now lives one tier down on .env-flap-panel, inside the context, which
+   is the same shape as .fold > .fold-panel > .fold-face -- and is why THAT two-face
+   construction has always worked. The projection is unchanged by the move: both tiers
+   are preserve-3d, so the paper is still flattened under this same camera. */
 .envelope-stack {
   position: absolute; inset: 0; z-index: 4;
   perspective: 520px;
@@ -145,21 +167,40 @@
    on darkening bare paper for the whole ship stage. */
 .env-throat { position: absolute; left: -5px; right: -5px; top: 136px; height: 22px; z-index: 4; opacity: 0; pointer-events: none; background: linear-gradient(rgba(46,40,32,0) 0%, rgba(46,40,32,.16) 44%, rgba(46,40,32,.5) 100%); }
 
-/* the flap. REST IS THE OPEN POSE, and open costs no transform: rotateX(0deg) is
-   the identity. That is what lets the ship stage hold the closed pose by simply
-   carrying the same animation rule through instead of pinning a second transform.
+/* THE FLAP IS A MOUNT, NOT THE PAPER. It holds the hinge's position, its z-index and
+   the camera; the sheet that actually turns is .env-flap-panel inside it. That split
+   is the fix for the backwards shading: `transform-style: preserve-3d` here makes
+   .env-flap the ROOT of a 3D rendering context, and a root's own transform is not part
+   of what its descendants accumulate. Put the rotation on the root (as this rule used
+   to) and both faces are evaluated in an unrotating frame -- the near face is front-
+   facing forever and the far face back-facing forever, whatever the flap is doing.
+   Put the rotation one level down and it lands INSIDE the context, where the faces
+   accumulate it. .fold > .fold-panel > .fold-face is the same three tiers for the same
+   reason.
+   NO PERSPECTIVE HERE, deliberately. The camera stays on .envelope-stack: this element
+   is preserve-3d and therefore does not flatten, so the panel's rotation is carried up
+   and projected by the stack exactly as the flap's own rotation used to be. Adding a
+   second perspective here would compose with that one and change the projection the
+   flap has always had (measured: .fold's 700px composes with the stack's 520px in
+   precisely that way).
    z-index 7 is declared once, here, and never changes: above .fold (3) so the lid is
    never behind the letter, and above .env-front (5) so the closing flap paints over
    the pocket. The pose used to drive it -- 1 while open, 7 while shutting -- and
    that is what made the open lid invisible; see the ladder note above. */
-.env-flap { position: absolute; left: -5px; right: -5px; top: 88px; height: 52px; z-index: 7; opacity: 0; transform-style: preserve-3d; transform-origin: 50% 100%; transform: rotateX(0deg); }
+.env-flap { position: absolute; left: -5px; right: -5px; top: 88px; height: 52px; z-index: 7; opacity: 0; transform-style: preserve-3d; }
+/* the paper. REST IS THE OPEN POSE, and open costs no transform: rotateX(0deg) is
+   the identity, which is what lets the ship stage hold the closed pose by carrying the
+   same animation rule through instead of pinning a second transform. */
+.env-flap-panel { position: absolute; inset: 0; transform-style: preserve-3d; transform-origin: 50% 100%; transform: rotateX(0deg); }
 /* Two faces, each backface-visibility:hidden, 1px apart in Z. The far face is
    `rotateX(180deg) translateZ(.5px)`, NOT translateZ(-.5px): after the 180 flip the
    face's local +Z points at global -Z, so a local +.5 puts it .5px BEHIND the near
    face. Writing -.5px there lands both faces on global +0.5 -- coplanar, and then
    which one you see is left entirely to backface-visibility with nothing to fall
    back on. With the real 1px gap, depth sorting alone already picks the right face,
-   and backface-visibility is belt and braces rather than the only mechanism. */
+   and backface-visibility is belt and braces rather than the only mechanism. That
+   claim is only true now: both mechanisms read the accumulated transform, and until
+   the panel existed neither of them ever saw the flap turn over. */
 .env-flap-face { position: absolute; inset: 0; backface-visibility: hidden; }
 .env-flap-in { transform: translateZ(.5px); -webkit-clip-path: polygon(0 100%, 100% 100%, 50% 0); clip-path: polygon(0 100%, 100% 100%, 50% 0); background: linear-gradient(#EFE7D2 0%, #DFD4B4 58%, #C8B98F 100%); }
 .env-flap-out { transform: rotateX(180deg) translateZ(.5px); -webkit-clip-path: polygon(0 0, 100% 0, 50% 100%); clip-path: polygon(0 0, 100% 0, 50% 100%); background: linear-gradient(#F3ECDA 0%, #E7DDC4 62%, #D5C8A4 100%); }
@@ -340,24 +381,59 @@
 .ceremony[data-stage='ship'] .fold-contact { animation: contact-drop .62s .70s cubic-bezier(.45,0,.2,1) both; }
 @keyframes contact-drop { 0% { opacity: 0; transform: translateZ(1px) scaleY(.4); } 100% { opacity: 1; transform: translateZ(1px) scaleY(1); } }
 
-/* ---- stage: envelope — the letter is posted, 1100ms ---------------------------
-      0 - 170   the envelope rises 106px into place from below while the packet lifts
-                106px to hover ABOVE the open flap. Both moves are the same distance
-                over the same span with the same easing, so the gap between the
-                letter's bottom edge and the flap's apex is a CONSTANT 2px for every
-                frame of the arrival -- they never overlap, at any frame, whatever the
-                z-order says. That invariant is the fix: the lid used to be behind an
-                opaque letter for the first ~310ms because the mouth pose (-36px) put
-                the packet at scene 60..156, a band containing the flap's 88..140.
-    170 - 300   the hold. The letter hangs above a visibly open flap -- the beat the
-                whole stage is for, and the one the old timing had no frame of.
-    300 - 560   the 260ms descent: 174px down, behind the standing lid and on past it,
-                eaten by the y>=62 occluder as it reaches the throat, landing on the
-                pocket floor
-    560 - 590   the 4px spring off the floor
-    590 - 900   the flap closes, 310ms, its cast shadow sweeping with it, and the
-                mouth's shadow fades out with it -- a sealed envelope has no opening
-    900 - 1100  the seal stamps, strictly after the flap has stopped moving
+/* ---- posting the letter — ONE CLOCK, STARTED WHEN THE FOLD STARTS --------------
+   Every animation below is scoped to 'fold', 'envelope' AND 'ship' and its delay is
+   measured from the fold stage's first frame, because THE ENVELOPE HAS TO ARRIVE FROM
+   OUTSIDE THE PICTURE and the envelope stage alone is not long enough to bring it in
+   without the arrival itself becoming a bang.
+
+   It used to open at translateY(106px) with opacity 1, so the whole envelope simply
+   existed at the first frame of the envelope stage: measured across that one stage
+   boundary, 44296 pixels -- 17.7% of a 375x667 screen -- changed by more than 24
+   levels between two consecutive frames, and the NEXT frame changed 54841 more. (The
+   build before that opened at opacity 0, which is not better, only differently wrong:
+   the envelope faded up out of nothing, and there was no lid to see because there was
+   no envelope.) Off-frame is the only start that is neither. 420px puts the envelope's
+   top edge at scene 516 against a viewport bottom of scene 477.5 (the 288-tall scene
+   is centred in 667), so the body AND the 28px blur of its drop-shadow are outside the
+   picture, and the first frame of the fold stage is unchanged.
+
+   The room comes from the fold stage's own tail: fold-down finishes at fold t=1320 and
+   MEASURED NOTHING AT ALL CHANGES from there to fold t=1600 -- 280ms of dead air
+   immediately before the letter is posted. The rise starts a little before that, at
+   1150, while the top panel is still easing into its landing; the envelope's leading
+   edge does not cross into the picture until 1203, and it enters at the very bottom of
+   a 667px screen with the fold happening 300px above it. That buys the arrival 430ms
+   of travel instead of 170, and 430ms is what it costs to move 314px WITHOUT the entry
+   itself becoming the loudest frame in the ceremony (see the per-frame budget below).
+
+     fold t                 (envelope-stage t)
+     1150 - 1580   (-450)   the envelope rises 314px, at a CONSTANT speed, from below
+                            the picture to 106px short of home. The letter has not
+                            moved: it is still exactly where the fold left it, and the
+                            flap's apex (88 + 420..106 = 508..194) stays below the
+                            letter's bottom edge (192) for the whole segment.
+     1580 - 1740   ( -20)   the last 106px, and now the letter lifts WITH it -- same
+                            distance, same span, same easing, so the gap between the
+                            letter's bottom edge and the flap's apex is a CONSTANT 2px
+                            for every frame. They never overlap, at any frame, whatever
+                            the z-order says. (Before the two segments, the lid was
+                            behind an opaque letter for the first ~310ms: the mouth
+                            pose (-36px) put the packet at scene 60..156, a band that
+                            contains the flap's 88..140.)
+     1740 - 1870   ( 140)   the hold. The letter hangs above a visibly open flap: the
+                            beat the whole stage is for, and the one the old timing had
+                            no frame of.
+     1870 - 2130   ( 270)   the 260ms descent: 174px down, behind the standing lid and
+                            on past it, eaten by the y>=62 occluder as it reaches the
+                            throat, landing on the pocket floor
+     2130 - 2160   ( 530)   the 4px spring off the floor, and the envelope's own 2px
+                            knock as it takes the weight
+     2160 - 2470   ( 560)   the flap closes, 310ms, its cast shadow sweeping with it,
+                            and the mouth's shadow fades out with it -- a sealed
+                            envelope has no opening left to be dark
+     2470 - 2670   ( 870)   the seal stamps, strictly after the flap has stopped moving
+     2670 - 2700   (1070)   the sealed envelope, still, before it ships
 
    There is no cross-fade and no second element anywhere in here. The old build
    replaced the packet with an unrelated envelope: it set a transform on .fold with
@@ -366,27 +442,36 @@
    over it. There was literally no frame in which the envelope held the letter. That
    rule is deleted; the SAME .fold element now travels into the pocket.
 
-   Every rule is written for both 'envelope' and 'ship' so its filled end state
-   survives the stage change without restarting (same computed animation value). */
+   Every rule is written for 'fold', 'envelope' AND 'ship' so its filled end state
+   survives BOTH stage changes without restarting (same computed animation value), and
+   so that every delay above can be read on one clock. An animation starts when its
+   element first matches, so the fold selector is not decoration: without it the
+   arrival could not begin before the envelope stage did. */
+.ceremony[data-stage='fold'] .env-part,
 .ceremony[data-stage='envelope'] .env-part,
-.ceremony[data-stage='ship'] .env-part { animation: env-arrive .62s linear both; }
+.ceremony[data-stage='ship'] .env-part { animation: env-arrive 1.01s 1.15s linear both; }
+.ceremony[data-stage='fold'] .fold,
 .ceremony[data-stage='envelope'] .fold,
-.ceremony[data-stage='ship'] .fold { animation: packet-insert .59s linear both; }
-/* the flap needs the arrival and the close, and both must be declared in ONE rule:
-   `animation` is a shorthand, so a second rule would replace the first rather than
-   add to it. The close uses `forwards`, not `both`, on purpose -- during its 590ms
-   delay it contributes nothing at all, so env-arrive still owns `transform`.
+.ceremony[data-stage='ship'] .fold { animation: packet-insert .58s 1.58s linear both; }
+/* The arrival and the close are now on DIFFERENT ELEMENTS, and that is a consequence
+   of the fix above rather than a free choice: the mount travels, the paper turns.
+   They used to be two animations crammed into one declaration on one element, because
+   `animation` is a shorthand and a second rule would have replaced the first rather
+   than added to it -- and the close had to be `forwards` rather than `both` so that
+   during its delay it contributed nothing and left `transform` to the arrival. With
+   one animation per element neither dodge is needed and the close can fill `both`.
    There is no third animation any more. env-flap-duck used to sit between these two
    to hold the open flap BEHIND the letter, on the theory that a standing lid would
    otherwise cover half the packet. It covered nothing and hid everything: the packet
    contained the flap's whole band, so the duck buried the lid under an opaque letter
    for the first ~310ms. The overlap is now impossible by construction (see
    packet-insert), so the flap keeps its single z-index 7 and is never ducked. */
+.ceremony[data-stage='fold'] .env-flap,
 .ceremony[data-stage='envelope'] .env-flap,
-.ceremony[data-stage='ship'] .env-flap {
-  animation: env-arrive .62s linear both,
-             env-flap-close .31s .59s cubic-bezier(.42,0,.28,1) forwards;
-}
+.ceremony[data-stage='ship'] .env-flap { animation: env-arrive 1.01s 1.15s linear both; }
+.ceremony[data-stage='fold'] .env-flap-panel,
+.ceremony[data-stage='envelope'] .env-flap-panel,
+.ceremony[data-stage='ship'] .env-flap-panel { animation: env-flap-close .31s 2.16s cubic-bezier(.42,0,.28,1) both; }
 /* the mouth's shadow belongs to an OPEN mouth. Both halves of it -- the cast shadow
    on the near side of the throat and the cavity darkening the back panel behind it --
    fade out on exactly the flap's clock, so that by the time the envelope is sealed
@@ -395,61 +480,96 @@
    held a >100-level dark wedge through the seal beat and the whole ship stage: the
    final image of the ceremony was a sealed envelope with two holes punched in it.
    .env-throat carries its own arrival here rather than the shared .env-part rule,
-   because `animation` is a shorthand and it needs a second animation on top. */
+   because `animation` is a shorthand and it needs a second animation on top. Both of
+   its animations therefore have to share one selector set, which is the other reason
+   the whole group is on one clock: split them and the same beat would need two
+   different delay numbers on the same stylesheet. */
+.ceremony[data-stage='fold'] .env-throat,
 .ceremony[data-stage='envelope'] .env-throat,
-.ceremony[data-stage='ship'] .env-throat { animation: env-arrive .62s linear both, mouth-shut .31s .59s cubic-bezier(.42,0,.28,1) forwards; }
+.ceremony[data-stage='ship'] .env-throat { animation: env-arrive 1.01s 1.15s linear both, mouth-shut .31s 2.16s cubic-bezier(.42,0,.28,1) forwards; }
 /* the cavity is a rect INSIDE .env-back, which is an .env-part and already carries the
    arrival on its own root -- so this one takes the shut alone. Giving it env-arrive too
    would compound the rise and the fade with its parent's. */
+.ceremony[data-stage='fold'] .env-cavity,
 .ceremony[data-stage='envelope'] .env-cavity,
-.ceremony[data-stage='ship'] .env-cavity { animation: mouth-shut .31s .59s cubic-bezier(.42,0,.28,1) forwards; }
+.ceremony[data-stage='ship'] .env-cavity { animation: mouth-shut .31s 2.16s cubic-bezier(.42,0,.28,1) forwards; }
 @keyframes mouth-shut { 0% { opacity: 1; } 100% { opacity: 0; } }
+.ceremony[data-stage='fold'] .env-flap-shadow,
 .ceremony[data-stage='envelope'] .env-flap-shadow,
-.ceremony[data-stage='ship'] .env-flap-shadow { animation: flap-shadow-sweep .31s .59s cubic-bezier(.42,0,.28,1) forwards; }
+.ceremony[data-stage='ship'] .env-flap-shadow { animation: flap-shadow-sweep .31s 2.16s cubic-bezier(.42,0,.28,1) forwards; }
+.ceremony[data-stage='fold'] .envelope-seal,
 .ceremony[data-stage='envelope'] .envelope-seal,
-.ceremony[data-stage='ship'] .envelope-seal { animation: seal-stamp-env .2s .9s cubic-bezier(.3,1.5,.5,1) forwards, seal-dent .2s .9s ease-out forwards; }
+.ceremony[data-stage='ship'] .envelope-seal { animation: seal-stamp-env .2s 2.47s cubic-bezier(.3,1.5,.5,1) forwards, seal-dent .2s 2.47s ease-out forwards; }
 
-/* THE ENVELOPE RISES EXACTLY AS FAR AS THE LETTER LIFTS, over exactly the same span,
-   under exactly the same easing. 106px, 0 -> 170ms, cubic-bezier(.25,.9,.35,1) here
-   and in packet-insert below. That pairing is the whole defence of the open lid:
-     flap apex(t)     = 88  + envArrive(t)
-     letter bottom(t) = 192 + packetInsert(t)
-     apex - bottom    = 88 - 192 + (106(1-p) - (-106p)) = -104 + 106 = 2px, every t
-   -- a constant 2px of daylight, independent of the ease, so no frame of the arrival
-   can put the letter over the lid. 27.4% of 620ms is 169.9ms, the same instant as
-   28.8% of packet-insert's 590ms; both segments start at 0, so identical eases over
-   identical absolute spans interpolate identically. MEASURED, not derived: see the
-   scrub of t = 0..170 in the commit.
-   opacity starts at 1 and never moves. It used to start at 0, which meant the frame
-   at t=0 had no envelope in it at all -- there was no lid to see because there was no
-   envelope. Paper does not fade in; it slides up from below.
-   The 2px knock at 90.3-96.3% (560-597ms) is the envelope taking the packet's weight
-   as it lands. Per-keyframe timing functions, so the arrival easing does not smear
-   across the knock. */
+/* THE ARRIVAL IS TWO SEGMENTS, AND THE SECOND ONE IS COUPLED TO THE LETTER.
+   1.01s starting at fold t=1150 (see the timeline above). The percentages are not round
+   numbers because the absolute instants are what matter: they have to agree with
+   packet-insert's to inside a frame, and packet-insert has a different duration and a
+   different delay.
+
+   0 -> 42.574%  (fold 1150 -> 1580, 430ms)  420px -> 106px, LINEAR.
+     420px is off-frame and that is the whole point of it: the envelope's top edge sits
+     at scene 516 while the picture ends at scene 477.5 (a 288-tall scene centred in a
+     667 viewport), so its body AND the 28px blur of its drop-shadow are outside the
+     picture. Measured: the envelope contributes exactly 0 changed pixels to every fold
+     frame up to 1319, so neither stage boundary moves anything.
+     LINEAR IS A MEASUREMENT, NOT A TASTE. 314px is a long way and the cost of moving
+     this object is about 1200 changed pixels per pixel travelled (it is 300 wide and
+     drags a soft 28px drop-shadow over a dark backdrop). The shipped arrival peaked at
+     35.3px in one frame and cost 54841 -- 21.9% of the screen -- in the worst single
+     frame. At a constant 314px/430ms the peak is 12.2px per frame. An ease-out here
+     would front-load the travel and put the old 30000px frame right at the edge of the
+     picture: the same bang, moved.
+     The letter does NOT move during this segment. It is where the fold left it, and the
+     envelope's flap apex is 88 + 420..106 = 508..194, i.e. always BELOW the letter's
+     bottom edge at 192. They cannot overlap here either.
+
+   42.574% -> 58.416%  (fold 1580 -> 1740, 160ms)  106px -> 0, and the letter lifts
+     106px over the SAME span under the SAME easing, so
+       flap apex(t)     = 88  + envArrive(t)
+       letter bottom(t) = 192 + packetInsert(t)
+       apex - bottom    = 88 - 192 + (106(1-p) - (-106p)) = -104 + 106 = 2px, every t
+     -- a constant 2px of daylight, independent of the ease, so no frame can put the
+     letter over the lid. cubic-bezier(.42,.42,.85,1) is chosen so this segment peaks at
+     12.4px/frame, the same as the linear run-up's 12.2: it starts at unit slope
+     (.42/.42) instead of the 3.6 of the ease it replaces, so there is no kick at the
+     hand-over, and it still settles rather than stopping dead.
+
+   97.030% -> 100%  (fold 2130 -> 2160)  the 2px knock as the envelope takes the
+     packet's weight. Per-keyframe timing functions, so the arrival easing does not
+     smear across it.
+
+   opacity is 1 at every step and never moves. Paper does not fade in. An earlier build
+   opened this at opacity 0, which meant the first frame of the envelope stage had no
+   envelope in it at all -- and then the frame after it had a whole one. */
 @keyframes env-arrive {
-  0% { opacity: 1; transform: translateY(106px); animation-timing-function: cubic-bezier(.25,.9,.35,1); }
-  27.4% { opacity: 1; transform: translateY(0); animation-timing-function: linear; }
-  90.3% { transform: translateY(0); animation-timing-function: cubic-bezier(.3,0,.4,1); }
-  96.3% { transform: translateY(2px); animation-timing-function: cubic-bezier(.3,.9,.4,1); }
+  0% { opacity: 1; transform: translateY(420px); animation-timing-function: linear; }
+  42.574% { opacity: 1; transform: translateY(106px); animation-timing-function: cubic-bezier(.42,.42,.85,1); }
+  58.416% { opacity: 1; transform: translateY(0); animation-timing-function: linear; }
+  97.030% { transform: translateY(0); animation-timing-function: cubic-bezier(.3,0,.4,1); }
+  98.515% { transform: translateY(2px); animation-timing-function: cubic-bezier(.3,.9,.4,1); }
   100% { opacity: 1; transform: translateY(0); }
 }
 
 /* the insertion, in scene pixels (packet at rest = scene 96..192, flap apex when the
-   envelope is home = 88, hinge = 140, throat = 158):
-     0%       0px   the packet is exactly where the fold left it — no jump
-     28.8% -106px   hover: packet -10..86, bottom edge 2px clear of the flap's
+   envelope is home = 88, hinge = 140, throat = 158). .58s starting at fold t=1580,
+   which is 20ms before the envelope stage begins -- the letter waits, motionless,
+   through the whole of the envelope's run-up and only moves once the envelope has
+   come up to meet it:
+     0%       0px   the packet is exactly where the fold left it — no jump (1580)
+     27.586% -106px hover: packet -10..86, bottom edge 2px clear of the flap's
                     APEX -- not of the throat. Clearing the throat is what the old
                     -36px did, and the throat is 70px BELOW the apex, so the letter
-                    sat over the whole lid.                                  (170ms)
-     50.8% -106px   held. The letter hangs above an open flap for 130ms.     (300ms)
-     94.9%  +68px   floor: packet 164..260, top 6px under the throat         (560ms)
-     100%   +64px   rest:  packet 160..256, top 2px under, nothing peeks     (590ms)
-   The 4px between 94.9% and 100% is the spring off the pocket floor. */
+                    sat over the whole lid.                                  (1740)
+     50%     -106px held. The letter hangs above an open flap for 130ms.     (1870)
+     94.828%  +68px floor: packet 164..260, top 6px under the throat         (2130)
+     100%     +64px rest:  packet 160..256, top 2px under, nothing peeks     (2160)
+   The 4px between 94.828% and 100% is the spring off the pocket floor. */
 @keyframes packet-insert {
-  0% { transform: translateY(0); animation-timing-function: cubic-bezier(.25,.9,.35,1); }
-  28.8% { transform: translateY(-106px); animation-timing-function: linear; }
-  50.8% { transform: translateY(-106px); animation-timing-function: cubic-bezier(.5,.02,.72,.86); }
-  94.9% { transform: translateY(68px); animation-timing-function: cubic-bezier(.3,.9,.4,1); }
+  0% { transform: translateY(0); animation-timing-function: cubic-bezier(.42,.42,.85,1); }
+  27.586% { transform: translateY(-106px); animation-timing-function: linear; }
+  50% { transform: translateY(-106px); animation-timing-function: cubic-bezier(.5,.02,.72,.86); }
+  94.828% { transform: translateY(68px); animation-timing-function: cubic-bezier(.3,.9,.4,1); }
   100% { transform: translateY(64px); }
 }
 

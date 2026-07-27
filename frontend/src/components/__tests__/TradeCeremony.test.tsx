@@ -881,21 +881,122 @@ describe('TradeCeremony', () => {
     expect(css).not.toMatch(/^\.ticket\s*\{[^}]*min-height/m);
   });
 
-  it('declares the perspective on .envelope-stack, with no filter anywhere on it', () => {
-    // perspective used to sit on .ceremony, where it applied to .ceremony-scene -- an element
-    // with no 3D transform -- and so never reached the flap, leaving the rotation flat. And
-    // .env-art carried filter: drop-shadow(), a grouping property that FLATTENS 3D subtrees:
-    // even a correctly placed perspective would have been destroyed by it.
+  it('opens the flap 3D context ABOVE the paper that turns, so the faces accumulate the rotation', () => {
+    // THE SEALED ENVELOPE WAS SHADED BACKWARDS FOR THE WHOLE SHIP STAGE, and the cause was one
+    // tier of DOM. `perspective` does not make a 3D rendering context; `transform-style:
+    // preserve-3d` does. .envelope-stack was flat, so .env-flap's preserve-3d STARTED a context
+    // rather than extending one -- which made the flap that context's ROOT, and a root's own
+    // transform is not part of what its descendants accumulate. Both faces were evaluated in a
+    // frame that never turned: the inner face was front-facing forever, the outer face
+    // back-facing forever. Measured in headless Chrome with a tint pass: the outer face painted
+    // 0px at EVERY frame from t=0 to t=1100, and at the sealed pose the flap showed the inner
+    // face upside down -- rgb(202,187,146) at the hinge against rgb(228,217,190) for the pocket
+    // beneath it, i.e. a dark band across the top of the final held image.
+    // The rotation now lives one tier down, inside the context, exactly as .fold > .fold-panel
+    // > .fold-face has always had it. After the fix the same pass reads inner 7693 / outer 0
+    // while open and inner 0 / outer 7686 once sealed, and the hinge is rgb(242,235,217).
     const css = readCeremonyCss();
-    const stack = css.match(/\.envelope-stack\s*\{([^}]*)\}/);
-    expect(stack).not.toBeNull();
-    expect(stack![1]).toMatch(/perspective:\s*\d+px/);
-    expect(stack![1]).not.toMatch(/filter/);
-    // nothing between the stack and the flap may reintroduce it either -- .env-flap is a direct
-    // child, so the only other candidate is the flap itself.
-    const flap = css.match(/\n\.env-flap\s*\{([^}]*)\}/);
-    expect(flap).not.toBeNull();
-    expect(flap![1]).not.toMatch(/filter/);
+    const rules = readCeremonyRules();
+    const { container } = render(<TradeCeremony ticket={ticket} onDone={vi.fn()} />);
+
+    // WHICH ELEMENT ROTATES IS READ OFF THE STYLESHEET, not assumed here: whatever rule applies
+    // env-flap-close names it, and the assertions below follow that element wherever it moves.
+    const closeRule = rules.match(/([^{}\n]*\.env-flap[\w-]*)\s*\{[^}]*animation:[^;]*env-flap-close/)!;
+    expect(closeRule).not.toBeNull();
+    const turning = closeRule[1].trim().split(/\s+/).pop()!; // e.g. '.env-flap-panel'
+    const paperEl = container.querySelector(turning)!;
+    expect(paperEl).not.toBeNull();
+
+    // 1. THE THING THAT TURNS MUST NOT BE THE ROOT OF ITS OWN CONTEXT. Its parent has to be the
+    //    element that declares preserve-3d, or the rotation is invisible to the faces again.
+    const parent = paperEl.parentElement!;
+    const opensContext = Array.from(parent.classList).some((c) =>
+      new RegExp(`\\n\\.${c}\\s*\\{[^}]*transform-style:\\s*preserve-3d`).test(css),
+    );
+    // spelled out rather than a bare boolean so a failure names the element that was found
+    // sitting at the root of its own context
+    const parentDesc = `.${Array.from(parent.classList).join('.')}`;
+    expect(`${turning} inside ${parentDesc}: preserve-3d=${opensContext}`)
+      .toBe(`${turning} inside ${parentDesc}: preserve-3d=true`);
+    // and the paper itself keeps preserve-3d, so the two faces extend that same context
+    const paper = css.match(new RegExp(`\\n\\${turning}\\s*\\{([^}]*)\\}`))![1];
+    expect(paper).toMatch(/transform-style:\s*preserve-3d/);
+
+    // 2. BOTH FACES HANG OFF THE PAPER, not off the mount: a face outside the rotating element
+    //    accumulates nothing no matter how the context is arranged.
+    const faces = Array.from(container.querySelectorAll('.env-flap-face'));
+    expect(faces).toHaveLength(2);
+    for (const f of faces) expect(f.parentElement).toBe(paperEl);
+
+    // 3. THE MOUNT OPENS THE CONTEXT BUT IS NOT THE CAMERA. Every tier from the paper up to the
+    //    first FLAT ancestor is preserve-3d, so the paper is not flattened until .envelope-stack
+    //    -- which is where the perspective must therefore live, and where it has always lived.
+    //    Deleting it from there on the theory that it reached nothing that rotates moved 20029
+    //    fold-stage pixels in headless Chrome (.fold is preserve-3d too and is projected by the
+    //    same camera); adding a SECOND perspective on the mount would compose with it and change
+    //    the projection the flap has always had.
+    const mount = css.match(/\n\.env-flap\s*\{([^}]*)\}/)![1];
+    expect(mount).toMatch(/transform-style:\s*preserve-3d/);
+    expect(mount).not.toMatch(/perspective/);
+    const stack = css.match(/\.envelope-stack\s*\{([^}]*)\}/)![1];
+    expect(stack).toMatch(/perspective:\s*\d+px/);
+    expect(stack).toMatch(/perspective-origin:\s*50% 140px/); // scene 140 = flap top 88 + height 52 = the hinge
+    expect(stack).not.toMatch(/transform-style:\s*preserve-3d/); // flat, so .fold and .env-flap each own a context
+
+    // 4. NO GROUPING PROPERTY ANYWHERE ON THE CHAIN. filter (and friends) flatten a 3D subtree,
+    //    which is what destroyed the rotation even where the perspective was right.
+    expect(stack).not.toMatch(/filter/);
+    expect(mount).not.toMatch(/filter/);
+    expect(paper).not.toMatch(/filter/);
+  });
+
+  it('puts the LIT face outside and the shaded face inside, and cuts them as mirror images', () => {
+    // Which gradient goes on which face was untested, and swapping the two left all 229 tests
+    // green -- while making the sealed envelope's lid the gummed inside of the paper, shaded
+    // dark exactly where the outside should be catching the light. (That is also the pose the
+    // ceremony HOLDS: the flap is shut from ~690ms of the envelope stage until the packet ships,
+    // and it is the last thing the eye is on.) The rule is physical, so it can be asserted as
+    // one: .env-flap-out is the face turned to the room, .env-flap-in is the one that goes down
+    // onto the pocket, and paper facing a light source is lighter at every point than paper
+    // facing away from it.
+    const css = readCeremonyCss();
+    const stops = (cls: string) => {
+      const rule = css.match(new RegExp(`\\n\\.${cls}\\s*\\{([^}]*)\\}`))![1];
+      const grad = rule.match(/background:\s*linear-gradient\(([^)]*)\)/)![1];
+      return Array.from(grad.matchAll(/#([0-9A-Fa-f]{6})\s+([\d.]+)%/g)).map((m) => ({
+        lum: parseInt(m[1].slice(0, 2), 16) + parseInt(m[1].slice(2, 4), 16) + parseInt(m[1].slice(4, 6), 16),
+        at: Number(m[2]),
+      }));
+    };
+    const outer = stops('env-flap-out');
+    const inner = stops('env-flap-in');
+    expect(outer).toHaveLength(3);
+    expect(inner).toHaveLength(3);
+    // The two gradients do not share stop POSITIONS (58% against 62%), so comparing them
+    // stop-by-stop would compare different points on the paper. Interpolate instead and compare
+    // the same y on both faces.
+    const lumAt = (g: typeof outer, y: number) => {
+      const hi = g.findIndex((s) => s.at >= y);
+      if (hi <= 0) return g[0].lum;
+      const a = g[hi - 1];
+      const b = g[hi];
+      return a.lum + ((b.lum - a.lum) * (y - a.at)) / (b.at - a.at);
+    };
+    for (const y of [0, 10, 25, 40, 50, 58, 62, 75, 90, 100]) {
+      const o = Math.round(lumAt(outer, y));
+      const i = Math.round(lumAt(inner, y));
+      expect(`at ${y}%: outer ${o} vs inner ${i} -> outer lighter? ${o > i}`)
+        .toBe(`at ${y}%: outer ${o} vs inner ${i} -> outer lighter? true`);
+    }
+
+    // and the two clips are mirror images about the horizontal: the outer face is rotated 180deg
+    // about X, so a triangle drawn apex-up on it has to be authored apex-DOWN or the paper has
+    // two different silhouettes depending on which side of it you are looking at.
+    const clip = (cls: string) =>
+      css.match(new RegExp(`\\n\\.${cls}\\s*\\{[^}]*[^-]clip-path:\\s*polygon\\(([^)]*)\\)`))![1]
+        .split(',').map((p) => p.trim().split(/\s+/).map((v) => Number(v.replace('%', ''))));
+    const mirror = clip('env-flap-in').map(([x, y]) => `${x} ${100 - y}`).sort();
+    expect(clip('env-flap-out').map(([x, y]) => `${x} ${y}`).sort()).toEqual(mirror);
   });
 
   it("rests the flap in the OPEN pose and closes it away from the viewer", () => {
@@ -903,7 +1004,7 @@ describe('TradeCeremony', () => {
     // hold the closed pose by carrying the same animation rule through, instead of pinning a
     // second transform on .env-flap-hinge the way the old build did.
     const css = readCeremonyCss();
-    const flap = css.match(/\n\.env-flap\s*\{([^}]*)\}/)![1];
+    const flap = css.match(/\n\.env-flap-panel\s*\{([^}]*)\}/)![1];
     expect(flap).toMatch(/transform:\s*rotateX\(0deg\)/);
     expect(flap).toMatch(/transform-origin:\s*50% 100%/);
 
@@ -931,47 +1032,110 @@ describe('TradeCeremony', () => {
     const flapRule = css.match(/\n\.env-flap\s*\{([^}]*)\}/)![1];
     const apex = Number(flapRule.match(/top:\s*(\d+)px/)![1]); // scene 88: the open flap's tip
     // the packet is the middle third of the ticket, so scene [h, 2h] with h = min-height / 3
-    const third = Number(css.match(/\.ticket-wrap \.ticket\s*\{[^}]*min-height:\s*(\d+)px/)![1]) / 3;
-    const packetBottom = third * 2;
+    const sceneH = Number(css.match(/\.ticket-wrap \.ticket\s*\{[^}]*min-height:\s*(\d+)px/)![1]);
+    const packetBottom = (sceneH / 3) * 2;
 
     const kf = (name: string) => keyframes(css, name);
     const steps = (body: string) =>
       Array.from(body.matchAll(/([\d.]+)%\s*\{([^}]*)/g)).map((m) => ({ pct: Number(m[1]), body: m[2] }));
-    const dur = (name: string) => Number(css.match(new RegExp(`animation: ${name} (\\.\\d+)s`))![1]) * 1000;
+    // duration AND delay, in ms. Both matter now: the two animations start at different instants
+    // and neither of them starts when the envelope stage does, so a percentage on its own says
+    // nothing about when a keyframe actually happens.
+    const clock = (name: string) => {
+      const m = css.match(new RegExp(`animation:[^;]*\\b${name} ([\\d.]+)s ([\\d.]+)s`))!;
+      return { dur: Number(m[1]) * 1000, delay: Number(m[2]) * 1000 };
+    };
+    const at = (name: string, pct: number) => {
+      const c = clock(name);
+      return c.delay + (pct / 100) * c.dur;
+    };
+    const yOf = (body: string) => Number(body.match(/translateY\((-?[\d.]+)px?\)/)![1]);
+    const ease = (body: string) => body.match(/animation-timing-function:\s*([^;]+);/)![1].trim();
 
     const arrive = steps(kf('env-arrive'));
     const insert = steps(kf('packet-insert'));
-    const rise = Number(arrive[0].body.match(/translateY\((\d+)px\)/)![1]);
-    const home = arrive.slice(1).find((s) => /translateY\(0\)/.test(s.body))!;
-    const hoverStep = insert.find((s) => /translateY\(-\d+px\)/.test(s.body))!;
-    const hover = Number(hoverStep.body.match(/translateY\((-\d+)px\)/)![1]);
+    const start = yOf(arrive[0].body);                                        // off-frame
+    const meetStep = arrive.slice(1).find((s) => yOf(s.body) > 0)!;           // the hand-over
+    const meet = yOf(meetStep.body);
+    const homeStep = arrive.slice(1).find((s) => /translateY\(0\)/.test(s.body))!;
+    const hoverStep = insert.find((s) => /translateY\(-[\d.]+px\)/.test(s.body))!;
+    const hover = yOf(hoverStep.body);
 
-    // 1. THE HOVER POSE CLEARS THE APEX, not the throat. Clearing the throat is what the old
+    // 1. THE ARRIVAL STARTS OFF-FRAME, body and shadow both. Not at opacity 0 (an envelope that
+    //    fades up out of nothing) and not at a partial offset that leaves it fully on screen at
+    //    the first frame (measured: 44296 px, 17.7% of the screen, changing at one stage
+    //    boundary, and 54841 on the frame after it). The viewport height is the one number here
+    //    that is not in the stylesheet: 375x667 is the target device, and headless Chrome puts
+    //    the 288-tall scene's top edge at 189.5 in it, which is (667-288)/2.
+    const VIEWPORT_H = 667;
+    const bottomOfPicture = VIEWPORT_H - (VIEWPORT_H - sceneH) / 2; // 477.5, in scene coordinates
+    const artTop = Number(css.match(/\n\.env-art\s*\{[^}]*top:\s*(\d+)px/)![1]);
+    expect(artTop + start).toBeGreaterThanOrEqual(bottomOfPicture);
+    // and the drop-shadow travels with it: a 28px blur offset 14px down reaches 14px ABOVE the
+    // element's own top edge, so the start has to clear the picture by that much as well.
+    const shadow = css.match(/\n\.env-back\s*\{[^}]*drop-shadow\(0 (\d+)px (\d+)px/)!;
+    expect(artTop + start + Number(shadow[1]) - Number(shadow[2])).toBeGreaterThanOrEqual(bottomOfPicture);
+
+    // 2. THE RUN-UP CANNOT REACH THE LETTER. The letter does not move at all until the envelope
+    //    has come up to `meet`, so this whole segment is one object moving under one monotone
+    //    (linear) easing and the two endpoints settle it: the flap's apex starts 316px below the
+    //    letter's bottom edge and ends 2px below it.
+    expect(ease(arrive[0].body)).toBe('linear');
+    expect(apex + start - packetBottom).toBeGreaterThan(0);
+    expect(apex + meet - packetBottom).toBeGreaterThan(0);
+    expect(at('packet-insert', 0)).toBeCloseTo(at('env-arrive', meetStep.pct), 0);
+
+    // 3. THE HOVER POSE CLEARS THE APEX, not the throat. Clearing the throat is what the old
     //    -36px did, and the throat is 70px below the apex -- which is exactly how the letter
     //    came to be sitting on top of the whole lid.
     expect(packetBottom + hover).toBeLessThanOrEqual(apex);
 
-    // 2. AND IT CLEARS IT AT EVERY FRAME OF THE ARRIVAL, not just at the end. The envelope
-    //    rises by `rise` while the letter lifts by `-hover` over the same span; the gap
-    //      apex + rise*(1-p) - (packetBottom + hover*p)
-    //    is independent of p only when rise === -hover, so assert that identity rather than
+    // 4. AND THE COUPLED SEGMENT CLEARS IT AT EVERY FRAME, not just at the ends. The envelope
+    //    covers its last `meet` px while the letter lifts by `-hover`; the gap
+    //      apex + meet*(1-p) - (packetBottom + hover*p)
+    //    is independent of p only when meet === -hover, so assert that identity rather than
     //    sampling a few p and hoping. With it, no easing and no frame rate can produce an
-    //    overlap. (Measured in headless Chrome: a constant 2px, t = 0..170.)
-    expect(rise).toBe(-hover);
-    expect(apex + rise - packetBottom).toBeGreaterThan(0);
+    //    overlap. (Measured in headless Chrome: exactly 2.00px at fold 1580/1600/1620/1650/
+    //    1680/1700/1720/1740.)
+    expect(meet).toBe(-hover);
+    // 5. the two segments have to START AND END AT THE SAME INSTANTS and share the same easing,
+    //    or the identity above holds only at the endpoints and sags in between. Absolute ms, not
+    //    percentages: the two animations have different durations AND different delays.
+    expect(at('env-arrive', homeStep.pct)).toBeCloseTo(at('packet-insert', hoverStep.pct), 0);
+    expect(ease(meetStep.body)).toBe(ease(insert[0].body));
 
-    // 3. the two segments have to END AT THE SAME INSTANT and share the same easing, or the
-    //    identity above holds only at the endpoints and sags in between.
-    expect((home.pct / 100) * dur('env-arrive')).toBeCloseTo((hoverStep.pct / 100) * dur('packet-insert'), 0);
-    const ease = /animation-timing-function:\s*([^;]+);/;
-    expect(arrive[0].body.match(ease)![1].trim()).toBe(insert[0].body.match(ease)![1].trim());
+    // 6. THE HOLD IS REAL AND IT IS LONG ENOUGH TO SEE. The letter hangs above an open flap: two
+    //    consecutive packet-insert steps at the SAME translateY, at least 120ms apart. Without
+    //    this the hover pose could be a corner the letter turns rather than a beat it holds --
+    //    and nothing else in this file would notice (the shipped 50.8% step could be moved to
+    //    30.0%, cutting the hold from 130ms to 40ms, with all 229 tests still passing).
+    const heldFrom = insert.indexOf(hoverStep);
+    const nextStep = insert[heldFrom + 1];
+    expect(yOf(nextStep.body)).toBe(hover); // still at the hover pose
+    const holdMs = at('packet-insert', nextStep.pct) - at('packet-insert', hoverStep.pct);
+    expect(holdMs).toBeGreaterThanOrEqual(120);
 
-    // 4. the envelope is never painted without its lid: the flap shares the arrival, and the
+    // 7. EVERY ONE OF THESE ANIMATIONS IS DECLARED FOR THE FOLD STAGE TOO. An animation starts
+    //    when its element first matches, so this is what lets the arrival begin before the
+    //    envelope stage does -- and every delay above is on that one clock. Drop the fold
+    //    selector and env-arrive's 1150ms delay would land almost the whole arrival past the end
+    //    of the 1100ms stage it is supposed to open.
+    for (const name of ['env-arrive', 'packet-insert', 'env-flap-close', 'mouth-shut',
+                        'flap-shadow-sweep', 'seal-stamp-env']) {
+      const rule = readCeremonyRules().match(new RegExp(`([^{}]*)\\{[^}]*animation:[^;]*\\b${name} `))!;
+      expect(`${name}: ${/\[data-stage='fold'\]/.test(rule[1])}`).toBe(`${name}: true`);
+    }
+
+    // 8. the envelope is never painted without its lid: the flap shares the arrival, and the
     //    arrival no longer opens at opacity 0 (which left t=0 with no envelope in it at all).
     expect(arrive[0].body).toMatch(/opacity:\s*1/);
+    // Both halves of the flap must survive the stage change into 'ship' -- the mount carries the
+    // arrival, the paper inside it carries the close, and each has to be re-declared for 'ship'
+    // with an identical value or the animation restarts and the pose is lost.
     const shipFlap = css.match(/\.ceremony\[data-stage='ship'\] \.env-flap \{([^}]*)\}/s)![1];
     expect(shipFlap).toMatch(/env-arrive/);
-    expect(shipFlap).toMatch(/env-flap-close/);
+    const shipPaper = css.match(/\.ceremony\[data-stage='ship'\] \.env-flap-panel \{([^}]*)\}/s)![1];
+    expect(shipPaper).toMatch(/env-flap-close/);
 
     // 5. NO Z-ORDER RULE MAY PUT THE LID BEHIND THE LETTER, at any frame. The duck is gone
     //    outright, and every z-index the flap can take stays above .fold's.
@@ -1086,13 +1250,25 @@ describe('TradeCeremony', () => {
 
     // and the mouth's own darkness is a shadow cast by an OPENING: it goes when the flap does,
     // or the corners stay dark under paper that is now lying flat on them.
-    expect(css).toMatch(/@keyframes mouth-shut/);
-    const shut = css.match(/animation: mouth-shut (\.\d+)s (\.\d+)s/)!;
-    const close = css.match(/animation:[^;]*env-flap-close (\.\d+)s (\.\d+)s/)!;
+    const shut = css.match(/animation:[^;]*\bmouth-shut ([\d.]+)s ([\d.]+)s/)!;
+    const close = css.match(/animation:[^;]*\benv-flap-close ([\d.]+)s ([\d.]+)s/)!;
     expect(shut[1]).toBe(close[1]); // same duration
     expect(shut[2]).toBe(close[2]); // and the same clock as the flap it belongs to
     expect(container.querySelector('.env-cavity')).not.toBeNull();
     expect(container.querySelector('.env-backpanel')).not.toBeNull();
+
+    // AND THE KEYFRAME HAS TO ACTUALLY SHUT THE MOUTH. Everything above is about WHEN, and a
+    // grep for the name plus two timing numbers is satisfied by a keyframe that does nothing at
+    // all: the shipped body could be replaced with `0%,100% { opacity: 1 }` and all 229 tests
+    // still passed, leaving the two dark corner wedges this whole test exists to prevent.
+    const shutBody = keyframes(css, 'mouth-shut');
+    const shutSteps = Array.from(shutBody.matchAll(/([\d.]+)%[^{]*\{([^}]*)\}/g))
+      .map((m) => ({ pct: Number(m[1]), opacity: Number(m[2].match(/opacity:\s*([\d.]+)/)![1]) }));
+    expect(shutSteps.length).toBeGreaterThanOrEqual(2);
+    expect(Math.min(...shutSteps.map((s) => s.pct))).toBe(0);
+    expect(Math.max(...shutSteps.map((s) => s.pct))).toBe(100);
+    expect(shutSteps.find((s) => s.pct === 0)!.opacity).toBe(1);   // an open mouth is dark
+    expect(shutSteps.find((s) => s.pct === 100)!.opacity).toBe(0); // a sealed one is not
   });
 
   it('puts preserve-3d only on HTML elements, never on SVG', () => {
@@ -1136,9 +1312,13 @@ describe('TradeCeremony', () => {
     expect(css).not.toMatch(/\[data-stage='(?:envelope|ship)'\] \.fold\s*\{[^}]*opacity/);
 
     // the packet ends below the throat, so the occluder has actually eaten it
-    const insert = css.match(/@keyframes packet-insert\s*\{([^@]*?)\n\}/s)![1];
-    const rest = Number(insert.match(/100%\s*\{[^}]*translateY\((-?\d+)px\)/)![1]);
-    const mouth = Number(insert.match(/28\.8%\s*\{[^}]*translateY\((-?\d+)px\)/)![1]);
+    const insert = keyframes(css, 'packet-insert');
+    const rest = Number(insert.match(/100%\s*\{[^}]*translateY\((-?[\d.]+)px\)/)![1]);
+    // the hover pose, found by value rather than by a hardcoded percentage -- the percentages
+    // move whenever the arrival is retimed, and a stale one would silently match nothing.
+    const mouth = Math.min(
+      ...Array.from(insert.matchAll(/translateY\((-?[\d.]+)px\)/g)).map((m) => Number(m[1])),
+    );
     // packet is scene 96..192; throat is scene 158. Resting top = 96 + rest must clear it.
     expect(96 + rest).toBeGreaterThan(158);
     expect(rest - mouth).toBeGreaterThan(90); // a real slide, not a nudge
@@ -1146,12 +1326,20 @@ describe('TradeCeremony', () => {
 
   it('stamps the seal strictly after the flap has stopped moving', () => {
     // seal-stamp-env used to fire at .6s while env-flap-close ran to .72s: 120ms of the seal
-    // pressing into a flap that was still swinging.
+    // pressing into a flap that was still swinging. Both are read on the same clock now (every
+    // animation of this group starts at the fold stage), so the comparison is still a straight
+    // one -- but the delays run past a second, so `\.\d+s` no longer matches them.
     const css = readCeremonyCss();
-    const flapClose = css.match(/animation:[^;]*env-flap-close (\.\d+)s (\.\d+)s/)!;
+    const flapClose = css.match(/animation:[^;]*\benv-flap-close ([\d.]+)s ([\d.]+)s/)!;
     const flapEnd = Number(flapClose[1]) + Number(flapClose[2]);
-    const sealStart = Number(css.match(/animation: seal-stamp-env \.\d+s (\.\d+)s/)![1]);
+    const sealStart = Number(css.match(/animation: seal-stamp-env [\d.]+s ([\d.]+)s/)![1]);
     expect(sealStart).toBeGreaterThanOrEqual(flapEnd);
+    // and it has to finish inside the stage it belongs to, or it stamps while the envelope is
+    // already flying off the top. Stage boundaries in ms, off the exported table.
+    const sealDur = Number(css.match(/animation: seal-stamp-env ([\d.]+)s/)![1]);
+    const foldMs = STAGE_MS.find(([s]) => s === 'fold')![1];
+    const envelopeMs = STAGE_MS.find(([s]) => s === 'envelope')![1];
+    expect((sealStart + sealDur) * 1000).toBeLessThanOrEqual(foldMs + envelopeMs);
   });
 
   it('binds data-strike=0 and data-strike=1 to two different keyframe names', () => {

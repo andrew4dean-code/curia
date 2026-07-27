@@ -298,9 +298,10 @@ export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: 
         {/* The letter is a SIBLING of the two envelope halves, sandwiched between
             them by z-index (see the ladder in ceremony.css). That is the only way a
             DOM element can be swallowed by an SVG envelope: the back wall paints
-            behind it, the pocket paints over it. .envelope-stack is the shared
-            perspective ancestor and must stay free of `filter`, which would flatten
-            the flap's rotation back into a squash. */}
+            behind it, the pocket paints over it. .envelope-stack is deliberately FLAT
+            -- .fold and .env-flap each open their own 3D rendering context -- while
+            still being the camera both of them are projected under, and it must stay
+            free of `filter`, which would flatten those rotations into a squash. */}
         <div className="envelope-stack" aria-hidden="true">
           <EnvelopeBack />
           {stage !== 'print' && (
@@ -343,10 +344,21 @@ export function TradeCeremony({ ticket, onDone }: { ticket: TicketData; onDone: 
           <EnvelopeFront />
           <div className="env-flap-shadow" />
           {/* the flap is a div, not SVG: as an SVG <g> mirrored above the viewBox it
-              was clipped away by overflow:hidden and the open pose never rendered. */}
+              was clipped away by overflow:hidden and the open pose never rendered.
+              THREE TIERS, NOT TWO, and the middle one is the whole reason the sealed
+              envelope stopped being shaded backwards. .env-flap is the mount: it opens
+              the 3D rendering context and holds the camera. .env-flap-panel is the
+              paper, and it is the element that turns -- because a 3D context's ROOT
+              does not contribute its own transform to what its descendants accumulate,
+              so with the rotation on .env-flap the two faces were evaluated in a frame
+              that never moved and backface-visibility never flipped. Measured: the
+              outer face painted 0px at every frame of the stage. Same three tiers as
+              .fold > .fold-panel > .fold-face, which is why that one always worked. */}
           <div className="env-flap">
-            <div className="env-flap-face env-flap-in" />
-            <div className="env-flap-face env-flap-out" />
+            <div className="env-flap-panel">
+              <div className="env-flap-face env-flap-in" />
+              <div className="env-flap-face env-flap-out" />
+            </div>
           </div>
           <div className="envelope-seal">C</div>
         </div>
