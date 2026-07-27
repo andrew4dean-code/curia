@@ -44,9 +44,14 @@ describe('OptionsTab board', () => {
     expect(screen.getByText(/collected this month/)).toBeInTheDocument();
   });
 
-  it('the month score rolls on an odometer', () => {
-    render(<OptionsTab snap={snapWith([base])} {...cbs} onSellWeek={vi.fn()} />);
-    expect(screen.getByTestId('month-score')).toHaveAttribute('data-value', '$148.00');
+  it('the month score counts its value up rather than rolling digit reels', () => {
+    const { container } = render(<OptionsTab snap={snapWith([base])} {...cbs} onSellWeek={vi.fn()} />);
+    const score = screen.getByTestId('month-score');
+    expect(score).toHaveAttribute('data-value', '$148.00');
+    // One text node holding the whole formatted figure — no per-digit strip to translate.
+    expect(score).toHaveTextContent('$148.00');
+    expect(container.querySelectorAll('.odo-reel')).toHaveLength(0);
+    expect(container.querySelectorAll('.odo-strip')).toHaveLength(0);
   });
 
   it('open option renders as a seal chip that opens the settle sheet', () => {

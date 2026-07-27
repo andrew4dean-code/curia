@@ -1,41 +1,243 @@
-.ceremony { position: fixed; inset: 0; z-index: 40; background: rgba(31, 27, 18, 0.55); display: flex; align-items: center; justify-content: center; perspective: 900px; animation: ceremony-in 0.3s ease-out both; }
+/* No `perspective` here. It used to sit on .ceremony, where it applied to
+   .ceremony-scene -- an element with no 3D transform of its own -- and therefore
+   reached nothing that actually rotates. The two things that rotate in 3D each own
+   their perspective now: .fold (the tri-fold panels) and .envelope-stack (the flap). */
+.ceremony { position: fixed; inset: 0; z-index: 40; background: rgba(31, 27, 18, 0.55); display: flex; align-items: center; justify-content: center; animation: ceremony-in 0.3s ease-out both; }
 @keyframes ceremony-in { from { background: rgba(31, 27, 18, 0); } to { background: rgba(31, 27, 18, 0.55); } }
 .ceremony-scene { position: relative; width: 290px; }
 
 /* ---- the ticket ---- */
 .ticket { position: relative; background: var(--parchment-card); border-radius: 10px 10px 4px 4px; padding: 22px 20px 30px; box-shadow: 0 12px 30px rgba(0,0,0,.35); border-top: 2px dashed var(--rule); border-bottom: 2px dashed var(--rule); transform-origin: 50% 0%; will-change: transform, opacity; }
 .ticket::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 16px; border-radius: 10px 10px 0 0; background: linear-gradient(rgba(46,40,32,.16), rgba(46,40,32,0)); pointer-events: none; }
-.ticket-head { font-family: var(--font-display); font-weight: 800; font-size: 15px; letter-spacing: .06em; text-align: center; border-bottom: 1px solid var(--rule); padding-bottom: 8px; margin-bottom: 10px; }
-.ticket-line { font-family: var(--font-mono); font-size: 14px; text-align: center; padding: 3px 0; min-height: 1.45em; }
+/* THE HEADER MUST NEVER WRAP, and at 15px/.06em every single one of them did.
+   The box is 250px (290 scene - 20px padding each side). Measured in headless Chrome
+   against Georgia Bold -- the declared fallback in --font-display, and therefore what
+   paints on EVERY first run of this offline-first PWA, since Playfair Display is
+   fetched from Google Fonts with display=swap:
+       15px/.06em   TRADE TICKET Nº 47    257.6   OPTION 266.3   CLOSED 289.8  all wrap
+       13px/.02em   TRADE TICKET Nº 47    209.8   OPTION 216.7   CLOSED 236.1  none wrap
+   A wrapped head is 22.5px taller, so every .ticket-line moved down while the press's
+   hardcoded register did not -- the clip band opened above the text and the shaft drew
+   straight down through the printed line -- and the text jumped again mid-ceremony
+   when the webfont swapped in. 13px/.02em fits Georgia through a three-digit ticket
+   number with 4px to spare, and `nowrap` is the structural guarantee behind that
+   arithmetic: a longer title (a five-figure id, a wider face than Georgia once
+   Playfair lands) now bleeds a couple of px into the 20px padding instead of taking a
+   second line. The register is measured as well (see Press.tsx), so both ends of the
+   failure are closed, not just one. */
+.ticket-head { font-family: var(--font-display); font-weight: 800; font-size: 13px; letter-spacing: .02em; white-space: nowrap; text-align: center; border-bottom: 1px solid var(--rule); padding-bottom: 8px; margin-bottom: 10px; }
+/* `text-align: center` stays, and it is safe now only because of the ghost span: a
+   partly-typed line is rendered as <span class="tl-ink">typed</span><span
+   class="tl-ghost" hidden>the rest</span>, so the line box is its FINAL width from
+   the first frame and the centring has nothing left to re-centre. Without the ghost
+   a growing centred line slides left one half-character at a time -- paper cannot do
+   that, and it is what made the text look like it was swimming under the hammer.
+   `white-space: pre` is part of the same guarantee: the ink and the ghost meet
+   mid-line, and under normal collapsing a run of spaces straddling that join would
+   collapse to one and the line would change width as the join moved through it.
+   AND IT IS `pre`, NOT `pre-wrap`, WHICH IS THE OTHER HALF OF THAT PROMISE. pre-wrap
+   preserves the spaces but still breaks the line, and a real ticket line goes over:
+   the box is 250px, and at 14px mono with the inherited letter-spacing of .01em the
+   advance measures 8.54-8.57px, so 29 characters fit and 30 do not.
+   "TQQQ $107.5 CALL · exp Aug 29" is 29 and fits at 248.5px; "GOOGL $107.5 CALL · exp
+   Aug 29" is 30 and wraps at 257.1px -- any five-letter ticker with a fractional
+   strike. Rendered with the fallback face the same string comes out 48px tall instead
+   of 27px, which voids the line pitch for every line under it, and NOTHING IN THE DOM
+   SAYS SO: the wrap is invisible to every test that reads text. `pre` cannot wrap at
+   all; an over-long line now runs a few px into the 20px padding, still inside the
+   card, and the press reads its register off the live box either way. */
+.ticket-line { font-family: var(--font-mono); font-size: 14px; text-align: center; padding: 3px 0; min-height: 1.45em; white-space: pre; }
 .ticket-line[data-sign='up'] { color: var(--pl-green); }
 .ticket-line[data-sign='down'] { color: var(--pl-red); }
-.type-caret { display: inline-block; width: 2px; height: 1em; background: var(--ink); margin-left: 2px; vertical-align: -0.15em; animation: caret-blink 0.5s step-end infinite; }
-@keyframes caret-blink { 50% { opacity: 0; } }
+/* The print-position anchor: zero-width, no ink, and it exists ONLY to be measured.
+   TradeCeremony drives the carriage off the box of the glyph just struck (.tl-strike,
+   the last character of the ink, in its own span) and falls back to this anchor for
+   the one frame before anything has been typed -- both read against the scene's box,
+   neither assuming a character pitch. It is NOT a caret: a blinking bar next to a
+   carriage that is already tracking the column is
+   two print-position indicators disagreeing with each other, and its 0.5s step-end
+   clock shares no common divisor with the ~48ms character beat, so it read as pure
+   noise on top of the strike. The blink keyframes are deleted outright, not gated. */
+.print-column { display: inline-block; width: 0; height: 1em; vertical-align: -0.15em; }
+/* still used by the wheel ceremony's caption, which has no press and no carriage in
+   front of it -- there it is the only indication of where the next letter lands. */
+.type-caret { display: inline-block; width: 2px; height: 1em; background: var(--ink); margin-left: 2px; vertical-align: -0.15em; }
 .ticket-seal, .envelope-seal { box-shadow: 0 2px 6px rgba(0,0,0,.35), 0 0 0 0 rgba(46,40,32,.32); }
 .ticket-seal { position: absolute; right: 14px; bottom: -18px; width: 44px; height: 44px; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-family: var(--font-display); font-weight: 800; font-size: 22px; display: flex; align-items: center; justify-content: center; opacity: 0; }
 
-/* ---- the envelope ---- */
-.envelope { position: absolute; inset: 0; margin: auto; width: 290px; height: 170px; opacity: 0; will-change: transform, opacity; }
-.env-art { position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 14px 30px rgba(0,0,0,.38)); }
-.env-flap-hinge { transform-origin: 145px 0px; transform: rotateX(180deg); transform-style: preserve-3d; }
-/* the top flap descends to y=96 in EnvelopeArt's 290x170 viewBox (1 SVG unit ==
-   1px here, since .env-art fills .envelope exactly); the seal is centred a few
-   pixels below that tip, same as it was against the old CSS-triangle flap's
-   apex, so it reads as stamped over the point where the flap meets the body. */
-.envelope-seal { position: absolute; left: 50%; top: 82px; transform: translateX(-50%) scale(0); width: 40px; height: 40px; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-family: var(--font-display); font-weight: 800; font-size: 20px; display: flex; align-items: center; justify-content: center; }
+/* THE TRADE TICKET IS PINNED TO 288px TALL, and that number is load-bearing.
+   .ceremony-scene's only in-flow child is .ticket-wrap, so the scene is exactly as
+   tall as the ticket; .fold is inset:0 over the scene and each .fold-panel is a
+   third of it, so the folded packet is ticket-height / 3. Left to its natural
+   height the ticket is 147.5px on a two-line trade and 174.5px on a three-line one
+   (22 pad + 41.5 head + 27 per line + 30 pad, at the inherited 1.5 line-height), so
+   the packet was BOTH too small for the envelope AND a different size on every
+   ticket -- it could never be tuned against a fixed pocket. 288 / 3 = 96px, which
+   is exactly the pocket interior (throat y=62 to floor y=158). The alternative the
+   design notes offered -- dropping the throat to y=58 -- buys only 100px and leaves
+   the packet variable, so it was rejected. min-height binds up to seven ticket
+   lines; the app never emits more than three.
+   Scoped to .ticket-wrap so the settle ceremony's .settle-ticket, which shares the
+   .ticket class but has no wrapper and a composition tuned to its own height, is
+   untouched. */
+.ticket-wrap .ticket { min-height: 288px; }
 
-/* ---- stage: print — rise off the press with a settle, then the seal stamps ----
-   the rise lives on .ticket-wrap (not .ticket) because .ticket's transform is
-   also driven by the page-feed rule below; keeping them on separate elements
-   means neither the ticket-rise animation nor the feed transition ever have to
-   fight over the same computed transform. */
-.ceremony[data-stage='print'] .ticket-wrap { animation: ticket-rise 0.8s cubic-bezier(.22, .9, .28, 1) both; }
-.ceremony[data-stage='print'] .ticket-seal { animation: seal-stamp .46s 3.72s cubic-bezier(.3,1.5,.5,1) both, seal-dent .46s 3.72s ease-out both; }
-@keyframes ticket-rise {
-  0% { transform: translateY(110vh); }
-  82% { transform: translateY(-10px); }
+/* ---- the envelope -------------------------------------------------------------
+   ONE COORDINATE SYSTEM, WRITTEN DOWN ONCE.
+   .envelope-stack is inset:0 over the 290x288 scene, so "scene y" below is measured
+   from the top of the ticket. Every flat envelope layer (.env-art) is a 300x170 box
+   pinned at top:96px, and both SVGs use viewBox "0 0 300 170", so 1 SVG unit == 1px
+   and envelope-local y maps to scene y by adding 96:
+
+       landmark      env y     scene y
+       flap free edge   -8          88   (open) / 96 -> 192 (closed)
+       hinge            44         140   = the body's TOP edge, not its mid-height
+       throat           62         158   at or below this the letter is occluded
+       floor           158         254
+       body bottom     164         260
+
+   The packet is the middle third of the 288px scene, i.e. scene 96..192, 96px tall,
+   which is exactly the pocket interior (158 - 62). See the note on .ticket-wrap
+   .ticket for why the ticket is pinned to 288px to make that true.
+
+   THE FLAP IS AN HTML DIV. As an SVG <g> it was mirrored above y=0 inside the
+   viewBox and clipped away by SVG's default overflow:hidden, so the open flap was
+   never painted -- it appeared out of nowhere already half shut. Nothing inside
+   .env-flap may carry `filter` (or any other grouping property): filter flattens 3D
+   subtrees, and a drop-shadow on the old .env-art is what destroyed the flap's
+   rotation even where the perspective was right. The two SVGs keep their
+   drop-shadows because they are leaves, not ancestors of anything that rotates.
+
+   .envelope-stack IS DELIBERATELY FLAT (transform-style is left at its default) and it
+   is THE CAMERA FOR BOTH 3D SUBTREES BELOW IT. Those two facts are not in tension, and
+   confusing them is what shaded the sealed envelope backwards: `perspective` does not
+   make an element a 3D rendering context -- only `transform-style: preserve-3d` does.
+   The stack being flat means .fold and .env-flap each START a context rather than
+   extending one; the stack having a perspective means that when each of those subtrees
+   is finally flattened INTO the stack, this is the projection it is flattened under.
+   (Measured, not reasoned: deleting `perspective` here on the theory that it was inert
+   moved 20029 fold-stage pixels, 1268 of them by more than 24 levels. A preserve-3d
+   element does not flatten, so the panel geometry travels all the way up to the first
+   flat ancestor and is projected here. .fold's own 700px composes with this 520px; the
+   fold was tuned against the pair.)
+   What DID have to move is the rotation. It sat on .env-flap, which made the flap the
+   ROOT of its own context -- and a root's own transform is not part of what its
+   descendants accumulate. Both faces were therefore evaluated in a frame that never
+   turned: the inner face painted ~7690px at every frame of the stage and the outer
+   face 0 at every frame, sealed pose included (headless Chrome tint pass, t=0..1100).
+   The rotation now lives one tier down on .env-flap-panel, inside the context, which
+   is the same shape as .fold > .fold-panel > .fold-face -- and is why THAT two-face
+   construction has always worked. The projection is unchanged by the move: both tiers
+   are preserve-3d, so the paper is still flattened under this same camera. */
+.envelope-stack {
+  position: absolute; inset: 0; z-index: 4;
+  perspective: 520px;
+  /* the camera sits on the hinge line. The design note said 50% 28%, which is 28%
+     of a 170-tall envelope box (47.6px, i.e. the hinge); against this 288-tall
+     stack the same percentage would land 60px above the hinge and shear the flap.
+     140px IS the hinge in stack coordinates (96 + 44), so it is written as a
+     length -- it does not drift with the scene's height. */
+  perspective-origin: 50% 140px;
+}
+
+/* the flat layers. Explicit z-index ladder, no `auto` anywhere, so occlusion is a
+   property of the stylesheet and not of source order:
+     .env-back 2  <  .fold 3  <  .env-throat 4  <  .env-front 5
+     <  .env-flap-shadow 6  <  .env-flap 7  <  .envelope-seal 8
+   .env-flap sits at 7 for the WHOLE stage and never moves. It used to be ducked to 1
+   -- under the letter -- while open, on the theory that a standing flap would hide
+   half the packet. It did the opposite: the packet's mouth pose put it at scene
+   60..156, a band that strictly CONTAINS the flap's 88..140, so ducking the flap hid
+   the LID behind an opaque 290x96 letter for the first ~310ms of an 1100ms stage.
+   Rendered at t=170 the top painter at the flap's own apex was .fold-p0 and the
+   envelope had no lid at all. The overlap is gone geometrically now (see
+   packet-insert: the packet clears the flap's apex by 2px through the whole arrival
+   and hold), so there is nothing for a duck to solve and nothing left to hide. */
+.env-art { position: absolute; left: -5px; right: -5px; top: 96px; height: 170px; opacity: 0; }
+.env-back { z-index: 2; filter: drop-shadow(0 14px 28px rgba(0,0,0,.36)); }
+.env-front { z-index: 5; filter: drop-shadow(0 5px 9px rgba(46,40,32,.26)); }
+
+/* the mouth shadow: env y 40..62, i.e. it stops dead on the throat. It sits above
+   the letter and below the pocket, so the last 18px of the letter darkens as it
+   goes in, then the occluder takes it. It is A SHADOW CAST BY AN OPEN MOUTH, so it
+   is faded out by mouth-shut as the flap comes over -- a sealed envelope has no
+   opening left to be dark. Leaving it up was half of the dark-corner defect: the
+   closed flap is a triangle based on the hinge, so at the two top corners nothing
+   lids the band scene 140..158 and this gradient (0.5 alpha at its bottom edge) went
+   on darkening bare paper for the whole ship stage. */
+.env-throat { position: absolute; left: -5px; right: -5px; top: 136px; height: 22px; z-index: 4; opacity: 0; pointer-events: none; background: linear-gradient(rgba(46,40,32,0) 0%, rgba(46,40,32,.16) 44%, rgba(46,40,32,.5) 100%); }
+
+/* THE FLAP IS A MOUNT, NOT THE PAPER. It holds the hinge's position, its z-index and
+   the camera; the sheet that actually turns is .env-flap-panel inside it. That split
+   is the fix for the backwards shading: `transform-style: preserve-3d` here makes
+   .env-flap the ROOT of a 3D rendering context, and a root's own transform is not part
+   of what its descendants accumulate. Put the rotation on the root (as this rule used
+   to) and both faces are evaluated in an unrotating frame -- the near face is front-
+   facing forever and the far face back-facing forever, whatever the flap is doing.
+   Put the rotation one level down and it lands INSIDE the context, where the faces
+   accumulate it. .fold > .fold-panel > .fold-face is the same three tiers for the same
+   reason.
+   NO PERSPECTIVE HERE, deliberately. The camera stays on .envelope-stack: this element
+   is preserve-3d and therefore does not flatten, so the panel's rotation is carried up
+   and projected by the stack exactly as the flap's own rotation used to be. Adding a
+   second perspective here would compose with that one and change the projection the
+   flap has always had (measured: .fold's 700px composes with the stack's 520px in
+   precisely that way).
+   z-index 7 is declared once, here, and never changes: above .fold (3) so the lid is
+   never behind the letter, and above .env-front (5) so the closing flap paints over
+   the pocket. The pose used to drive it -- 1 while open, 7 while shutting -- and
+   that is what made the open lid invisible; see the ladder note above. */
+.env-flap { position: absolute; left: -5px; right: -5px; top: 88px; height: 52px; z-index: 7; opacity: 0; transform-style: preserve-3d; }
+/* the paper. REST IS THE OPEN POSE, and open costs no transform: rotateX(0deg) is
+   the identity, which is what lets the ship stage hold the closed pose by carrying the
+   same animation rule through instead of pinning a second transform. */
+.env-flap-panel { position: absolute; inset: 0; transform-style: preserve-3d; transform-origin: 50% 100%; transform: rotateX(0deg); }
+/* Two faces, each backface-visibility:hidden, 1px apart in Z. The far face is
+   `rotateX(180deg) translateZ(.5px)`, NOT translateZ(-.5px): after the 180 flip the
+   face's local +Z points at global -Z, so a local +.5 puts it .5px BEHIND the near
+   face. Writing -.5px there lands both faces on global +0.5 -- coplanar, and then
+   which one you see is left entirely to backface-visibility with nothing to fall
+   back on. With the real 1px gap, depth sorting alone already picks the right face,
+   and backface-visibility is belt and braces rather than the only mechanism. That
+   claim is only true now: both mechanisms read the accumulated transform, and until
+   the panel existed neither of them ever saw the flap turn over. */
+.env-flap-face { position: absolute; inset: 0; backface-visibility: hidden; }
+.env-flap-in { transform: translateZ(.5px); -webkit-clip-path: polygon(0 100%, 100% 100%, 50% 0); clip-path: polygon(0 100%, 100% 100%, 50% 0); background: linear-gradient(#EFE7D2 0%, #DFD4B4 58%, #C8B98F 100%); }
+.env-flap-out { transform: rotateX(180deg) translateZ(.5px); -webkit-clip-path: polygon(0 0, 100% 0, 50% 100%); clip-path: polygon(0 0, 100% 0, 50% 100%); background: linear-gradient(#F3ECDA 0%, #E7DDC4 62%, #D5C8A4 100%); }
+
+/* the travelling cast shadow, anchored on the hinge and sweeping down the face as
+   the flap comes over. Without it a rotateX reads as a vertical squash, not as
+   paper leaving the plane. Same construction as .fold-contact below. */
+.env-flap-shadow { position: absolute; left: 6px; right: 6px; top: 140px; height: 58px; z-index: 6; opacity: 0; pointer-events: none; transform-origin: 50% 0%; transform: scaleY(.15); background: radial-gradient(128% 86% at 50% 0%, rgba(46,40,32,.5), rgba(46,40,32,0) 74%); }
+
+/* the closed flap's free edge is hinge + flap height = 44 + 52 = env y 96 = scene
+   y 192. Measured, not guessed: the design notes carried both 96 and 87 and only 96
+   follows from the geometry above. The seal is 40px, centred on that tip, so it
+   straddles the point where the flap meets the body -- half on paper that moved,
+   half on paper that did not, which is what a wax seal is for. */
+.envelope-seal { position: absolute; left: 50%; top: 172px; z-index: 8; transform: translateX(-50%) scale(0); opacity: 0; width: 40px; height: 40px; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-family: var(--font-display); font-weight: 800; font-size: 20px; display: flex; align-items: center; justify-content: center; }
+
+/* ---- stage: print — the sheet is fed UP into the machine, typed, then rolled clear ----
+   The load lives on .ticket-wrap and the feed on .ticket, one element each, so the two
+   never have to fight over the same computed transform. The sheet starts 150px BELOW its
+   seated position, which is well inside the machine (the press body is opaque from the nip
+   down), so the ceremony opens on the machine alone and the paper's top edge climbs out of
+   the platen. It used to start at translateY(110vh) and fly in from off-screen, which is not
+   a thing paper does in a typewriter. .6s, so the sheet is seated at the instant typing
+   starts (TYPE_START_MS = 600). */
+.ceremony[data-stage='print'] .ticket-wrap { animation: sheet-load .6s cubic-bezier(.45, .06, .3, 1) both; }
+@keyframes sheet-load {
+  0% { transform: translateY(150px); }
+  78% { transform: translateY(-7px); }
   100% { transform: translateY(0); }
 }
+/* THE SEAL IS SCHEDULED OFF THE LAST CHARACTER, NOT OFF A STOPWATCH. It used to carry a
+   hardcoded 3.72s delay, tuned against one ticket shape -- and a full three-line option
+   ticket types until ~3720ms, so on those the wax pressed onto the page BEFORE its final
+   glyph. data-print goes to 'clear' only once the sheet has rolled out of the machine, which
+   is itself hung off printDone (see TradeCeremony.tsx), so "the seal lands after the final
+   character" is now true by construction for every ticket length. */
+.ceremony[data-print='clear'] .ticket-seal { animation: seal-stamp .46s cubic-bezier(.3,1.5,.5,1) both, seal-dent .46s ease-out both; }
 @keyframes seal-stamp { 0% { opacity: 0; transform: scale(1.9) rotate(-9deg); } 45% { opacity: 1; transform: scale(.88) rotate(2.5deg); } 70% { transform: scale(1.06) rotate(-1deg); } 100% { opacity: 1; transform: scale(1) rotate(0deg); } }
 @keyframes seal-dent { 0% { box-shadow: 0 2px 6px rgba(0,0,0,.35), 0 0 0 0 rgba(46,40,32,0); } 45% { box-shadow: 0 1px 3px rgba(0,0,0,.4), 0 0 0 13px rgba(46,40,32,.20); } 100% { box-shadow: 0 2px 6px rgba(0,0,0,.35), 0 0 0 7px rgba(46,40,32,.09); } }
 
@@ -44,20 +246,128 @@
    fold panels below take over as the visible proxy for the page. */
 .ceremony[data-stage='fold'] .ticket, .ceremony[data-stage='envelope'] .ticket, .ceremony[data-stage='ship'] .ticket { opacity: 0; }
 
-/* ---- the fold: three panels of the actual ticket content, clipped to thirds ---- */
-.fold { position: absolute; inset: 0; transform-style: preserve-3d; perspective: 700px; }
-.fold-panel { position: absolute; left: 0; right: 0; height: 33.334%; overflow: hidden; background: var(--parchment-card); }
-.fold-inner { position: absolute; left: 0; right: 0; top: 0; height: 300%; padding: 22px 20px; backface-visibility: hidden; }
+/* ---- the fold: three panels of the actual ticket content, clipped to thirds ----
+   .fold lives INSIDE .envelope-stack so that the letter is a sibling of the two
+   envelope halves and can be sandwiched between them by z-index. It keeps inset:0
+   over the scene, so nothing about the fold stage changes. It carries no
+   transform-origin, so its default 50% 50% is the packet's own centre -- which is
+   what the insertion translate below wants. */
+.fold { position: absolute; inset: 0; z-index: 3; transform-style: preserve-3d; perspective: 700px; }
+/* THE PANEL IS THE LEAF OF THE FOLD, NOT THE PAPER. It carries the rotation and the
+   preserve-3d context its two faces live in, and nothing else: no background, and
+   above all NO `overflow: hidden`. Clipping here is what broke the previous build --
+   overflow is a flattening property, so the 180deg flip lived on an ancestor that
+   destroyed its own 3D subtree, and .fold-inner's `backface-visibility: hidden`
+   (the stated fail-safe) had no rotation of its own left to cull. It never fired
+   once. The clip belongs on the faces, which are leaves: flattening them costs
+   nothing because there is no 3D below them. */
+.fold-panel { position: absolute; left: 0; right: 0; height: 33.334%; transform-style: preserve-3d; }
+/* THE TWO FACES OF ONE SHEET, 1px apart in Z, each backface-culled -- the same
+   construction as .env-flap-in / .env-flap-out above, and for the same reason: a
+   panel showing its reverse must show blank paper, never the printed face read
+   through the back. Correcting the folded panels' Z sign alone does NOT do that; it
+   renders the ticket text mirrored and upside down, because the printed face is
+   still the only face there is. */
+.fold-face { position: absolute; inset: 0; overflow: hidden; backface-visibility: hidden; background: var(--parchment-card); }
+.fold-face-front { transform: translateZ(.5px); }
+/* rotateX(180deg), not rotateY: the panels themselves rotate about X, so an X-flipped
+   back face comes out UPRIGHT and unmirrored once its panel has folded, and the crease
+   shading below can be authored in plain screen terms. translateZ(.5px) and NOT
+   -.5px: after the 180 flip a local +Z points at global -Z, so +.5 puts this face
+   .5px BEHIND the front one. Writing -.5px lands both faces on the same plane and
+   leaves which one you see entirely to backface-visibility, with nothing underneath
+   it -- exactly the single-mechanism fragility this file avoids for the flap. */
+.fold-face-back { transform: rotateX(180deg) translateZ(.5px); }
+/* THE BOX HAS TO MATCH THE CARD'S, BORDER AND ALL. .ticket is `border-top/bottom: 2px
+   dashed` + `padding: 22px 20px 30px` under border-box sizing, so its first line of type
+   starts 24px down. .fold-inner had the padding but not the border, so at the print->fold
+   handoff the whole page of type jumped UP 2.20px in one frame (measured: head top 24.00 ->
+   21.80) -- which is most of why the seam read as the card being SWAPPED rather than folded.
+   The border is transparent because the visible perforation is drawn by the outer faces
+   below, where it can sit on the packet's real outer edges instead of on every third. */
+.fold-inner { position: absolute; left: 0; right: 0; top: 0; height: 300%; padding: 22px 20px; border-top: 2px solid transparent; border-bottom: 2px solid transparent; }
 .fold-p0 { top: 0; transform-origin: 50% 100%; z-index: 3; }
 .fold-p1 { top: 33.333%; z-index: 1; }
 .fold-p2 { top: 66.666%; transform-origin: 50% 0%; z-index: 2; }
-.ceremony[data-stage='fold'] .fold-p2 { animation: fold-up .62s cubic-bezier(.45,0,.2,1) both; }
-.ceremony[data-stage='fold'] .fold-p0 { animation: fold-down .62s .70s cubic-bezier(.45,0,.2,1) both; }
-@keyframes fold-up { 0% { transform: rotateX(0deg); box-shadow: 0 0 0 rgba(0,0,0,0); } 60% { box-shadow: 0 -8px 16px rgba(46,40,32,.34); } 100% { transform: rotateX(-180deg) translateZ(1px); box-shadow: 0 -3px 9px rgba(46,40,32,.26); } }
-@keyframes fold-down { 0% { transform: rotateX(0deg); } 60% { box-shadow: 0 8px 16px rgba(46,40,32,.34); } 100% { transform: rotateX(180deg) translateZ(2px); box-shadow: 0 3px 9px rgba(46,40,32,.26); } }
-.fold-panel::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0; background: linear-gradient(rgba(255,255,255,.5), rgba(46,40,32,.16)); }
-.ceremony[data-stage='fold'] .fold-p2::after { animation: crease .62s ease-out both; }
-.ceremony[data-stage='fold'] .fold-p0::after { animation: crease .62s .70s ease-out both; }
+/* THE CARD'S OWN CHROME, ON THE PANELS THAT OWN ITS OUTER EDGES. p0 carries the ticket's
+   top corners and its top perforation; p2 carries the bottom pair. Written on the FACE and
+   as a pseudo-element rather than as a real border on .fold-face or .fold-panel: both of
+   those are sized `inset: 0` / `height: 33.334%` under border-box, so a real border would
+   shrink the box the type is positioned inside and re-open the 2px jump this rule exists to
+   close. .fold-face already carries overflow:hidden, so the radius clips the parchment. */
+.fold-p0 .fold-face-front, .fold-p0 .fold-face-back { border-radius: 10px 10px 0 0; }
+.fold-p2 .fold-face-front, .fold-p2 .fold-face-back { border-radius: 0 0 4px 4px; }
+.fold-p0 .fold-face-front::before, .fold-p2 .fold-face-front::before { content: ''; position: absolute; left: 0; right: 0; height: 0; pointer-events: none; }
+.fold-p0 .fold-face-front::before { top: 0; border-top: 2px dashed var(--rule); }
+.fold-p2 .fold-face-front::before { bottom: 0; border-bottom: 2px dashed var(--rule); }
+/* the head gradient off .ticket::before, on the panel that holds the ticket's top edge */
+.fold-p0 .fold-face-front::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 16px; border-radius: 10px 10px 0 0; pointer-events: none; background: linear-gradient(rgba(46,40,32,.16), rgba(46,40,32,0)); }
+/* THE WAX, ON THE PANEL. Same box as .ticket-seal in scene coordinates: the ticket is
+   scene 0..288 and the seal 260..304, p2 is 192..288, so bottom:-16px and right:14px put it
+   byte-on-top of where the flat card had it. .55px of Z is between the printed face (.5px)
+   and the crease highlight (.6px), so the wax sits ON the paper and still takes the crease's
+   lighting over it; backface-visibility culls it as p2 turns over.
+   TWO TIERS, and the split is what lets the wax keep the SAME keyframes it had on the card:
+   the mount owns the depth (a `transform` the stamp must not overwrite -- a scale() in the
+   keyframes would drop the translateZ, put the seal at z 0 and bury it behind the printed
+   face at .5px), the wax owns the stamp. Same shape as .fold-panel > .fold-face. */
+.fold-seal { position: absolute; right: 14px; bottom: -16px; width: 44px; height: 44px; transform: translateZ(.55px); backface-visibility: hidden; }
+.fold-seal-wax { position: absolute; inset: 0; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-family: var(--font-display); font-weight: 800; font-size: 22px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,.35), 0 0 0 7px rgba(46,40,32,.09); }
+/* THE STAMP IS PICKED UP MID-SQUASH, NOT RESTARTED. The delay is inline and NEGATIVE, set
+   from the same constants that schedule the wax on the card (see sealCarryMs in
+   TradeCeremony.tsx), so on a short trade -- where the wax landed 700ms before the fold --
+   the animation is already filled at 100% and the packet simply shows a finished seal, while
+   on the longest option ticket -- where the wax is only 38% of the way into its squash when
+   the fold starts -- the packet picks the squash up on the exact frame the card handed it
+   over. That is the release valve: a seal still pressing at 4200ms is no longer truncated. */
+.ceremony .fold-seal-wax { animation: seal-stamp .46s cubic-bezier(.3,1.5,.5,1) both, seal-dent .46s ease-out both; }
+/* THE FLAT CARD'S DROP SHADOW, HANDED OVER RATHER THAN DROPPED. .ticket casts
+   `0 12px 30px rgba(0,0,0,.35)` down and out to both flanks; the fold panels cast nothing at
+   0% of fold-up, so ~15000px of soft shadow disappeared in the seam frame. This is the same
+   shadow on the same 290x288 box, faded out across the first fold as the panels' own
+   crease shadows take over. It is NOT put on .fold-p0/.fold-p2 directly: p0's downward
+   offset would paint a dark band across the top of p1, which the flat card never had. */
+.fold-cast { position: absolute; inset: 0; z-index: 0; pointer-events: none; border-radius: 10px 10px 4px 4px; transform: translateZ(-1px); box-shadow: 0 12px 30px rgba(0,0,0,.35); animation: cast-fade .62s cubic-bezier(.4,0,.6,1) both; }
+@keyframes cast-fade { 0% { opacity: 1; } 100% { opacity: 0; } }
+/* Every fold-stage animation below is carried through 'envelope' and 'ship' by
+   listing those stages in the same rule. It is not decoration: the packet is no
+   longer thrown away when the envelope arrives, it is the thing that goes IN. These
+   animations hold the folded pose only while their selector matches, so scoping
+   them to 'fold' alone meant the panels sprang flat again the instant the stage
+   advanced. Repeating the selector (rather than adding a second rule) keeps the
+   computed animation value identical across the three stages, so nothing restarts —
+   the same mechanism the certificate uses under "stage: file" further down. */
+.ceremony[data-stage='fold'] .fold-p2,
+.ceremony[data-stage='envelope'] .fold-p2,
+.ceremony[data-stage='ship'] .fold-p2 { animation: fold-up .62s cubic-bezier(.45,0,.2,1) both; }
+.ceremony[data-stage='fold'] .fold-p0,
+.ceremony[data-stage='envelope'] .fold-p0,
+.ceremony[data-stage='ship'] .fold-p0 { animation: fold-down .62s .70s cubic-bezier(.45,0,.2,1) both; }
+/* THE Z SIGNS ARE NEGATIVE, AND THAT IS WHAT PUTS THE FOLDED PANELS IN FRONT.
+   A transform list applies as R.T, so the translateZ is spent in the ROTATED frame:
+   after a 180deg flip about X a local +Z points at global -Z. The previous build wrote
+   translateZ(1px)/translateZ(2px) and measured out at global -1 and -2, i.e. BEHIND
+   the untransformed middle panel at 0 -- so in .fold's preserve-3d context the panels
+   depth-sorted behind p1 and the tri-fold never closed over anything. What was posted
+   was p1: a full sheet of readable ticket text with a crease slicing a line of type.
+   Local -2 / -4 land at global +2 / +4, so the stack from the back is
+   p1 (0) < contact shadow (1) < p2 (2) < p0 (4), which is the order paper folds in:
+   bottom panel up first, top panel down over it, top panel outermost. */
+@keyframes fold-up { 0% { transform: rotateX(0deg); box-shadow: 0 0 0 rgba(0,0,0,0); } 60% { box-shadow: 0 -8px 16px rgba(46,40,32,.34); } 100% { transform: rotateX(-180deg) translateZ(-2px); box-shadow: 0 -3px 9px rgba(46,40,32,.26); } }
+@keyframes fold-down { 0% { transform: rotateX(0deg); } 60% { box-shadow: 0 8px 16px rgba(46,40,32,.34); } 100% { transform: rotateX(180deg) translateZ(-4px); box-shadow: 0 3px 9px rgba(46,40,32,.26); } }
+/* the crease highlight. translateZ(.6px) puts it just in FRONT of the front face
+   (.5px) instead of on the panel's own plane, where the opaque face would bury it;
+   backface-visibility culls it the moment its panel turns over, so it can never bleed
+   through onto the blank reverse. This is the one rule allowed to declare a
+   `background` on .fold-panel::after -- a second same-specificity ::after rule would
+   silently overwrite this gradient. */
+.fold-panel::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0; transform: translateZ(.6px); backface-visibility: hidden; background: linear-gradient(rgba(255,255,255,.5), rgba(46,40,32,.16)); }
+.ceremony[data-stage='fold'] .fold-p2::after,
+.ceremony[data-stage='envelope'] .fold-p2::after,
+.ceremony[data-stage='ship'] .fold-p2::after { animation: crease .62s ease-out both; }
+.ceremony[data-stage='fold'] .fold-p0::after,
+.ceremony[data-stage='envelope'] .fold-p0::after,
+.ceremony[data-stage='ship'] .fold-p0::after { animation: crease .62s .70s ease-out both; }
 @keyframes crease { 0% { opacity: 0; } 45% { opacity: .85; } 100% { opacity: .3; } }
 
 /* ---- paper shading, contact shadow and edge thickness for the folding panels ----
@@ -77,29 +387,257 @@
    instead (the more obvious-looking fix, since it is the panel that folds upward)
    would leave both panels bright at the free edge and dark at the crease. */
 .fold-p0 .fold-shade { transform: scaleY(-1); }
-.ceremony[data-stage='fold'] .fold-p2 .fold-shade { animation: shade-roll .62s cubic-bezier(.45,0,.2,1) both; }
-.ceremony[data-stage='fold'] .fold-p0 .fold-shade { animation: shade-roll .62s .70s cubic-bezier(.45,0,.2,1) both; }
+.ceremony[data-stage='fold'] .fold-p2 .fold-shade,
+.ceremony[data-stage='envelope'] .fold-p2 .fold-shade,
+.ceremony[data-stage='ship'] .fold-p2 .fold-shade { animation: shade-roll .62s cubic-bezier(.45,0,.2,1) both; }
+.ceremony[data-stage='fold'] .fold-p0 .fold-shade,
+.ceremony[data-stage='envelope'] .fold-p0 .fold-shade,
+.ceremony[data-stage='ship'] .fold-p0 .fold-shade { animation: shade-roll .62s .70s cubic-bezier(.45,0,.2,1) both; }
 @keyframes shade-roll { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: .34; } }
+
+/* THE BLANK REVERSE. This is what a posted letter actually shows: the back of the
+   paper, with the shadow that collects in the valley of the fold. It carries no
+   .fold-inner and therefore no type at all -- which is the point. A back face flipped
+   about X comes out upright once its panel has folded, so `top` here means the top of
+   the folded panel on screen, and both creases can be shaded with a plain gradient:
+   p0 folds down about its bottom edge, so its crease ends up at the TOP of where it
+   lands; p2 folds up about its top edge, so its crease ends up at the BOTTOM. */
+.fold-back-shade { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(rgba(46,40,32,.30) 0%, rgba(46,40,32,.10) 22%, rgba(46,40,32,.03) 62%, rgba(255,255,255,.22) 100%); }
+.fold-p2 .fold-back-shade { transform: scaleY(-1); }
 
 /* the paper-edge hairline: a sliver lighter than the face, at each folding panel's
    crease, so the sheet reads as having thickness rather than being a flat decal. */
-.fold-edge { position: absolute; left: 0; right: 0; height: 1px; background: rgba(255,255,255,.6); pointer-events: none; }
+/* THE EDGE IS NOT THERE BEFORE THE PAPER BENDS. Both hairlines used to be at full opacity
+   on the fold stage's first frame, which put two creases on a sheet that had not been folded
+   -- part of what made the seam read as a different card being swapped in. 80ms is short
+   enough that the thickness is present before either panel has visibly moved. */
+.fold-edge { position: absolute; left: 0; right: 0; height: 1px; background: rgba(255,255,255,.6); pointer-events: none; animation: edge-in .08s linear both; }
+@keyframes edge-in { 0% { opacity: 0; } 100% { opacity: 1; } }
 .fold-p0 .fold-edge { bottom: 0; }
 .fold-p2 .fold-edge { top: 0; }
+/* on the reverse the crease is at the opposite end of the face from the printed side */
+.fold-p0 .fold-face-back .fold-edge { bottom: auto; top: 0; }
+.fold-p2 .fold-face-back .fold-edge { top: auto; bottom: 0; }
 
 /* the contact shadow: cast by the folding panels onto the middle panel beneath them,
    tightening in as the top panel (.fold-p0) comes down to close over the stack. */
-.fold-contact { position: absolute; left: 6%; right: 6%; top: 33.333%; height: 33.334%; pointer-events: none; opacity: 0; background: radial-gradient(120% 70% at 50% 0%, rgba(46,40,32,.42), rgba(46,40,32,0) 72%); z-index: 2; }
-.ceremony[data-stage='fold'] .fold-contact { animation: contact-drop .62s .70s cubic-bezier(.45,0,.2,1) both; }
-@keyframes contact-drop { 0% { opacity: 0; transform: scaleY(.4); } 100% { opacity: 1; transform: scaleY(1); } }
+/* translateZ(1px) is load-bearing, not decoration: this shadow lies ON the middle
+   panel, so it has to sit in front of p1's face (global .5) and behind the panel
+   casting it (p2 at global 2). At Z 0 it fell behind p1's own front face and vanished
+   the moment the faces gained their .5px offset. It is repeated in every keyframe
+   because `transform` is one property -- a keyframe that names only scaleY would drop
+   the depth for as long as the animation is running. */
+.fold-contact { position: absolute; left: 6%; right: 6%; top: 33.333%; height: 33.334%; pointer-events: none; opacity: 0; transform: translateZ(1px); background: radial-gradient(120% 70% at 50% 0%, rgba(46,40,32,.42), rgba(46,40,32,0) 72%); z-index: 2; }
+.ceremony[data-stage='fold'] .fold-contact,
+.ceremony[data-stage='envelope'] .fold-contact,
+.ceremony[data-stage='ship'] .fold-contact { animation: contact-drop .62s .70s cubic-bezier(.45,0,.2,1) both; }
+@keyframes contact-drop { 0% { opacity: 0; transform: translateZ(1px) scaleY(.4); } 100% { opacity: 1; transform: translateZ(1px) scaleY(1); } }
 
-/* ---- stage: envelope — wraps the folded packet, flap presses shut, seal stamps ---- */
-.ceremony[data-stage='envelope'] .fold { transform: rotateX(-88deg) scaleY(0.42); opacity: 0; transition: opacity 0.3s ease-out; }
-.ceremony[data-stage='envelope'] .envelope { animation: env-appear 0.32s cubic-bezier(.25, .9, .35, 1) both; }
-.ceremony[data-stage='envelope'] .env-flap-hinge { animation: env-flap-close .46s .26s cubic-bezier(.5,0,.3,1) both; }
-.ceremony[data-stage='envelope'] .envelope-seal { animation: seal-stamp-env .4s .6s cubic-bezier(.3,1.5,.5,1) both, seal-dent .4s .6s ease-out both; }
-@keyframes env-appear { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
-@keyframes env-flap-close { from { transform: rotateX(180deg); } to { transform: rotateX(0deg); } }
+/* ---- posting the letter — ONE CLOCK, STARTED WHEN THE FOLD STARTS --------------
+   Every animation below is scoped to 'fold', 'envelope' AND 'ship' and its delay is
+   measured from the fold stage's first frame, because THE ENVELOPE HAS TO ARRIVE FROM
+   OUTSIDE THE PICTURE and the envelope stage alone is not long enough to bring it in
+   without the arrival itself becoming a bang.
+
+   It used to open at translateY(106px) with opacity 1, so the whole envelope simply
+   existed at the first frame of the envelope stage: measured across that one stage
+   boundary, 44296 pixels -- 17.7% of a 375x667 screen -- changed by more than 24
+   levels between two consecutive frames, and the NEXT frame changed 54841 more. (The
+   build before that opened at opacity 0, which is not better, only differently wrong:
+   the envelope faded up out of nothing, and there was no lid to see because there was
+   no envelope.) Off-frame is the only start that is neither. 420px puts the envelope's
+   top edge at scene 516 against a viewport bottom of scene 477.5 (the 288-tall scene
+   is centred in 667), so the body AND the 28px blur of its drop-shadow are outside the
+   picture, and the first frame of the fold stage is unchanged.
+
+   The room comes from the fold stage's own tail: fold-down finishes at fold t=1320 and
+   MEASURED NOTHING AT ALL CHANGES from there to fold t=1600 -- 280ms of dead air
+   immediately before the letter is posted. The rise starts a little before that, at
+   1150, while the top panel is still easing into its landing; the envelope's leading
+   edge does not cross into the picture until 1203, and it enters at the very bottom of
+   a 667px screen with the fold happening 300px above it. That buys the arrival 430ms
+   of travel instead of 170, and 430ms is what it costs to move 314px WITHOUT the entry
+   itself becoming the loudest frame in the ceremony (see the per-frame budget below).
+
+     fold t                 (envelope-stage t)
+     1150 - 1580   (-450)   the envelope rises 314px, at a CONSTANT speed, from below
+                            the picture to 106px short of home. The letter has not
+                            moved: it is still exactly where the fold left it, and the
+                            flap's apex (88 + 420..106 = 508..194) stays below the
+                            letter's bottom edge (192) for the whole segment.
+     1580 - 1740   ( -20)   the last 106px, and now the letter lifts WITH it -- same
+                            distance, same span, same easing, so the gap between the
+                            letter's bottom edge and the flap's apex is a CONSTANT 2px
+                            for every frame. They never overlap, at any frame, whatever
+                            the z-order says. (Before the two segments, the lid was
+                            behind an opaque letter for the first ~310ms: the mouth
+                            pose (-36px) put the packet at scene 60..156, a band that
+                            contains the flap's 88..140.)
+     1740 - 1870   ( 140)   the hold. The letter hangs above a visibly open flap: the
+                            beat the whole stage is for, and the one the old timing had
+                            no frame of.
+     1870 - 2130   ( 270)   the 260ms descent: 174px down, behind the standing lid and
+                            on past it, eaten by the y>=62 occluder as it reaches the
+                            throat, landing on the pocket floor
+     2130 - 2160   ( 530)   the 4px spring off the floor, and the envelope's own 2px
+                            knock as it takes the weight
+     2160 - 2470   ( 560)   the flap closes, 310ms, its cast shadow sweeping with it,
+                            and the mouth's shadow fades out with it -- a sealed
+                            envelope has no opening left to be dark
+     2470 - 2670   ( 870)   the seal stamps, strictly after the flap has stopped moving
+     2670 - 2700   (1070)   the sealed envelope, still, before it ships
+
+   There is no cross-fade and no second element anywhere in here. The old build
+   replaced the packet with an unrelated envelope: it set a transform on .fold with
+   `transition: opacity .3s` only, so the transform was never interpolated -- the
+   letter TELEPORTED into a squash and dissolved while a separate envelope faded up
+   over it. There was literally no frame in which the envelope held the letter. That
+   rule is deleted; the SAME .fold element now travels into the pocket.
+
+   Every rule is written for 'fold', 'envelope' AND 'ship' so its filled end state
+   survives BOTH stage changes without restarting (same computed animation value), and
+   so that every delay above can be read on one clock. An animation starts when its
+   element first matches, so the fold selector is not decoration: without it the
+   arrival could not begin before the envelope stage did. */
+.ceremony[data-stage='fold'] .env-part,
+.ceremony[data-stage='envelope'] .env-part,
+.ceremony[data-stage='ship'] .env-part { animation: env-arrive 1.01s 1.15s linear both; }
+.ceremony[data-stage='fold'] .fold,
+.ceremony[data-stage='envelope'] .fold,
+.ceremony[data-stage='ship'] .fold { animation: packet-insert .58s 1.58s linear both; }
+/* The arrival and the close are now on DIFFERENT ELEMENTS, and that is a consequence
+   of the fix above rather than a free choice: the mount travels, the paper turns.
+   They used to be two animations crammed into one declaration on one element, because
+   `animation` is a shorthand and a second rule would have replaced the first rather
+   than added to it -- and the close had to be `forwards` rather than `both` so that
+   during its delay it contributed nothing and left `transform` to the arrival. With
+   one animation per element neither dodge is needed and the close can fill `both`.
+   There is no third animation any more. env-flap-duck used to sit between these two
+   to hold the open flap BEHIND the letter, on the theory that a standing lid would
+   otherwise cover half the packet. It covered nothing and hid everything: the packet
+   contained the flap's whole band, so the duck buried the lid under an opaque letter
+   for the first ~310ms. The overlap is now impossible by construction (see
+   packet-insert), so the flap keeps its single z-index 7 and is never ducked. */
+.ceremony[data-stage='fold'] .env-flap,
+.ceremony[data-stage='envelope'] .env-flap,
+.ceremony[data-stage='ship'] .env-flap { animation: env-arrive 1.01s 1.15s linear both; }
+.ceremony[data-stage='fold'] .env-flap-panel,
+.ceremony[data-stage='envelope'] .env-flap-panel,
+.ceremony[data-stage='ship'] .env-flap-panel { animation: env-flap-close .31s 2.16s cubic-bezier(.42,0,.28,1) both; }
+/* the mouth's shadow belongs to an OPEN mouth. Both halves of it -- the cast shadow
+   on the near side of the throat and the cavity darkening the back panel behind it --
+   fade out on exactly the flap's clock, so that by the time the envelope is sealed
+   the band between the hinge and the throat is plain paper at every x. That band is
+   only lidded by the closed flap's triangle, so outside its slope the two top corners
+   held a >100-level dark wedge through the seal beat and the whole ship stage: the
+   final image of the ceremony was a sealed envelope with two holes punched in it.
+   .env-throat carries its own arrival here rather than the shared .env-part rule,
+   because `animation` is a shorthand and it needs a second animation on top. Both of
+   its animations therefore have to share one selector set, which is the other reason
+   the whole group is on one clock: split them and the same beat would need two
+   different delay numbers on the same stylesheet. */
+.ceremony[data-stage='fold'] .env-throat,
+.ceremony[data-stage='envelope'] .env-throat,
+.ceremony[data-stage='ship'] .env-throat { animation: env-arrive 1.01s 1.15s linear both, mouth-shut .31s 2.16s cubic-bezier(.42,0,.28,1) forwards; }
+/* the cavity is a rect INSIDE .env-back, which is an .env-part and already carries the
+   arrival on its own root -- so this one takes the shut alone. Giving it env-arrive too
+   would compound the rise and the fade with its parent's. */
+.ceremony[data-stage='fold'] .env-cavity,
+.ceremony[data-stage='envelope'] .env-cavity,
+.ceremony[data-stage='ship'] .env-cavity { animation: mouth-shut .31s 2.16s cubic-bezier(.42,0,.28,1) forwards; }
+@keyframes mouth-shut { 0% { opacity: 1; } 100% { opacity: 0; } }
+.ceremony[data-stage='fold'] .env-flap-shadow,
+.ceremony[data-stage='envelope'] .env-flap-shadow,
+.ceremony[data-stage='ship'] .env-flap-shadow { animation: flap-shadow-sweep .31s 2.16s cubic-bezier(.42,0,.28,1) forwards; }
+.ceremony[data-stage='fold'] .envelope-seal,
+.ceremony[data-stage='envelope'] .envelope-seal,
+.ceremony[data-stage='ship'] .envelope-seal { animation: seal-stamp-env .2s 2.47s cubic-bezier(.3,1.5,.5,1) forwards, seal-dent .2s 2.47s ease-out forwards; }
+
+/* THE ARRIVAL IS TWO SEGMENTS, AND THE SECOND ONE IS COUPLED TO THE LETTER.
+   1.01s starting at fold t=1150 (see the timeline above). The percentages are not round
+   numbers because the absolute instants are what matter: they have to agree with
+   packet-insert's to inside a frame, and packet-insert has a different duration and a
+   different delay.
+
+   0 -> 42.574%  (fold 1150 -> 1580, 430ms)  420px -> 106px, LINEAR.
+     420px is off-frame and that is the whole point of it: the envelope's top edge sits
+     at scene 516 while the picture ends at scene 477.5 (a 288-tall scene centred in a
+     667 viewport), so its body AND the 28px blur of its drop-shadow are outside the
+     picture. Measured: the envelope contributes exactly 0 changed pixels to every fold
+     frame up to 1319, so neither stage boundary moves anything.
+     LINEAR IS A MEASUREMENT, NOT A TASTE. 314px is a long way and the cost of moving
+     this object is about 1200 changed pixels per pixel travelled (it is 300 wide and
+     drags a soft 28px drop-shadow over a dark backdrop). The shipped arrival peaked at
+     35.3px in one frame and cost 54841 -- 21.9% of the screen -- in the worst single
+     frame. At a constant 314px/430ms the peak is 12.2px per frame. An ease-out here
+     would front-load the travel and put the old 30000px frame right at the edge of the
+     picture: the same bang, moved.
+     The letter does NOT move during this segment. It is where the fold left it, and the
+     envelope's flap apex is 88 + 420..106 = 508..194, i.e. always BELOW the letter's
+     bottom edge at 192. They cannot overlap here either.
+
+   42.574% -> 58.416%  (fold 1580 -> 1740, 160ms)  106px -> 0, and the letter lifts
+     106px over the SAME span under the SAME easing, so
+       flap apex(t)     = 88  + envArrive(t)
+       letter bottom(t) = 192 + packetInsert(t)
+       apex - bottom    = 88 - 192 + (106(1-p) - (-106p)) = -104 + 106 = 2px, every t
+     -- a constant 2px of daylight, independent of the ease, so no frame can put the
+     letter over the lid. cubic-bezier(.42,.42,.85,1) is chosen so this segment peaks at
+     12.4px/frame, the same as the linear run-up's 12.2: it starts at unit slope
+     (.42/.42) instead of the 3.6 of the ease it replaces, so there is no kick at the
+     hand-over, and it still settles rather than stopping dead.
+
+   97.030% -> 100%  (fold 2130 -> 2160)  the 2px knock as the envelope takes the
+     packet's weight. Per-keyframe timing functions, so the arrival easing does not
+     smear across it.
+
+   opacity is 1 at every step and never moves. Paper does not fade in. An earlier build
+   opened this at opacity 0, which meant the first frame of the envelope stage had no
+   envelope in it at all -- and then the frame after it had a whole one. */
+@keyframes env-arrive {
+  0% { opacity: 1; transform: translateY(420px); animation-timing-function: linear; }
+  42.574% { opacity: 1; transform: translateY(106px); animation-timing-function: cubic-bezier(.42,.42,.85,1); }
+  58.416% { opacity: 1; transform: translateY(0); animation-timing-function: linear; }
+  97.030% { transform: translateY(0); animation-timing-function: cubic-bezier(.3,0,.4,1); }
+  98.515% { transform: translateY(2px); animation-timing-function: cubic-bezier(.3,.9,.4,1); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* the insertion, in scene pixels (packet at rest = scene 96..192, flap apex when the
+   envelope is home = 88, hinge = 140, throat = 158). .58s starting at fold t=1580,
+   which is 20ms before the envelope stage begins -- the letter waits, motionless,
+   through the whole of the envelope's run-up and only moves once the envelope has
+   come up to meet it:
+     0%       0px   the packet is exactly where the fold left it — no jump (1580)
+     27.586% -106px hover: packet -10..86, bottom edge 2px clear of the flap's
+                    APEX -- not of the throat. Clearing the throat is what the old
+                    -36px did, and the throat is 70px BELOW the apex, so the letter
+                    sat over the whole lid.                                  (1740)
+     50%     -106px held. The letter hangs above an open flap for 130ms.     (1870)
+     94.828%  +68px floor: packet 164..260, top 6px under the throat         (2130)
+     100%     +64px rest:  packet 160..256, top 2px under, nothing peeks     (2160)
+   The 4px between 94.828% and 100% is the spring off the pocket floor. */
+@keyframes packet-insert {
+  0% { transform: translateY(0); animation-timing-function: cubic-bezier(.42,.42,.85,1); }
+  27.586% { transform: translateY(-106px); animation-timing-function: linear; }
+  50% { transform: translateY(-106px); animation-timing-function: cubic-bezier(.5,.02,.72,.86); }
+  94.828% { transform: translateY(68px); animation-timing-function: cubic-bezier(.3,.9,.4,1); }
+  100% { transform: translateY(64px); }
+}
+
+/* 0deg is open, -180deg is shut, and -187deg at 88% is the paper's overshoot as it
+   slaps down. No z-index here: the flap holds 7 for the whole stage from its base
+   rule, so there is no pose-dependent z-order left to step. */
+@keyframes env-flap-close {
+  0% { transform: rotateX(0deg); }
+  88% { transform: rotateX(-187deg); }
+  100% { transform: rotateX(-180deg); }
+}
+@keyframes flap-shadow-sweep {
+  0% { opacity: 0; transform: scaleY(.15); }
+  58% { opacity: .34; transform: scaleY(.74); }
+  100% { opacity: .18; transform: scaleY(1); }
+}
 /* envelope-specific variant of seal-stamp: the envelope seal is centred via
    translateX(-50%) in its base rule (unlike the ticket seal, which has no
    horizontal centring), so its stamp keyframes must carry that translateX
@@ -108,12 +646,17 @@
    not gain a translateX it doesn't need. */
 @keyframes seal-stamp-env { 0% { opacity: 0; transform: translateX(-50%) scale(1.9) rotate(-9deg); } 45% { opacity: 1; transform: translateX(-50%) scale(.88) rotate(2.5deg); } 70% { transform: translateX(-50%) scale(1.06) rotate(-1deg); } 100% { opacity: 1; transform: translateX(-50%) scale(1) rotate(0deg); } }
 
-/* ---- stage: ship — a small dip of anticipation, then away off the top ---- */
-.ceremony[data-stage='ship'] .fold { opacity: 0; }
-.ceremony[data-stage='ship'] .envelope { opacity: 1; }
-.ceremony[data-stage='ship'] .env-flap-hinge { transform: rotateX(0deg); }
-.ceremony[data-stage='ship'] .envelope-seal { transform: translateX(-50%) scale(1); }
-.ceremony[data-stage='ship'] .envelope { animation: env-ship 0.9s cubic-bezier(.5, -.08, .75, .35) both; }
+/* ---- stage: ship — a small dip of anticipation, then away off the top ----
+   Four pinning rules used to live here: hold the fold hidden, hold the envelope
+   visible, hold the flap shut, hold the seal stamped. All four existed because the
+   envelope-stage animations stopped matching at this stage and dropped their held
+   state. Every one of them is now handled by carrying the animation's selector into
+   'ship' above, so this stage has one job: fly the whole thing off the top. The
+   flap pin in particular is gone because the resting pose is now OPEN (rotateX(0));
+   there is nothing to pin a closed flap to.
+   The transform goes on .envelope-stack, which contains the letter, so the packet
+   ships inside the envelope instead of being separately hidden. */
+.ceremony[data-stage='ship'] .envelope-stack { animation: env-ship 0.9s cubic-bezier(.5, -.08, .75, .35) both; }
 .ceremony[data-stage='ship'] { animation: dim-out 0.9s ease-in both; }
 @keyframes env-ship {
   0% { transform: translateY(0) rotate(0); }
@@ -168,23 +711,116 @@
 .wheel-ceremony[data-phase='stamp'] .crest-banner { animation: banner-press 0.45s 0.15s cubic-bezier(.3,1.4,.5,1) forwards; }
 @keyframes banner-press { 0% { opacity: 0; transform: translate(-50%,-50%) rotate(-8deg) scale(1.6); } 100% { opacity: 1; transform: translate(-50%,-50%) rotate(-8deg) scale(1); } }
 
-/* ---- the press: platen roller + striking arm (SVG, see Press.tsx) ---- */
-.press { position: absolute; left: -14px; right: -14px; top: -34px; height: 260px; overflow: visible; pointer-events: none; z-index: 3; }
-.press-arm { opacity: 0; transform-origin: 158px 258px; }
-.ceremony[data-typing='yes'] .press-arm { opacity: 1; }
-.ceremony[data-typing='yes'] .press-arm[data-strike='0'] { animation: press-hit-a 110ms cubic-bezier(.3,0,.2,1) both; }
-.ceremony[data-typing='yes'] .press-arm[data-strike='1'] { animation: press-hit-b 110ms cubic-bezier(.3,0,.2,1) both; }
-/* press-hit-a / press-hit-b alternate the arm's approach angle (not just its
-   name) so it reads as two different typebars striking, not one bar
-   twitching. They still must carry different keyframe names regardless:
-   alternating the computed animation-name on each strike is what forces the
-   browser to restart the animation. Two rules sharing one keyframe name
-   compute to the same animation-name, and CSS does not restart an animation
-   whose computed value hasn't changed. */
-@keyframes press-hit-a { 0% { transform: rotate(9deg) translateY(16px); } 52% { transform: rotate(0deg) translateY(0); } 100% { transform: rotate(7deg) translateY(13px); } }
-@keyframes press-hit-b { 0% { transform: rotate(-9deg) translateY(16px); } 52% { transform: rotate(0deg) translateY(0); } 100% { transform: rotate(-7deg) translateY(13px); } }
-.ceremony:not([data-stage='print']) .press { opacity: 0; transition: opacity .3s ease-out; }
-.ceremony[data-stage='print'] .ticket { transform: translateY(calc(var(--feed, 0) * -3px)); transition: transform .13s steps(2, end); }
+/* ---- the press: THE MACHINE IS THE RIGHT WAY UP ----------------------------------
+   `top: 170px` is the NIP -- where paper meets roller -- and it is duplicated from NIP_Y in
+   Press.tsx (a CSS `top` cannot be written from a TS constant without an inline style, and an
+   inline style here would fight the withdraw animation's transform; the suite pins the two
+   together instead). The viewBox is 350x210 over a 350x210 box, so ONE USER UNIT IS ONE CSS
+   PIXEL IN BOTH AXES and svg y 0 is exactly this line. Everything the press draws is at or
+   below it; the sheet stands up out of it.
+   -30px each side, not -14px: the machine has to be WIDER than the paper or it reads as a
+   stick behind a card rather than a card in a machine. The scene is 290px in a 375px viewport,
+   so there is (375-290)/2 = 42.5px of margin each side and a 30px bleed fits with room to
+   spare. */
+.press { position: absolute; left: -30px; right: -30px; top: 170px; height: 210px; overflow: visible; pointer-events: none; z-index: 3; }
+/* THE BAR IS PART OF THE MACHINE AND IT IS ALWAYS VISIBLE. It used to be opacity 0 with the
+   typing flag fading it in -- which, since data-typing is 'yes' from ceremony mount, meant it
+   actually sat at opacity 1 with `animation: none` for the whole 600ms pre-roll: a lit, dead
+   stick in mid-air over an empty page, before a single character had been typed. Now it rests
+   INSIDE the basket, below the nip, on top of an opaque machine body, so a motionless frame
+   reads as a part parked in a machine rather than a stick parked in the air.
+   The base `transform` IS the rest pose, byte-identical to 0%/100% of the strike, so the first
+   swing does not start with a teleport. Press.tsx authors the bar AT CONTACT (the untransformed
+   pose is the strike), so rest is a translate DOWN into the basket plus a small rotation -- a
+   type bar swings in a plane perpendicular to the front view, so from the front it mostly
+   rises; a pure rotation big enough to drop the head into the basket would swing it 116px
+   sideways. transform-origin's y is a CONSTANT now. It used to have to track the line, because
+   the whole assembly moved down the page and a fixed pivot made the lever shorten from 136px to
+   88px across three lines. Nothing moves down the page any more. */
+.press-arm { transform: rotate(-7deg) translateY(56px); transform-origin: 175px 152px; }
+.ceremony[data-typing='yes'] .press-arm[data-strike='0'] { animation: press-hit-a 44ms linear both; }
+.ceremony[data-typing='yes'] .press-arm[data-strike='1'] { animation: press-hit-b 44ms linear both; }
+/* THE BAR RETURNS TO REST, and 0% and 100% are the identical pose so that it returns
+   to the SAME rest every time. The old pair ended at rotate(7deg) translateY(13px)
+   and held there on `both`, and the next strike began at rotate(-9deg)
+   translateY(16px): a 16-degree teleport, seven times a second, with no frame in
+   between at which the arm was ever at rest. That is why the idle pose looked
+   arbitrary -- there was no idle pose.
+   The two keyframe bodies are now BYTE-IDENTICAL and the names differ only so the
+   computed animation-name changes on each strike; that is the whole mechanism that
+   forces the browser to restart the animation (two rules sharing one keyframe name
+   compute to the same animation-name, and CSS does not restart an animation whose
+   computed value has not changed). What differs per character is the tilt of the
+   slug at the tip, an SVG rotate about its own contact point -- see tiltForChar in
+   Press.tsx. Angle belongs to the character, not to the beat parity.
+   44ms, not 110ms: the beat is 48ms, so the swing now finishes INSIDE its own
+   character and holds rest for the remainder instead of being interrupted mid-flight
+   by the next glyph forever. It is floored well above 2.5 frames at 60fps so a
+   sampled frame can still catch it. Contact sits at 26% -- deliberately early, so the
+   pose a frame is most likely to land on is REST, below the line. A head parked on
+   top of the letter it just printed is worse than no strike at all.
+   The per-keyframe easing is the impact: accelerating INTO the paper (a hammer does
+   not decelerate as it arrives), snapping away off it, falling back for the ribbon's
+   second touch, then settling. A single ease across the whole swing smeared all four
+   of those into one drifting motion. */
+@keyframes press-hit-a {
+  0% { transform: rotate(-7deg) translateY(56px); animation-timing-function: cubic-bezier(.5,0,.9,.55); }
+  26% { transform: rotate(0deg) translateY(0px); animation-timing-function: cubic-bezier(.2,.8,.4,1); }
+  44% { transform: rotate(-2.4deg) translateY(19px); animation-timing-function: cubic-bezier(.5,0,.8,.5); }
+  58% { transform: rotate(-.9deg) translateY(7px); animation-timing-function: cubic-bezier(.2,.7,.3,1); }
+  100% { transform: rotate(-7deg) translateY(56px); }
+}
+@keyframes press-hit-b {
+  0% { transform: rotate(-7deg) translateY(56px); animation-timing-function: cubic-bezier(.5,0,.9,.55); }
+  26% { transform: rotate(0deg) translateY(0px); animation-timing-function: cubic-bezier(.2,.8,.4,1); }
+  44% { transform: rotate(-2.4deg) translateY(19px); animation-timing-function: cubic-bezier(.5,0,.8,.5); }
+  58% { transform: rotate(-.9deg) translateY(7px); animation-timing-function: cubic-bezier(.2,.7,.3,1); }
+  100% { transform: rotate(-7deg) translateY(56px); }
+}
+.ceremony:not([data-stage='print']) .press { opacity: 0; }
+
+/* ---- the feed: A PLATEN RATCHETS. IT DOES NOT EASE. ----
+   ONE feed, in real pixels, replacing two disagreeing halves of the old model: a
+   `--feed * -3px` roll on the sheet and a hardcoded LINE_PITCH of 27 inside the press, which
+   were different numbers for the same motion and cost 3px of registration per line. --sheet is
+   MEASURED (see TradeCeremony.tsx) as whatever offset puts the line currently being typed onto
+   the nip, so a step between two lines is exactly one real line pitch and every line's strike
+   point is the same scene y.
+   No transition, and that is deliberate: this used to carry `transition: transform .13s
+   steps(2, end)` while the press jumped its whole line offset inside the React commit, so the
+   two disagreed for 130ms out of a 48ms beat and the first strikes of every line after the
+   first landed 3px high. The paper steps, once, in the frame the line changes.
+   Scoped to .ticket-wrap so the settle ceremony's .settle-ticket, which shares the .ticket
+   class, is untouched. */
+.ticket-wrap .ticket { transform: translateY(var(--sheet, 0px)); }
+
+/* ---- the eject: the last character is struck, the platen rolls the sheet clear, and the
+   press withdraws, leaving the finished page standing alone where the fold expects it ----
+   The sheet ends at translateY(0) -- its laid-out position, which is exactly where .fold's
+   panels are pinned (inset:0 over the scene) -- so the handoff into the fold stage is a
+   straight swap with nothing to reconcile.
+   Both stages are listed on one rule rather than written twice, so the computed animation
+   value is identical across them and nothing restarts when data-print advances. */
+.ceremony[data-print='eject'] .ticket,
+.ceremony[data-print='clear'] .ticket { animation: sheet-eject .2s cubic-bezier(.25,.9,.3,1) both; }
+@keyframes sheet-eject {
+  0% { transform: translateY(var(--sheet-from, 0px)); }
+  100% { transform: translateY(0); }
+}
+/* THE MACHINE LEAVES OPAQUE, AND ONLY FADES ONCE IT IS PAST THE PAGE. A straight
+   fade-in-place was tried first and rendered badly: for the whole 260ms the sheet's lower half
+   showed THROUGH a semi-transparent platen and body, which reads as a dissolve, not as a page
+   coming out of a press. Sliding it down opaque means the paper is revealed by the machine
+   physically clearing it. 125px at 55% already puts the nip (scene 170) at 295, past the
+   sheet's bottom edge at 288, so nothing is ever revealed through translucency; the last 45%
+   is the machine leaving the frame. */
+.ceremony[data-print='eject'] .press,
+.ceremony[data-print='clear'] .press { animation: press-withdraw .3s cubic-bezier(.45,0,.7,.5) both; }
+@keyframes press-withdraw {
+  0% { transform: translateY(0); opacity: 1; }
+  55% { transform: translateY(125px); opacity: 1; }
+  100% { transform: translateY(200px); opacity: 0; }
+}
 
 /* ---- the settle stamp: outcome slams diagonally across the ticket, amount counts up beneath it ---- */
 .settle-ceremony[data-tone='up'] { --stamp: var(--pl-green); }
