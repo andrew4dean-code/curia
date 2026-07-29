@@ -23,6 +23,7 @@ import type { WheelCeremonyData } from './components/WheelCeremony';
 import { SettleCeremony } from './components/SettleCeremony';
 import type { SettleData } from './components/SettleCeremony';
 import { summarizeWheel } from './lib/wheelMath';
+import { recentSymbols } from './lib/symbols';
 import { deleteWheel } from './lib/api';
 import { TradeCeremony } from './components/TradeCeremony';
 import type { TicketData } from './components/TradeCeremony';
@@ -243,7 +244,7 @@ export default function App() {
         </button>
       )}
       {sheet?.kind === 'trade' && (
-        <AddTradeSheet trade={sheet.trade} wheels={snap.wheels} trades={snap.trades} prefill={sheet.prefill} onDone={onTicket} onDeleted={onDeleted} onCancel={() => setSheet(null)} />
+        <AddTradeSheet trade={sheet.trade} wheels={snap.wheels} trades={snap.trades} options={snap.options} prefill={sheet.prefill} onDone={onTicket} onDeleted={onDeleted} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'position' && (
         <PositionSheet
@@ -260,14 +261,14 @@ export default function App() {
         />
       )}
       {sheet?.kind === 'optionEdit' && (
-        <OptionSellSheet option={sheet.option} expiration={sheet.option.expiration} wheels={snap.wheels} onDone={onTicket} onCancel={() => setSheet(null)} />
+        <OptionSellSheet option={sheet.option} expiration={sheet.option.expiration} wheels={snap.wheels} trades={snap.trades} options={snap.options} onDone={onTicket} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'record' && (
         <OptionRecordSheet option={sheet.option} onDeleted={onOptionDeleted} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'freshWheel' && (
         <FreshWheelSheet
-          suggestions={[...new Set([...snap!.trades.map((t) => t.symbol), ...snap!.options.map((o) => o.symbol)])]
+          suggestions={recentSymbols(snap!.trades, snap!.options, 24)
             .filter((sym) => !snap!.wheels.some((w) => w.symbol === sym && w.closed_at === null))
             .slice(0, 3)}
           onDone={async (c) => { setSheet(null); setWheelCeremony(c); }}
@@ -303,7 +304,7 @@ export default function App() {
         />
       )}
       {sheet?.kind === 'sellOption' && (
-        <OptionSellSheet expiration={sheet.expiration} wheels={snap.wheels} onDone={onTicket} onCancel={() => setSheet(null)} />
+        <OptionSellSheet expiration={sheet.expiration} wheels={snap.wheels} trades={snap.trades} options={snap.options} onDone={onTicket} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'mark' && (
         <MarkSheet symbol={sheet.symbol} onDone={async () => { setSheet(null); await refresh(); }} onCancel={() => setSheet(null)} />

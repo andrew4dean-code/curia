@@ -79,3 +79,76 @@ describe('OptionSellSheet', () => {
     expect(screen.queryByText(/won't count toward it/i)).toBeNull();
   });
 });
+
+/* Selling a weekly on a wheel, four of the six fields were already knowable: the wheel's
+   stage says whether the next thing sold is a put or a call, and a covered call is
+   covered by definition. These cover the sheet reading that, and — more importantly —
+   knowing when to stop. */
+describe('OptionSellSheet wheel-derived entry', () => {
+  const wheel = { id: 1, symbol: 'TQQQ', no: 1, opened_at: '2026-01-01', closed_at: null };
+  const assignedPut = {
+    id: 1, symbol: 'TQQQ', opt_type: 'PUT', strike: 100, expiration: '2026-02-01', contracts: 1,
+    premium: 1, fees: 0, opened_at: '2026-01-15', note: '', status: 'ASSIGNED',
+    closed_at: '2026-02-01', buyback_price: 0,
+  } as never;
+  const heldShares = {
+    id: 1, symbol: 'TQQQ', side: 'BUY', qty: 400, price: 100, fees: 0,
+    executed_at: '2026-02-01', note: '',
+  } as never;
+
+  const sheet = (props: Record<string, unknown> = {}) =>
+    render(
+      <OptionSellSheet
+        expiration="2026-08-21"
+        wheels={[wheel]}
+        trades={[heldShares]}
+        options={[assignedPut]}
+        onDone={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
+        {...props}
+      />,
+    );
+
+  const isOn = (name: string) =>
+    screen.getByRole('button', { name }).className.includes('on');
+
+  it('picks the side and the count off the wheel when you tap the symbol', () => {
+    sheet();
+    fireEvent.click(screen.getByRole('button', { name: 'TQQQ' }));
+    expect(isOn('CALL')).toBe(true); // shares are held, so the next sale is a call
+    expect(screen.getByLabelText('Contracts')).toHaveValue(4); // 400 shares / 100
+    expect(screen.getByTestId('implied-note')).toHaveTextContent('4 covered');
+  });
+
+  it('stops choosing the side once you have chosen it yourself', () => {
+    sheet();
+    fireEvent.click(screen.getByRole('button', { name: 'PUT' })); // deliberate override
+    fireEvent.click(screen.getByRole('button', { name: 'TQQQ' }));
+    expect(isOn('PUT')).toBe(true); // the wheel does not overrule you
+  });
+
+  it('stops choosing the count once you have typed one', () => {
+    sheet();
+    fireEvent.change(screen.getByLabelText('Contracts'), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'TQQQ' }));
+    expect(screen.getByLabelText('Contracts')).toHaveValue(2);
+  });
+
+  it('fills nothing for a symbol with no open wheel', () => {
+    sheet({ wheels: [] });
+    fireEvent.change(screen.getByLabelText('Symbol'), { target: { value: 'NVDA' } });
+    expect(screen.queryByTestId('implied-note')).toBeNull();
+  });
+
+  it('leaves an existing option alone — those fields are the record, not a guess', () => {
+    const existing = {
+      id: 9, symbol: 'TQQQ', opt_type: 'PUT', strike: 55, expiration: '2026-08-21', contracts: 1,
+      premium: 2, fees: 0, opened_at: '2026-08-01', note: '', status: 'OPEN',
+      closed_at: null, buyback_price: 0,
+    } as never;
+    sheet({ option: existing });
+    expect(isOn('PUT')).toBe(true); // not flipped to CALL by the wheel behind it
+    expect(screen.getByLabelText('Contracts')).toHaveValue(1);
+    expect(screen.queryByTestId('implied-note')).toBeNull();
+  });
+});

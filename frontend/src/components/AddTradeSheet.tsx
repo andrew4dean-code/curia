@@ -4,7 +4,9 @@ import { createTrade, deleteTrade, updateTrade } from '../lib/api';
 import { todayIso } from '../lib/time';
 import { wheelWindowNote } from '../lib/wheelMath';
 import { realisedForSell } from '../lib/fifo';
-import type { Side, Trade, Wheel } from '../lib/types';
+import type { OptionPosition, Side, Trade, Wheel } from '../lib/types';
+import { SymbolChips } from './SymbolChips';
+import { recentSymbols } from '../lib/symbols';
 import { formatMoney, formatSignedMoney } from '../lib/format';
 import type { TicketData } from './TradeCeremony';
 
@@ -17,6 +19,7 @@ export function AddTradeSheet({
   trade,
   wheels,
   trades = [],
+  options = [],
   prefill,
   onDone,
   onDeleted,
@@ -25,11 +28,15 @@ export function AddTradeSheet({
   trade: Trade | null;
   wheels: Wheel[];
   trades?: Trade[];
+  options?: OptionPosition[];
   prefill?: { side: Side; symbol: string; qty: number };
   onDone: (ticket: TicketData) => Promise<void>;
   onDeleted?: (id?: number) => Promise<void>;
   onCancel: () => void;
 }) {
+  // Recomputed per render rather than memoised: the list is capped at eight and the sheet
+  // is mounted for as long as it takes to type one trade.
+  const symbolOptions = recentSymbols(trades, options);
   const [side, setSide] = useState<Side>(trade?.side ?? prefill?.side ?? 'BUY');
   const [symbol, setSymbol] = useState(trade?.symbol ?? prefill?.symbol ?? '');
   const [qty, setQty] = useState(trade ? String(trade.qty) : prefill ? String(prefill.qty) : '');
@@ -114,6 +121,7 @@ export function AddTradeSheet({
         <div className="field">
           <label htmlFor="symbol">Symbol</label>
           <input id="symbol" value={symbol} onChange={(e) => setSymbol(e.target.value)} autoCapitalize="characters" required />
+          <SymbolChips idPrefix="trade" symbols={symbolOptions} active={symbol} onPick={setSymbol} />
         </div>
         <div className="field">
           <label htmlFor="qty">Shares</label>

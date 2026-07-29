@@ -4,7 +4,10 @@ import { createOption, updateOption } from '../lib/api';
 import { todayIso } from '../lib/time';
 import { wheelWindowNote } from '../lib/wheelMath';
 import { formatMoney } from '../lib/format';
-import type { OptionDraft, OptionPosition, OptionType, Wheel } from '../lib/types';
+import type { OptionDraft, OptionPosition, OptionType, Trade, Wheel } from '../lib/types';
+import { SymbolChips } from './SymbolChips';
+import { recentSymbols } from '../lib/symbols';
+import { optionDefaults } from '../lib/optionEntry';
 import type { TicketData } from './TradeCeremony';
 
 function fmtDate(iso: string): string {
@@ -16,15 +19,20 @@ export function OptionSellSheet({
   expiration,
   option,
   wheels,
+  trades = [],
+  options = [],
   onDone,
   onCancel,
 }: {
   expiration: string;
   option?: OptionPosition | null;
   wheels: Wheel[];
+  trades?: Trade[];
+  options?: OptionPosition[];
   onDone: (ticket: TicketData) => Promise<void>;
   onCancel: () => void;
 }) {
+  const symbolOptions = recentSymbols(trades, options);
   const exp = option ? option.expiration : expiration;
   const [optType, setOptType] = useState<OptionType>(option?.opt_type ?? 'PUT');
   const [symbol, setSymbol] = useState(option?.symbol ?? '');
@@ -35,6 +43,24 @@ export function OptionSellSheet({
   const [note, setNote] = useState(option?.note ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  /* Once you have chosen a side or a size yourself, the wheel stops choosing it for you.
+     Filling a field you already set — because you happened to retype the symbol — is the
+     kind of help that costs more trust than it saves. */
+  const [chosenType, setChosenType] = useState(false);
+  const [chosenContracts, setChosenContracts] = useState(false);
+
+  /** Apply what the symbol's open wheel implies. Never while editing an existing option:
+   *  those fields are the record, not a guess. */
+  function applySymbol(next: string) {
+    setSymbol(next);
+    if (option) return;
+    const d = optionDefaults(next, wheels, trades, options);
+    if (!d) return;
+    if (!chosenType) setOptType(d.optType);
+    if (!chosenContracts && d.contracts !== null) setContracts(String(d.contracts));
+  }
+
+  const implied = option ? null : optionDefaults(symbol, wheels, trades, options);
 
   const take = (Number(premium) || 0) * 100 * (Number(contracts) || 0);
   const wheelNote = wheelWindowNote(symbol, date, wheels);
@@ -72,12 +98,20 @@ export function OptionSellSheet({
         <h2>{option ? 'Edit option' : `Sell — week of Fri ${fmtDate(exp)}`}</h2>
         <div className="hero-sub" style={{ marginBottom: 12 }}>expiration set by the line you tapped</div>
         <div className="toggle-row">
-          <button type="button" className={optType === 'PUT' ? 'on' : ''} onClick={() => setOptType('PUT')}>PUT</button>
-          <button type="button" className={optType === 'CALL' ? 'on' : ''} onClick={() => setOptType('CALL')}>CALL</button>
+          <button type="button" className={optType === 'PUT' ? 'on' : ''} onClick={() => { setChosenType(true); setOptType('PUT'); }}>PUT</button>
+          <button type="button" className={optType === 'CALL' ? 'on' : ''} onClick={() => { setChosenType(true); setOptType('CALL'); }}>CALL</button>
         </div>
         <div className="field">
           <label htmlFor="os-symbol">Symbol</label>
-          <input id="os-symbol" value={symbol} onChange={(e) => setSymbol(e.target.value)} autoCapitalize="characters" required />
+          <input id="os-symbol" value={symbol} onChange={(e) => applySymbol(e.target.value)} autoCapitalize="characters" required />
+          <SymbolChips idPrefix="option" symbols={symbolOptions} active={symbol} onPick={applySymbol} />
+          {implied && (
+            <div className="row-sub" data-testid="implied-note" style={{ marginTop: 6 }}>
+              {implied.optType === 'PUT'
+                ? 'wheel is waiting on a put'
+                : `wheel holds shares — ${implied.contracts !== null ? `${implied.contracts} covered` : 'call'}`}
+            </div>
+          )}
         </div>
         <div className="field">
           <label htmlFor="os-strike">Strike</label>
@@ -85,7 +119,7 @@ export function OptionSellSheet({
         </div>
         <div className="field">
           <label htmlFor="os-contracts">Contracts</label>
-          <input id="os-contracts" type="number" inputMode="numeric" step="1" min="1" value={contracts} onChange={(e) => setContracts(e.target.value)} required />
+          <input id="os-contracts" type="number" inputMode="numeric" step="1" min="1" value={contracts} onChange={(e) => { setChosenContracts(true); setContracts(e.target.value); }} required />
         </div>
         <div className="field">
           <label htmlFor="os-premium">Premium / share</label>
