@@ -1,9 +1,16 @@
 import { useRef, useState } from 'react';
 import type { TabProps } from './PortfolioTab';
 import { exportBackup, importBackup } from '../lib/api';
+import { RELEASES } from '../lib/releases';
 
 function fmtStamp(iso: string): string {
   return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+/** Date-only, and parsed as UTC: a bare '2026-07-28' is midnight UTC, which prints as
+ *  the 27th anywhere west of Greenwich if handed straight to a local formatter. */
+function fmtDay(iso: string): string {
+  return new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export function SettingsTab({ onRefresh }: TabProps) {
@@ -69,7 +76,8 @@ export function SettingsTab({ onRefresh }: TabProps) {
   return (
     <div>
       <h2 className="section-title">The Press</h2>
-      <div className="row-sub" style={{ padding: '8px 0' }}>Pressed {fmtStamp(__BUILD_STAMP__)}</div>
+      <div className="version-line" data-testid="app-version">Curia v{__APP_VERSION__}</div>
+      <div className="row-sub" style={{ padding: '2px 0 8px' }}>Pressed {fmtStamp(__BUILD_STAMP__)}</div>
       <button className="btn" onClick={() => void updateNow()} disabled={busy}>
         {busy ? 'Updating…' : 'Update now'}
       </button>
@@ -85,6 +93,22 @@ export function SettingsTab({ onRefresh }: TabProps) {
         <input ref={fileRef} type="file" accept="application/json" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void doImport(f); }} />
       </div>
       {importError && <div style={{ color: 'var(--pl-red)', textAlign: 'center', fontSize: 13 }}>{importError}</div>}
+      <h2 className="section-title">What changed</h2>
+      <ol className="release-list" data-testid="release-list">
+        {RELEASES.map((r) => (
+          <li key={r.version} className="release" data-version={r.version}>
+            <div className="release-head">
+              <span className="release-version">v{r.version}</span>
+              <span className="release-date">{fmtDay(r.date)}</span>
+            </div>
+            <ul className="release-notes">
+              {r.notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

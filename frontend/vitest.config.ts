@@ -1,8 +1,9 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import { buildDefines } from './build-defines';
 
 export default defineConfig({
-  define: { __BUILD_STAMP__: JSON.stringify(new Date().toISOString()) },
+  define: buildDefines,
   plugins: [react()],
   test: {
     environment: 'jsdom',

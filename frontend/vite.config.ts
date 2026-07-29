@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { buildDefines } from './build-defines';
 
 export default defineConfig({
-  define: { __BUILD_STAMP__: JSON.stringify(new Date().toISOString()) },
+  define: buildDefines,
   server: {
     proxy: { '/api': 'http://localhost:8000' },
   },

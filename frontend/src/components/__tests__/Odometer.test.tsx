@@ -246,30 +246,48 @@ describe('Odometer', () => {
     expect(centyTotal).toBeGreaterThan(0); // the ladder does reach the bottom rung
   });
 
-  /* The count used to run on the app's --roll-ease, which is shaped for a panel sliding
-     into place: 65% of the distance inside the first fifth of the run, then a long creep
-     through the last cents. On a figure that reads rather than moves, that lands the
-     number almost immediately and spends the rest of the duration barely changing — the
-     eye sees a snap and a twitch, not a count. The curve now carries the value across
-     the whole window, so the digits are still visibly turning at the halfway mark. */
-  it('keeps counting through the back half of the run', () => {
+  /* The count winds up from rest and winds back down to it. Two earlier curves each got
+     one end: --roll-ease landed softly but left at nearly 2x speed on the first frame,
+     and the pass after it spread the travel evenly but still started hard. Both read as
+     stopping abruptly, because a deceleration is only legible against an acceleration
+     that came before it.
+
+     Stated as segments rather than as fixed percentages at fixed marks: what makes this
+     an arc is that the middle outruns both ends, and that is true of any curve worth
+     shipping here. Pinning "77% at halfway" would pin this test to one bezier and would
+     have to be rewritten on every taste change — as the version it replaces was. */
+  it('winds up from rest, runs fastest through the middle, and settles back down', () => {
     const { el, to } = mount('$0.00', { speed: 'hero' });
     to('$1,000.00', { speed: 'hero' });
     const { seen, elapsed } = playTimed(el);
 
-    /** The figure on screen at a given fraction of the way through the run. */
+    /** The fraction of the total value on screen at a given fraction of the way through. */
     const at = (f: number) => {
-      const cut = elapsed * f;
-      const painted = seen.filter((s) => s.at <= cut);
-      return num(painted[painted.length - 1].text) / 1000;
+      const painted = seen.filter((s) => s.at <= elapsed * f);
+      return painted.length ? num(painted[painted.length - 1].text) / 1000 : 0;
     };
+    /** How much of the value is covered between two marks. */
+    const span = (a: number, b: number) => at(b) - at(a);
 
-    expect(at(0.2)).toBeLessThan(0.45); // was ~0.65 on --roll-ease
-    expect(at(0.5)).toBeLessThan(0.75); // was ~0.93 — the count was over before halfway
-    expect(at(0.7)).toBeLessThan(0.92); // was ~0.98
-    // ...and it is genuinely moving throughout, not stalled early and dumped at the end.
-    expect(at(0.2)).toBeGreaterThan(0.15);
+    const first = span(0, 0.2);
+    const middle = span(0.4, 0.6);
+    const last = span(0.8, 1);
+
+    // The arc: the middle fifth outruns the fifth at either end.
+    expect(middle).toBeGreaterThan(first);
+    expect(middle).toBeGreaterThan(last);
+
+    // Winding up: the opening tenth moves less than the tenth that follows it.
+    expect(span(0, 0.1)).toBeLessThan(span(0.1, 0.2));
+    // Settling down: the closing tenth moves less than the tenth before it.
+    expect(span(0.9, 1)).toBeLessThan(span(0.8, 0.9));
+
+    // It starts from something near rest rather than leaping...
+    expect(at(0.1)).toBeLessThan(0.12);
+    // ...and is still genuinely mid-count at the midpoint, not finished and creeping.
     expect(at(0.5)).toBeGreaterThan(0.55);
+    expect(at(0.5)).toBeLessThan(0.9);
+
     expect(seen[seen.length - 1].text).toBe('$1,000.00');
   });
 

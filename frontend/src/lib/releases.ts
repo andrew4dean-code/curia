@@ -1,0 +1,50 @@
+/** What shipped, newest first.
+ *
+ *  The head entry's version MUST match package.json — a test asserts it, because a
+ *  version the app prints and a version the package declares that disagree is worse
+ *  than showing no version at all. Bumping one without the other fails the suite.
+ *
+ *  Notes are written for the one person who reads them. Say what changed from the
+ *  outside, not which file moved.
+ */
+export interface Release {
+  version: string;
+  /** ISO date, so it sorts and formats without a parser guessing at the order. */
+  date: string;
+  notes: string[];
+}
+
+export const RELEASES: Release[] = [
+  {
+    version: '2.2.0',
+    date: '2026-07-28',
+    notes: [
+      'The wheel dial is redrawn: graduated chapter ring, engine-turned face, and the four stage names upright outside the bezel instead of rotated sideways.',
+      'The hand now sweeps into position and leaves a fading trail behind it.',
+      'More figures roll — the ledger totals, unrealized P/L and the wheel basis lines.',
+      'This screen now tells you which Curia you are running.',
+    ],
+  },
+  {
+    version: '2.1.2',
+    date: '2026-07-28',
+    notes: ['The count winds up from rest and settles back down instead of starting at full speed.'],
+  },
+  {
+    version: '2.1.1',
+    date: '2026-07-28',
+    notes: ['The count takes longer, so the figures roll rather than flick.'],
+  },
+  {
+    version: '2.1.0',
+    date: '2026-07-28',
+    notes: ['Money counts up across the whole roll instead of snapping most of the way and creeping the rest.'],
+  },
+  {
+    version: '2.0.0',
+    date: '2026-07-25',
+    notes: ['The Wheel: campaign cards, true basis, close-today totals, and the crest ceremony.'],
+  },
+];
+
+export const CURRENT = RELEASES[0];
