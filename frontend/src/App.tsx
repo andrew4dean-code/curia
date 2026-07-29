@@ -47,6 +47,29 @@ type Sheet =
  *  A test asserts the relationship, so this cannot drift silently again. */
 export const LANDING_MS = 4200;
 
+/** Every wheel's current stage, keyed by wheel id. Compared either side of a ceremony's
+ *  refresh to answer one question: did what I just booked move a wheel along? */
+export function wheelStages(snap: Snapshot | null): Map<number, string> {
+  const stages = new Map<number, string>();
+  if (!snap) return stages;
+  for (const w of snap.wheels) {
+    if (w.closed_at) continue;
+    stages.set(w.id, summarizeWheel(w, snap.trades, snap.options, snap.marks).stage);
+  }
+  return stages;
+}
+
+/** The id of a wheel whose stage differs between two snapshots, or null.
+ *  A wheel that appears or disappears is not a stage change — opening a fresh wheel has
+ *  its own ceremony, and closing one should not yank the tab out from under it. */
+export function movedWheel(before: Map<number, string>, after: Map<number, string>): number | null {
+  for (const [id, stage] of after) {
+    const was = before.get(id);
+    if (was !== undefined && was !== stage) return id;
+  }
+  return null;
+}
+
 export default function App() {
   const [snap, setSnap] = useState<Snapshot | null>(() => (getPasscode() ? cachedSnapshot() : null));
   const [unlocked, setUnlocked] = useState(() => !!getPasscode());
@@ -309,7 +332,18 @@ export default function App() {
           onDone={() => {
             setCeremony(null);
             setLanding(true);
+            // Where the wheels stood before this booking was folded in. Captured after
+            // the envelope has closed and before the refresh that may move one along.
+            const before = wheelStages(snap);
             void refresh().then(() => {
+              // The dial keeps its own memory of where each hand was left, so landing on
+              // Portfolio makes the arm travel to the new stage rather than already be
+              // there. Only switch when a wheel actually moved: being thrown to another
+              // tab for a booking that changed nothing would be worse than staying put.
+              setSnap((latest) => {
+                if (movedWheel(before, wheelStages(latest))) setTab('portfolio');
+                return latest;
+              });
               landingTimer.current = window.setTimeout(() => {
                 landingTimer.current = null;
                 setLanding(false);

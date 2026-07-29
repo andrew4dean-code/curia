@@ -16,6 +16,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.3.0',
+    date: '2026-07-28',
+    notes: [
+      'Figures no longer sit in oversized boxes — the width is measured from the number itself rather than guessed, so nothing floats away from the word beside it.',
+      'Come back to a tab and the numbers count up to what changed while you were away, instead of already being right.',
+      'Book an option that moves a wheel along and Curia takes you to it, so you watch the arm travel to the new stage.',
+    ],
+  },
+  {
     version: '2.2.0',
     date: '2026-07-28',
     notes: [

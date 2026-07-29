@@ -43,6 +43,20 @@ const STATIONS = [
   { stage: 'CALLED_AWAY' as WheelStage, label: 'CALLED AWAY', deg: 270, lx: -R_FACE - 10, ly: 4, anchor: 'end' },
 ] as const;
 
+/** The stage each dial was left pointing at, surviving unmount.
+ *
+ *  Same reason the odometer keeps one: tabs are keyed on the active tab, so settling an
+ *  option on Options and returning to Portfolio remounts the card, and a fresh dial has
+ *  no previous stage to sweep from — the hand would simply be in its new place. Keyed by
+ *  wheel id, so two wheels never inherit each other's position.
+ */
+const STAGE_MEMORY = new Map<number, WheelStage>();
+
+/** Module state outlives a test; without this one test's final stage seeds the next. */
+export function resetDialMemory(): void {
+  STAGE_MEMORY.clear();
+}
+
 const rad = (deg: number) => (deg * Math.PI) / 180;
 const px = (r: number, deg: number) => +(r * Math.sin(rad(deg))).toFixed(2);
 const py = (r: number, deg: number) => +(-r * Math.cos(rad(deg))).toFixed(2);
@@ -63,17 +77,26 @@ export function WheelDial({
   callsSold,
   no,
   weeks,
+  wheelId,
 }: {
   stage: WheelStage;
   callsSold: number;
   no: number;
   weeks: number;
+  /** Identity for remembering where the hand was left. Without it the dial still works,
+   *  it simply never sweeps across a remount. */
+  wheelId?: number;
 }) {
   const idx = stage === 'COMPLETED' ? ORDER.length : ORDER.indexOf(stage);
   const spokes = Math.min(callsSold, 12);
   const target = HAND_ANGLE[stage];
+  /** Where this dial was last left, if it has been drawn before. Read once, at mount:
+   *  after that the live angle is the truth and the registry only follows it. */
+  const remembered = useRef(wheelId !== undefined ? STAGE_MEMORY.get(wheelId) : undefined);
 
-  const [angle, setAngle] = useState(target);
+  const [angle, setAngle] = useState(
+    remembered.current !== undefined ? HAND_ANGLE[remembered.current] : target,
+  );
   const [ghosts, setGhosts] = useState<Ghost[]>([]);
   const frame = useRef<number | null>(null);
   const live = useRef(angle);
@@ -82,11 +105,22 @@ export function WheelDial({
   const mounted = useRef(false);
 
   useEffect(() => {
+    if (wheelId !== undefined) STAGE_MEMORY.set(wheelId, stage);
+
+    // First render places the hand rather than sweeping it — EXCEPT when this dial was
+    // left pointing somewhere else, which is the case that matters: settle an option on
+    // Options, come back, and the arm should travel to where the wheel has moved rather
+    // than already be there. A cold load remembers nothing and simply points.
     if (!mounted.current) {
       mounted.current = true;
-      live.current = target;
-      setAngle(target);
-      return;
+      const from = remembered.current;
+      if (from === undefined || from === stage) {
+        live.current = target;
+        setAngle(target);
+        return;
+      }
+      live.current = HAND_ANGLE[from];
+      // fall through and sweep from the remembered stage to this one
     }
     if (prefersReducedMotion()) {
       live.current = target;
@@ -123,7 +157,7 @@ export function WheelDial({
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       frame.current = null;
     };
-  }, [target]);
+  }, [target, stage, wheelId]);
 
   const now = typeof performance !== 'undefined' ? performance.now() : 0;
 

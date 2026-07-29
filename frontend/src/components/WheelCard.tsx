@@ -50,7 +50,7 @@ export function WheelCard({
         Wheel Nº {wheel.no} · started {fmtShort(wheel.opened_at)} · week {summary.weeks}
       </div>
       <div className="wheel-dial-wrap">
-        <WheelDial stage={stage} callsSold={summary.callsSold} no={wheel.no} weeks={summary.weeks} />
+        <WheelDial stage={stage} callsSold={summary.callsSold} no={wheel.no} weeks={summary.weeks} wheelId={wheel.id} />
       </div>
       <div className="wheel-tiles">
         {/* An em dash is not a figure — only hand the odometer something it can count. */}

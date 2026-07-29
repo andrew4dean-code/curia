@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import App, { LANDING_MS } from '../App';
+import App, { LANDING_MS, movedWheel, wheelStages } from '../App';
 import { DURATION_MS } from '../components/Odometer';
 // @ts-expect-error -- no @types/node in this project.
 import { readFileSync } from 'node:fs';
@@ -447,5 +447,34 @@ describe('App strike timer race across kinds', () => {
     // AAA's own timer (armed fresh at its own delete) should fire by now.
     await flush(400);
     expect(strikingRows()).toHaveLength(0);
+  });
+});
+
+/* Booking an option that assigns you shares moves a wheel from SELL PUT to ASSIGNED.
+   That happens on the Options tab; the wheel is drawn on Portfolio. These decide whether
+   the app should carry you there to watch the hand travel. */
+describe('wheel stage change detection', () => {
+  const stages = (m: Record<number, string>) => new Map<number, string>(Object.entries(m).map(([k, v]) => [Number(k), v]));
+
+  it('finds the wheel whose stage moved', () => {
+    expect(movedWheel(stages({ 1: 'SELL_PUT', 2: 'ASSIGNED' }), stages({ 1: 'ASSIGNED', 2: 'ASSIGNED' }))).toBe(1);
+  });
+
+  it('reports nothing when every wheel stands still', () => {
+    expect(movedWheel(stages({ 1: 'SELL_PUT' }), stages({ 1: 'SELL_PUT' }))).toBeNull();
+  });
+
+  it('does not count a wheel that only just appeared', () => {
+    // Opening a fresh wheel has its own ceremony; it must not also throw the tab across.
+    expect(movedWheel(stages({}), stages({ 3: 'SELL_PUT' }))).toBeNull();
+  });
+
+  it('does not count a wheel that went away', () => {
+    // Completing a wheel should not yank the tab out from under the sheet doing it.
+    expect(movedWheel(stages({ 4: 'CALLED_AWAY' }), stages({}))).toBeNull();
+  });
+
+  it('reads no stages at all from a missing snapshot', () => {
+    expect(wheelStages(null).size).toBe(0);
   });
 });

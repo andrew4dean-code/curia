@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { beforeEach } from 'vitest';
 import { resetOdometerMemory } from '../components/Odometer';
+import { resetDialMemory } from '../components/WheelDial';
 
 // Odometers remember the figure they were left showing, so that returning to a tab counts
 // rather than prints. That registry is module state, and module state outlives a test:
@@ -8,4 +9,5 @@ import { resetOdometerMemory } from '../components/Odometer';
 // counts appear in tests that never set one up.
 beforeEach(() => {
   resetOdometerMemory();
+  resetDialMemory();
 });
