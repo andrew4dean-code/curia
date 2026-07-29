@@ -7,6 +7,10 @@ import { NIP_Y, PRESS_HOME_X, PRESS_OVERHANG, PRESS_VIEW_H, tiltForChar } from '
 // test sees the real rules on disk, bypassing Vitest's mocked CSS-import handling (which returns
 // '' for .css imports under jsdom by default, so a normal `import` here would prove nothing).
 import { readFileSync } from 'node:fs';
+// @ts-expect-error -- no @types/node in this project.
+import { fileURLToPath } from 'node:url';
+// @ts-expect-error -- no @types/node in this project.
+import { dirname, join } from 'node:path';
 
 const ticket: TicketData = { no: 47, title: 'TRADE TICKET', symbol: 'TQQQ', lines: ['BUY 400 TQQQ', '@ $72.00'] };
 
@@ -14,10 +18,14 @@ const ticket: TicketData = { no: 47, title: 'TRADE TICKET', symbol: 'TQQQ', line
 // ship, not a jsdom-mocked stand-in. jsdom computes no animation and no layout, so this whole
 // class of bug -- a transform that is never transitioned, a perspective on the wrong element,
 // preserve-3d on an SVG node -- is otherwise invisible to every test in this file.
+// fileURLToPath, never new URL(...).pathname: a URL path is percent-encoded, so any checkout
+// whose path contains a space (the local clone lives under ".../Desktop/Claude Work/") hands
+// readFileSync a literal "Claude%20Work" and every assertion in this file dies on ENOENT. The
+// suite passed in CI on nothing more than the absence of a space in the runner's path.
 function readCeremonyCss(): string {
-  const testFilePath = new URL(import.meta.url).pathname;
-  const cssPath = testFilePath.replace(/components\/__tests__\/TradeCeremony\.test\.tsx$/, 'styles/ceremony.css');
-  return readFileSync(cssPath, 'utf8');
+  // .../src/components/__tests__ -> .../src/styles/ceremony.css
+  const here = dirname(fileURLToPath(import.meta.url));
+  return readFileSync(join(here, '..', '..', 'styles', 'ceremony.css'), 'utf8');
 }
 
 // The rules with the comments taken out. Several assertions below are of the form "this name
