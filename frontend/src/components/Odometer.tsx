@@ -15,7 +15,7 @@ interface OdometerProps {
 
 /** A WheelCard row is one of many, so it settles faster than the book value: a row
  *  that churns longer than the hero figure reads as noise, not as counting. */
-const DURATION_MS: Record<RollSpeed, number> = { hero: 900, detail: 620 };
+const DURATION_MS: Record<RollSpeed, number> = { hero: 1250, detail: 860 };
 
 /** Cent precision, taken from the formatter itself so the two can never disagree. */
 const DP = usd.resolvedOptions().maximumFractionDigits ?? 2;
