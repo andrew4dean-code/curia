@@ -79,6 +79,23 @@ function play(el: HTMLElement, dt = 16.7, phase = dt) {
 
 const num = (s: string) => Number(s.replace(/[^0-9.]/g, '')) * (/^[−-]/.test(s) ? -1 : 1);
 
+/** Like play(), but stamps each painted figure with the clock it was painted at, so a
+ *  test can ask where the count had got to a given fraction of the way through. */
+function playTimed(el: HTMLElement, dt = 16.7, phase = dt) {
+  const start = clock;
+  const seen = [{ at: 0, text: el.textContent ?? '' }];
+  let frames = 0;
+  let first = true;
+  while (pending.size && frames < 600) {
+    tick(first ? phase : dt);
+    first = false;
+    frames++;
+    const text = el.textContent ?? '';
+    if (text !== seen[seen.length - 1].text) seen.push({ at: clock - start, text });
+  }
+  return { seen, elapsed: clock - start };
+}
+
 function mount(value: string, props: { speed?: 'hero' | 'detail'; run?: boolean } = {}) {
   const view = render(<Odometer value={value} dataTestid="odo" {...props} />);
   const el = view.getByTestId('odo');
@@ -227,6 +244,33 @@ describe('Odometer', () => {
       }
     }
     expect(centyTotal).toBeGreaterThan(0); // the ladder does reach the bottom rung
+  });
+
+  /* The count used to run on the app's --roll-ease, which is shaped for a panel sliding
+     into place: 65% of the distance inside the first fifth of the run, then a long creep
+     through the last cents. On a figure that reads rather than moves, that lands the
+     number almost immediately and spends the rest of the duration barely changing — the
+     eye sees a snap and a twitch, not a count. The curve now carries the value across
+     the whole window, so the digits are still visibly turning at the halfway mark. */
+  it('keeps counting through the back half of the run', () => {
+    const { el, to } = mount('$0.00', { speed: 'hero' });
+    to('$1,000.00', { speed: 'hero' });
+    const { seen, elapsed } = playTimed(el);
+
+    /** The figure on screen at a given fraction of the way through the run. */
+    const at = (f: number) => {
+      const cut = elapsed * f;
+      const painted = seen.filter((s) => s.at <= cut);
+      return num(painted[painted.length - 1].text) / 1000;
+    };
+
+    expect(at(0.2)).toBeLessThan(0.45); // was ~0.65 on --roll-ease
+    expect(at(0.5)).toBeLessThan(0.75); // was ~0.93 — the count was over before halfway
+    expect(at(0.7)).toBeLessThan(0.92); // was ~0.98
+    // ...and it is genuinely moving throughout, not stalled early and dumped at the end.
+    expect(at(0.2)).toBeGreaterThan(0.15);
+    expect(at(0.5)).toBeGreaterThan(0.55);
+    expect(seen[seen.length - 1].text).toBe('$1,000.00');
   });
 
   it('takes the same time whichever way and however far the figure travels', () => {

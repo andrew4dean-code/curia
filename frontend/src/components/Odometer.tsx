@@ -14,8 +14,9 @@ interface OdometerProps {
 }
 
 /** A WheelCard row is one of many, so it settles faster than the book value: a row
- *  that churns longer than the hero figure reads as noise, not as counting. */
-const DURATION_MS: Record<RollSpeed, number> = { hero: 900, detail: 620 };
+ *  that churns longer than the hero figure reads as noise, not as counting. The 1.45
+ *  ratio between the two is what stages them, so both move together. */
+const DURATION_MS: Record<RollSpeed, number> = { hero: 1150, detail: 790 };
 
 /** Cent precision, taken from the formatter itself so the two can never disagree. */
 const DP = usd.resolvedOptions().maximumFractionDigits ?? 2;
@@ -51,9 +52,17 @@ function build(n: number, signed: boolean): string {
   return v > 0 ? `+${abs}` : v < 0 ? `−${abs}` : `±${abs}`;
 }
 
-/** The app's --roll-ease (cubic-bezier(.18,.71,.21,1)) evaluated in JS, so the count
- *  carries the same motion signature as every CSS transition around it. */
-const EASE = [0.18, 0.71, 0.21, 1];
+/** The count deliberately does NOT run on the app's --roll-ease. That curve is shaped
+ *  for a panel sliding into place — it covers 65% of its travel in the first fifth and
+ *  then creeps — which on a figure that is read rather than watched lands the number
+ *  almost at once and leaves the rest of the duration to a twitch in the cents. This
+ *  one spreads the value across the whole window (33% / 68% / 85% at a fifth, half and
+ *  seven tenths of the way through), so the digits are still turning at the midpoint.
+ *  It keeps --roll-ease's final control point at y=1, so it still glides to a stop
+ *  rather than arriving with speed on it — the landing matches the motion around it
+ *  even though the travel does not. Kept in JS, not as a CSS token: nothing in CSS
+ *  reads it, and unlike --roll-scale it does not vary by cascade. */
+const EASE = [0.3, 0.59, 0.83, 1];
 
 function ease(t: number): number {
   const [x1, y1, x2, y2] = EASE;
