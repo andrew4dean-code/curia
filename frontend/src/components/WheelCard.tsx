@@ -53,17 +53,20 @@ export function WheelCard({
         <WheelDial stage={stage} callsSold={summary.callsSold} no={wheel.no} weeks={summary.weeks} />
       </div>
       <div className="wheel-tiles">
+        {/* An em dash is not a figure — only hand the odometer something it can count. */}
         <div className="wheel-tile">
           <b>Raw basis</b>
-          <span>{rawBasis != null ? formatMoney(rawBasis) : '—'}</span>
+          <span>{rawBasis != null ? <Odometer value={formatMoney(rawBasis)} speed="detail" /> : '—'}</span>
         </div>
         <div className="wheel-tile">
           <b>Premium banked</b>
-          <span style={{ color: plColor(premiumBanked) }}>{formatMoney(premiumBanked)}</span>
+          <span style={{ color: plColor(premiumBanked) }}>
+            <Odometer value={formatMoney(premiumBanked)} speed="detail" />
+          </span>
         </div>
         <div className="wheel-tile">
           <b>True basis</b>
-          <span>{trueBasis != null ? formatMoney(trueBasis) : '—'}</span>
+          <span>{trueBasis != null ? <Odometer value={formatMoney(trueBasis)} speed="detail" /> : '—'}</span>
         </div>
       </div>
       {!flat && rawBasis != null && trueBasis != null && (

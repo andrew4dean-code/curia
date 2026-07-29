@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { deleteOption } from '../lib/api';
 import { optionRealizedPl, premiumCollected } from '../lib/optionsMath';
 import { formatMoney, formatSignedMoney, plColor } from '../lib/format';
+import { Odometer } from './Odometer';
 import type { OptionPosition } from '../lib/types';
 
 const OUTCOME_LABELS: Record<string, string> = {
@@ -50,7 +51,7 @@ export function OptionRecordSheet({
           sold {option.opened_at} · settled {option.closed_at}
         </div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, color: plColor(pl), margin: '10px 0 14px' }}>
-          {formatSignedMoney(pl)}
+          <Odometer value={formatSignedMoney(pl)} speed="detail" />
         </div>
         {option.status === 'ASSIGNED' && (
           <div className="row-sub" style={{ marginBottom: 12 }}>

@@ -101,7 +101,7 @@ export function PortfolioTab({
       <header className="hero" style={summaries.length > 0 ? { padding: '10px 0 6px' } : undefined}>
         <Odometer value={formatMoney(bookValue)} speed="hero" className={flash} dataTestid="book-value" />
         <div className="hero-sub" style={{ color: plColor(unrealized) }}>
-          {formatSignedMoney(unrealized)} unrealized
+          <Odometer value={formatSignedMoney(unrealized)} speed="detail" dataTestid="unrealized" /> unrealized
         </div>
       </header>
       {positions.some((p) => p.mark) && (

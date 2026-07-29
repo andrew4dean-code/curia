@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { closeWheel, deleteWheel, openWheel } from '../lib/api';
 import { formatSignedMoney, plColor } from '../lib/format';
+import { Odometer } from './Odometer';
 import type { Wheel, WheelSummary } from '../lib/types';
 import type { WheelCeremonyData } from './WheelCeremony';
 
@@ -115,7 +116,7 @@ export function CompleteWheelSheet({
           {weeks} weeks · {callsSold} calls sold · shares flat
         </div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 800, color: plColor(closeToday), margin: '8px 0 14px' }}>
-          {formatSignedMoney(closeToday)}
+          <Odometer value={formatSignedMoney(closeToday)} speed="detail" />
         </div>
         <button className="btn" onClick={() => void complete()} disabled={busy}>
           {busy ? 'Sealing…' : 'Complete the wheel'}
@@ -167,7 +168,7 @@ export function WheelRecordSheet({
         </h2>
         <div className="row-sub" style={{ marginBottom: 6 }}>{detailLine}</div>
         <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 800, color: plColor(finalTotal), margin: '8px 0 14px' }}>
-          {formatSignedMoney(finalTotal)}
+          <Odometer value={formatSignedMoney(finalTotal)} speed="detail" />
         </div>
         <button className="btn" onClick={() => void remove()} disabled={busy}>
           {busy ? 'Deleting…' : 'Delete record'}

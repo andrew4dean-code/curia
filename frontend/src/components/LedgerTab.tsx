@@ -5,6 +5,7 @@ import { computeClosedTrades } from '../lib/fifo';
 import { computeStats } from '../lib/stats';
 import { computeOptionStats, optionRealizedPl } from '../lib/optionsMath';
 import { formatMoney, formatPct, formatSignedMoney, formatSignedPct, plColor } from '../lib/format';
+import { Odometer } from './Odometer';
 
 export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord, strikingTradeId, strikingOptionId, onDeleted }: TabProps) {
   const [showEntries, setShowEntries] = useState(false);
@@ -41,10 +42,10 @@ export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord, striking
           <h2 className="section-title">The record</h2>
           <div className="stats-grid">
             <div className="stat"><div className="label">Win rate</div><div className="value">{formatPct(stats.winRate)}</div></div>
-            <div className="stat"><div className="label">Realized P/L</div><div className="value" style={{ color: plColor(stats.totalRealizedPl) }}>{formatSignedMoney(stats.totalRealizedPl)}</div></div>
-            <div className="stat"><div className="label">Avg win</div><div className="value">{formatSignedMoney(stats.avgWin)}</div></div>
-            <div className="stat"><div className="label">Avg loss</div><div className="value">{formatSignedMoney(stats.avgLoss)}</div></div>
-            <div className="stat"><div className="label">Expectancy</div><div className="value" style={{ color: plColor(stats.expectancy) }}>{formatSignedMoney(stats.expectancy)}</div></div>
+            <div className="stat"><div className="label">Realized P/L</div><div className="value" style={{ color: plColor(stats.totalRealizedPl) }}><Odometer value={formatSignedMoney(stats.totalRealizedPl)} speed="detail" /></div></div>
+            <div className="stat"><div className="label">Avg win</div><div className="value"><Odometer value={formatSignedMoney(stats.avgWin)} speed="detail" /></div></div>
+            <div className="stat"><div className="label">Avg loss</div><div className="value"><Odometer value={formatSignedMoney(stats.avgLoss)} speed="detail" /></div></div>
+            <div className="stat"><div className="label">Expectancy</div><div className="value" style={{ color: plColor(stats.expectancy) }}><Odometer value={formatSignedMoney(stats.expectancy)} speed="detail" /></div></div>
             <div className="stat"><div className="label">Closed</div><div className="value">{stats.wins}W · {stats.losses}L</div></div>
           </div>
         </>
@@ -80,10 +81,10 @@ export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord, striking
             </button>
           ))}
           <div className="stats-grid">
-            <div className="stat"><div className="label">Premium kept</div><div className="value" style={{ color: plColor(oStats.totalKept) }}>{formatSignedMoney(oStats.totalKept)}</div></div>
+            <div className="stat"><div className="label">Premium kept</div><div className="value" style={{ color: plColor(oStats.totalKept) }}><Odometer value={formatSignedMoney(oStats.totalKept)} speed="detail" /></div></div>
             <div className="stat"><div className="label">Premium win rate</div><div className="value">{formatPct(oStats.winRate)}</div></div>
             <div className="stat"><div className="label">Expired · bought back · assigned</div><div className="value">{oStats.expiredCount} · {oStats.boughtBackCount} · {oStats.assignedCount}</div></div>
-            <div className="stat"><div className="label">Avg take</div><div className="value">{formatSignedMoney(oStats.avgTake)}</div></div>
+            <div className="stat"><div className="label">Avg take</div><div className="value"><Odometer value={formatSignedMoney(oStats.avgTake)} speed="detail" /></div></div>
           </div>
         </>
       )}
