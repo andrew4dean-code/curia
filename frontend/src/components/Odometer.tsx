@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { usd } from '../lib/format';
+import { cubicBezier } from '../lib/ease';
 
 export type RollSpeed = 'hero' | 'detail';
 
@@ -16,7 +17,7 @@ interface OdometerProps {
 /** A WheelCard row is one of many, so it settles faster than the book value: a row
  *  that churns longer than the hero figure reads as noise, not as counting. The 1.45
  *  ratio between the two is what stages them, so both move together. */
-export const DURATION_MS: Record<RollSpeed, number> = { hero: 1900, detail: 1300 };
+export const DURATION_MS: Record<RollSpeed, number> = { hero: 2200, detail: 1520 };
 
 /** Cent precision, taken from the formatter itself so the two can never disagree. */
 const DP = usd.resolvedOptions().maximumFractionDigits ?? 2;
@@ -55,34 +56,21 @@ function build(n: number, signed: boolean): string {
 /** The count deliberately does NOT run on the app's --roll-ease. That curve is shaped
  *  for a panel sliding into place — it covers 65% of its travel in the first fifth and
  *  then creeps — which on a figure that is read rather than watched lands the number
- *  almost at once and leaves the rest of the duration to a twitch in the cents. This
- *  one spreads the value across the whole window (33% / 68% / 85% at a fifth, half and
- *  seven tenths of the way through), so the digits are still turning at the midpoint.
- *  It keeps --roll-ease's final control point at y=1, so it still glides to a stop
- *  rather than arriving with speed on it — the landing matches the motion around it
- *  even though the travel does not. Kept in JS, not as a CSS token: nothing in CSS
- *  reads it, and unlike --roll-scale it does not vary by cascade. */
-const EASE = [0.3, 0.59, 0.83, 1];
-
-function ease(t: number): number {
-  const [x1, y1, x2, y2] = EASE;
-  const cx = 3 * x1;
-  const bx = 3 * (x2 - x1) - cx;
-  const ax = 1 - cx - bx;
-  const cy = 3 * y1;
-  const by = 3 * (y2 - y1) - cy;
-  const ay = 1 - cy - by;
-  let s = t;
-  for (let i = 0; i < 6; i++) {
-    const dx = ((ax * s + bx) * s + cx) * s - t;
-    if (Math.abs(dx) < 1e-5) break;
-    const slope = (3 * ax * s + 2 * bx) * s + cx;
-    if (Math.abs(slope) < 1e-6) break;
-    s -= dx / slope;
-  }
-  s = Math.min(1, Math.max(0, s));
-  return ((ay * s + by) * s + cy) * s;
-}
+ *  almost at once and leaves the rest of the duration to a twitch in the cents.
+ *
+ *  This one is a true ease-in-out: it starts from a standstill, winds up to about 2.4x
+ *  average speed a quarter of the way through, and glides back down to rest (20% / 77% /
+ *  93% of the value at a fifth, half and seven tenths). Both endpoints matter. An earlier
+ *  pass fixed only the landing and left the start at nearly 2x speed from the first frame,
+ *  and it still read as stopping abruptly — the eye judges a deceleration against the
+ *  acceleration that preceded it, and there wasn't one to judge against.
+ *
+ *  The cost is ~185ms of stillness before the figure moves, and a middle that runs fast
+ *  enough to blur. That is the trade for the arc, and it is deliberate.
+ *
+ *  Kept in JS, not as a CSS token: nothing in CSS reads it, and unlike --roll-scale it
+ *  does not vary by cascade. */
+const ease = cubicBezier(0.3, 0, 0.25, 1);
 
 /** .roll-slow winds every figure out during a ceremony landing. */
 function rollScale(el: HTMLElement | null): number {
