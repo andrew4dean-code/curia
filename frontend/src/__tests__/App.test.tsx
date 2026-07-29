@@ -70,6 +70,9 @@ describe('App landing timer race', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString();
       const method = init?.method ?? 'GET';
+      if (method === 'GET' && url === '/api/settings') {
+        return new Response(JSON.stringify({ option_fee_per_contract: 0, stock_fee_per_trade: 0, tax_rate_pct: 0 }), { status: 200 });
+      }
       if (method === 'GET' && (url === '/api/trades' || url === '/api/marks' || url === '/api/options' || url === '/api/wheels' || url === '/api/quiet-weeks')) {
         return new Response('[]', { status: 200 });
       }
@@ -153,6 +156,9 @@ describe('App cover', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString();
       const method = init?.method ?? 'GET';
+      if (method === 'GET' && url === '/api/settings') {
+        return new Response(JSON.stringify({ option_fee_per_contract: 0, stock_fee_per_trade: 0, tax_rate_pct: 0 }), { status: 200 });
+      }
       if (method === 'GET' && (url === '/api/trades' || url === '/api/marks' || url === '/api/options' || url === '/api/wheels' || url === '/api/quiet-weeks')) {
         return new Response('[]', { status: 200 });
       }

@@ -16,6 +16,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.5.0',
+    date: '2026-07-29',
+    notes: [
+      'Fees are finally counted. Set a worst-case figure per contract and per stock fill in Settings, and every new entry carries it — so your P/L understates rather than flatters.',
+      'A set-aside line on the Ledger estimates tax on what you have realized this year, at a rate you set. Withdrawing does not change it: gains are taxable when realized, not when you take the cash out.',
+      'Settings now live on the server, so they survive a reinstall, match on every device, and ride along in your backups.',
+    ],
+  },
+  {
     version: '2.4.2',
     date: '2026-07-28',
     notes: ['Tapping the paste box no longer zooms the page in and pushes the sheet off the side of the screen.'],

@@ -33,24 +33,43 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** Account preferences, held on the server so they survive a reinstall and match on
+ *  every device. Fees are deliberately WORST CASE: it is better for a figure to
+ *  understate what you kept than to overstate it. */
+export interface Settings {
+  option_fee_per_contract: number;
+  stock_fee_per_trade: number;
+  /** Percent, 0-100. An estimate you set; the app only multiplies. */
+  tax_rate_pct: number;
+  updated_at?: string;
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  option_fee_per_contract: 0,
+  stock_fee_per_trade: 0,
+  tax_rate_pct: 0,
+};
+
 export interface Snapshot {
   trades: Trade[];
   marks: Mark[];
   options: OptionPosition[];
   wheels: Wheel[];
   quietWeeks: string[];
+  settings: Settings;
   fetchedAt: string;
 }
 
 export async function fetchSnapshot(): Promise<Snapshot> {
-  const [trades, marks, options, wheels, quietWeeks] = await Promise.all([
+  const [trades, marks, options, wheels, quietWeeks, settings] = await Promise.all([
     request<Trade[]>('/api/trades'),
     request<Mark[]>('/api/marks'),
     request<OptionPosition[]>('/api/options'),
     request<Wheel[]>('/api/wheels'),
     request<string[]>('/api/quiet-weeks'),
+    request<Settings>('/api/settings'),
   ]);
-  const snap: Snapshot = { trades, marks, options, wheels, quietWeeks, fetchedAt: new Date().toISOString() };
+  const snap: Snapshot = { trades, marks, options, wheels, quietWeeks, settings, fetchedAt: new Date().toISOString() };
   localStorage.setItem(CACHE_STORAGE, JSON.stringify(snap));
   return snap;
 }
@@ -60,7 +79,13 @@ export function cachedSnapshot(): Snapshot | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Snapshot;
-    return { ...parsed, quietWeeks: parsed.quietWeeks ?? [] };
+    // A cache written before settings existed has none. Falling back to zeros keeps the
+    // app readable offline; the real values arrive with the next refresh.
+    return {
+      ...parsed,
+      quietWeeks: parsed.quietWeeks ?? [],
+      settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
+    };
   } catch {
     localStorage.removeItem(CACHE_STORAGE);
     return null;
@@ -109,3 +134,7 @@ export const markQuietWeek = (friday: string) =>
   request<{ friday: string }>('/api/quiet-weeks', { method: 'POST', body: JSON.stringify({ friday }) });
 export const clearQuietWeek = (friday: string) =>
   request<void>(`/api/quiet-weeks/${friday}`, { method: 'DELETE' });
+
+export function saveSettings(body: Settings): Promise<Settings> {
+  return request<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(body) });
+}

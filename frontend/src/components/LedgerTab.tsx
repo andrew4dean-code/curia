@@ -6,11 +6,17 @@ import { computeStats } from '../lib/stats';
 import { computeOptionStats, optionRealizedPl } from '../lib/optionsMath';
 import { formatMoney, formatPct, formatSignedMoney, formatSignedPct, plColor } from '../lib/format';
 import { Odometer } from './Odometer';
+import { estimateTax } from '../lib/tax';
+import { DEFAULT_SETTINGS } from '../lib/api';
 
 export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord, strikingTradeId, strikingOptionId, onDeleted }: TabProps) {
   const [showEntries, setShowEntries] = useState(false);
   const entriesVisible = showEntries || strikingTradeId != null;
   const closed = computeClosedTrades(snap.trades);
+  // Calendar year, because that is the unit tax is assessed in.
+  const tax = estimateTax(closed, snap.options, (snap.settings ?? DEFAULT_SETTINGS).tax_rate_pct,
+                          new Date().getFullYear());
+
   const stats = computeStats(closed);
   const settledOptions = [...snap.options]
     .filter((o) => o.status !== 'OPEN')
@@ -36,6 +42,30 @@ export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord, striking
           </div>
         </div>
       ))}
+
+      {tax.ratePct > 0 && (
+        <>
+          <h2 className="section-title">Set aside for tax</h2>
+          <div className="tax-panel" data-testid="tax-panel">
+            <div className="tax-row">
+              <span>Realized in {tax.year}</span>
+              <b style={{ color: plColor(tax.realized) }}>{formatSignedMoney(tax.realized)}</b>
+            </div>
+            <div className="tax-row tax-row-main">
+              <span>Estimated tax at {tax.ratePct}%</span>
+              <b data-testid="tax-set-aside">
+                <Odometer value={formatMoney(tax.setAside)} speed="detail" dataTestid="tax-figure" />
+              </b>
+            </div>
+            <div className="tax-note">
+              An estimate at a rate you set, on gains realized this year. Withdrawing does not
+              change it: cash left in the account from an expired put is already income.
+              Assigned premium is counted here the day it is assigned, which is earlier than
+              tax treats it. Not tax advice.
+            </div>
+          </div>
+        </>
+      )}
 
       {stats.closedCount > 0 && (
         <>

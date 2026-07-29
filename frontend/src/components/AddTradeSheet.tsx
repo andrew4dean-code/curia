@@ -7,6 +7,8 @@ import { realisedForSell } from '../lib/fifo';
 import type { OptionPosition, Side, Trade, Wheel } from '../lib/types';
 import { SymbolChips } from './SymbolChips';
 import { recentSymbols } from '../lib/symbols';
+import { DEFAULT_SETTINGS } from '../lib/api';
+import type { Settings } from '../lib/api';
 import { formatMoney, formatSignedMoney } from '../lib/format';
 import type { TicketData } from './TradeCeremony';
 
@@ -20,6 +22,7 @@ export function AddTradeSheet({
   wheels,
   trades = [],
   options = [],
+  settings = DEFAULT_SETTINGS,
   prefill,
   onDone,
   onDeleted,
@@ -29,6 +32,7 @@ export function AddTradeSheet({
   wheels: Wheel[];
   trades?: Trade[];
   options?: OptionPosition[];
+  settings?: Settings;
   prefill?: { side: Side; symbol: string; qty: number };
   onDone: (ticket: TicketData) => Promise<void>;
   onDeleted?: (id?: number) => Promise<void>;
@@ -58,7 +62,8 @@ export function AddTradeSheet({
         side,
         qty: Number(qty),
         price: Number(price),
-        fees: 0,
+        // Share commissions do not scale with size, so this is applied whole.
+        fees: settings.stock_fee_per_trade,
         executed_at: date,
         note,
       };

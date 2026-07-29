@@ -2,9 +2,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SettingsTab } from '../SettingsTab';
 import type { Snapshot } from '../../lib/api';
+import { DEFAULT_SETTINGS } from '../../lib/api';
 import { RELEASES } from '../../lib/releases';
 
-const snap: Snapshot = { trades: [], marks: [], options: [], wheels: [], quietWeeks: [], fetchedAt: new Date().toISOString() };
+const snap: Snapshot = { trades: [], marks: [], options: [], wheels: [], quietWeeks: [], settings: DEFAULT_SETTINGS, fetchedAt: new Date().toISOString() };
 const cbs = { onRefresh: vi.fn(), onEditTrade: vi.fn(), onMark: vi.fn(), onSettleOption: vi.fn(), onEditOption: vi.fn() };
 
 /* The version the app prints and the version the package declares are two facts that

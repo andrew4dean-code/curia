@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { PortfolioTab } from '../PortfolioTab';
 import type { Snapshot } from '../../lib/api';
+import { DEFAULT_SETTINGS } from '../../lib/api';
 
 const snap: Snapshot = {
   trades: [
@@ -12,6 +13,7 @@ const snap: Snapshot = {
   options: [],
   wheels: [],
   quietWeeks: [],
+  settings: DEFAULT_SETTINGS,
   fetchedAt: new Date().toISOString(),
 };
 
@@ -32,7 +34,7 @@ describe('PortfolioTab', () => {
 
   it('empty state invites the first trade', () => {
     render(
-      <PortfolioTab snap={{ trades: [], marks: [], options: [], wheels: [], quietWeeks: [], fetchedAt: snap.fetchedAt }} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()}
+      <PortfolioTab snap={{ trades: [], marks: [], options: [], wheels: [], quietWeeks: [], settings: DEFAULT_SETTINGS, fetchedAt: snap.fetchedAt }} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()}
                      onSettleOption={vi.fn()} onEditOption={vi.fn()} />,
     );
     expect(screen.getByText(/No open positions/)).toBeInTheDocument();

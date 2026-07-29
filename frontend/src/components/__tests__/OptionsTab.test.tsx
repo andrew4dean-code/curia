@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OptionsTab } from '../OptionsTab';
+import { DEFAULT_SETTINGS } from '../../lib/api';
 import type { Snapshot } from '../../lib/api';
 import type { OptionPosition } from '../../lib/types';
 
@@ -11,7 +12,7 @@ const base: OptionPosition = {
 };
 
 function snapWith(options: OptionPosition[], quietWeeks: string[] = []): Snapshot {
-  return { trades: [], marks: [], options, wheels: [], quietWeeks, fetchedAt: new Date().toISOString() };
+  return { trades: [], marks: [], options, wheels: [], quietWeeks, settings: DEFAULT_SETTINGS, fetchedAt: new Date().toISOString() };
 }
 
 const cbs = {

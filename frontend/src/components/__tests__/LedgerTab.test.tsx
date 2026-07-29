@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { LedgerTab } from '../LedgerTab';
 import type { Snapshot } from '../../lib/api';
+import { DEFAULT_SETTINGS } from '../../lib/api';
 import type { OptionPosition } from '../../lib/types';
 
 const snap: Snapshot = {
@@ -15,6 +16,7 @@ const snap: Snapshot = {
   options: [],
   wheels: [],
   quietWeeks: [],
+  settings: DEFAULT_SETTINGS,
   fetchedAt: new Date().toISOString(),
 };
 
@@ -66,7 +68,7 @@ describe('LedgerTab', () => {
 
   it('empty ledger shows the honest empty state', () => {
     render(
-      <LedgerTab snap={{ trades: [], marks: [], options: [], wheels: [], quietWeeks: [], fetchedAt: snap.fetchedAt }} {...cbs} />,
+      <LedgerTab snap={{ trades: [], marks: [], options: [], wheels: [], quietWeeks: [], settings: DEFAULT_SETTINGS, fetchedAt: snap.fetchedAt }} {...cbs} />,
     );
     expect(screen.getByText(/No closed trades yet/)).toBeInTheDocument();
   });

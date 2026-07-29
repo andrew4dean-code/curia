@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { TabProps } from './PortfolioTab';
-import { exportBackup, importBackup } from '../lib/api';
+import { DEFAULT_SETTINGS, exportBackup, importBackup, saveSettings } from '../lib/api';
 import { RELEASES } from '../lib/releases';
 
 function fmtStamp(iso: string): string {
@@ -13,11 +13,38 @@ function fmtDay(iso: string): string {
   return new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export function SettingsTab({ onRefresh }: TabProps) {
+export function SettingsTab({ snap, onRefresh }: TabProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [importError, setImportError] = useState('');
   const [updateError, setUpdateError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  /* Held as strings so the fields can be empty while being retyped. Committing an empty
+     box as 0 mid-edit would silently zero a fee you were in the middle of changing. */
+  const s = snap.settings ?? DEFAULT_SETTINGS;
+  const [feeContract, setFeeContract] = useState(String(s.option_fee_per_contract));
+  const [feeStock, setFeeStock] = useState(String(s.stock_fee_per_trade));
+  const [taxRate, setTaxRate] = useState(String(s.tax_rate_pct));
+  const [savingFees, setSavingFees] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [feeError, setFeeError] = useState('');
+
+  async function persist() {
+    setSavingFees(true);
+    setFeeError('');
+    try {
+      await saveSettings({
+        option_fee_per_contract: Number(feeContract) || 0,
+        stock_fee_per_trade: Number(feeStock) || 0,
+        tax_rate_pct: Number(taxRate) || 0,
+      });
+      await onRefresh();
+      setSaved(true);
+    } catch {
+      setFeeError('Could not save — check your connection.');
+    }
+    setSavingFees(false);
+  }
 
   async function updateNow() {
     if (!navigator.onLine) {
@@ -85,6 +112,41 @@ export function SettingsTab({ onRefresh }: TabProps) {
         Fetches the newest Curia and clears cached data. Your trades live on the server — nothing is lost.
       </div>
       {updateError && <div style={{ color: 'var(--pl-red)', textAlign: 'center', fontSize: 13 }}>{updateError}</div>}
+      <h2 className="section-title">Fees and tax</h2>
+      <div className="row-sub" style={{ marginBottom: 10 }}>
+        Deliberately pessimistic. A fee set too high makes every figure understate what you kept,
+        which is the safe direction to be wrong in.
+      </div>
+      <div className="field">
+        <label htmlFor="fee-contract">Worst-case fee per option contract</label>
+        <input
+          id="fee-contract" type="number" inputMode="decimal" step="0.01" min="0"
+          value={feeContract} onChange={(e) => { setFeeContract(e.target.value); setSaved(false); }}
+        />
+      </div>
+      <div className="field">
+        <label htmlFor="fee-stock">Worst-case fee per stock fill</label>
+        <input
+          id="fee-stock" type="number" inputMode="decimal" step="0.01" min="0"
+          value={feeStock} onChange={(e) => { setFeeStock(e.target.value); setSaved(false); }}
+        />
+      </div>
+      <div className="field">
+        <label htmlFor="tax-rate">Estimated tax rate (%)</label>
+        <input
+          id="tax-rate" type="number" inputMode="decimal" step="1" min="0" max="100"
+          value={taxRate} onChange={(e) => { setTaxRate(e.target.value); setSaved(false); }}
+        />
+      </div>
+      <div className="row-sub" style={{ marginBottom: 10 }}>
+        Your figure, not Curia's. It only multiplies. Tax is owed on gains you have realized,
+        whether or not you withdraw the cash.
+      </div>
+      <button className="btn" onClick={() => void persist()} disabled={savingFees}>
+        {savingFees ? 'Saving…' : saved ? 'Saved' : 'Save'}
+      </button>
+      {feeError && <div style={{ color: 'var(--pl-red)', textAlign: 'center', fontSize: 13, marginTop: 8 }}>{feeError}</div>}
+
       <h2 className="section-title">Backup</h2>
       <div className="link-row">
         <button onClick={() => void doExport()}>Export backup</button>

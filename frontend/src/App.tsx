@@ -249,7 +249,7 @@ export default function App() {
         </button>
       )}
       {sheet?.kind === 'trade' && (
-        <AddTradeSheet trade={sheet.trade} wheels={snap.wheels} trades={snap.trades} options={snap.options} prefill={sheet.prefill} onDone={onTicket} onDeleted={onDeleted} onCancel={() => setSheet(null)} />
+        <AddTradeSheet trade={sheet.trade} wheels={snap.wheels} trades={snap.trades} options={snap.options} settings={snap.settings} prefill={sheet.prefill} onDone={onTicket} onDeleted={onDeleted} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'position' && (
         <PositionSheet
@@ -266,7 +266,7 @@ export default function App() {
         />
       )}
       {sheet?.kind === 'optionEdit' && (
-        <OptionSellSheet option={sheet.option} expiration={sheet.option.expiration} wheels={snap.wheels} trades={snap.trades} options={snap.options} onDone={onTicket} onCancel={() => setSheet(null)} />
+        <OptionSellSheet option={sheet.option} expiration={sheet.option.expiration} wheels={snap.wheels} trades={snap.trades} options={snap.options} settings={snap.settings} onDone={onTicket} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'record' && (
         <OptionRecordSheet option={sheet.option} onDeleted={onOptionDeleted} onCancel={() => setSheet(null)} />
@@ -309,7 +309,7 @@ export default function App() {
         />
       )}
       {sheet?.kind === 'sellOption' && (
-        <OptionSellSheet expiration={sheet.expiration} prefill={sheet.prefill} wheels={snap.wheels} trades={snap.trades} options={snap.options} onDone={onTicket} onCancel={() => setSheet(null)} />
+        <OptionSellSheet expiration={sheet.expiration} prefill={sheet.prefill} wheels={snap.wheels} trades={snap.trades} options={snap.options} settings={snap.settings} onDone={onTicket} onCancel={() => setSheet(null)} />
       )}
       {sheet?.kind === 'paste' && (
         <PasteSheet
@@ -343,6 +343,7 @@ export default function App() {
         <SettleSheet
           option={sheet.option}
           buybackPrefill={sheet.buyback}
+          settings={snap.settings}
           onDone={async (c) => { setSheet(null); setSettleCeremony(c); }}
           onDeleted={onOptionDeleted}
           onEdit={() => setSheet({ kind: 'optionEdit', option: sheet.option })}

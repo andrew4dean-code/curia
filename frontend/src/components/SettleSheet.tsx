@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { deleteOption, settleOption } from '../lib/api';
+import { DEFAULT_SETTINGS, deleteOption, settleOption } from '../lib/api';
+import type { Settings } from '../lib/api';
 import { settleDateDefault, todayIso } from '../lib/time';
 import { optionRealizedPl, premiumCollected } from '../lib/optionsMath';
 import { formatMoney, formatSignedMoney } from '../lib/format';
@@ -11,6 +12,7 @@ import type { OptionPosition, OptionStatus } from '../lib/types';
 export function SettleSheet({
   option,
   buybackPrefill,
+  settings = DEFAULT_SETTINGS,
   onDone,
   onDeleted,
   onEdit,
@@ -19,6 +21,7 @@ export function SettleSheet({
   option: OptionPosition;
   /** Buyback price read off a pasted confirmation, in dollars per share. */
   buybackPrefill?: number;
+  settings?: Settings;
   onDone: (c: SettleData) => Promise<void>;
   onDeleted?: (id?: number) => Promise<void>;
   onEdit: () => void;
@@ -46,7 +49,7 @@ export function SettleSheet({
         outcome,
         closed_at: date,
         ...(outcome === 'BOUGHT_BACK'
-          ? { buyback_price: Number(buyback), close_fees: 0 }
+          ? { buyback_price: Number(buyback), close_fees: settings.option_fee_per_contract * option.contracts }
           : {}),
       });
       const settled: OptionPosition = {
@@ -54,7 +57,7 @@ export function SettleSheet({
         status: outcome,
         closed_at: date,
         ...(outcome === 'BOUGHT_BACK'
-          ? { buyback_price: Number(buyback), close_fees: 0 }
+          ? { buyback_price: Number(buyback), close_fees: settings.option_fee_per_contract * option.contracts }
           : {}),
       };
       const realised = optionRealizedPl(settled) ?? 0;

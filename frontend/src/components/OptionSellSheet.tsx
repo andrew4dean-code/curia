@@ -9,6 +9,8 @@ import { SymbolChips } from './SymbolChips';
 import { recentSymbols } from '../lib/symbols';
 import { optionDefaults } from '../lib/optionEntry';
 import type { ParsedConfirmation } from '../lib/parseConfirmation';
+import { DEFAULT_SETTINGS } from '../lib/api';
+import type { Settings } from '../lib/api';
 import type { TicketData } from './TradeCeremony';
 
 function fmtDate(iso: string): string {
@@ -23,6 +25,7 @@ export function OptionSellSheet({
   trades = [],
   options = [],
   prefill,
+  settings = DEFAULT_SETTINGS,
   onDone,
   onCancel,
 }: {
@@ -34,6 +37,7 @@ export function OptionSellSheet({
   /** A confirmation that has already been read. Authoritative — it beats anything the
    *  wheel would infer, because it is a record of what actually filled. */
   prefill?: ParsedConfirmation | null;
+  settings?: Settings;
   onDone: (ticket: TicketData) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -105,7 +109,9 @@ export function OptionSellSheet({
     const draft: OptionDraft = {
       symbol: symbol.trim().toUpperCase(), opt_type: optType, strike: Number(strike),
       expiration: exp, contracts: Number(contracts), premium: Number(premium),
-      fees: 0, opened_at: date, note,
+      // Worst case, and per contract: brokers charge by the contract, not the order.
+      fees: settings.option_fee_per_contract * Number(contracts || 0),
+      opened_at: date, note,
     };
     try {
       const saved = option ? await updateOption(option.id, draft) : await createOption(draft);

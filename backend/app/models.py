@@ -72,3 +72,26 @@ class QuietWeek(Base):
     __tablename__ = "quiet_weeks"
     friday: Mapped[str] = mapped_column(primary_key=True)  # YYYY-MM-DD, the week's Friday
     created_at: Mapped[str] = mapped_column(default=utcnow)
+
+
+class Settings(Base):
+    """Account preferences, as opposed to device ones.
+
+    Exactly one row, id=1. A key/value table would be more flexible and worse: these are
+    a fixed, small set of numbers that the money math reads, and giving them real columns
+    means a typo is a migration error rather than a silently missing key that reads as
+    zero. Zero is a plausible fee, which is what makes a missing one dangerous.
+    """
+
+    __tablename__ = "settings"
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    # Dollars per contract, applied to a newly recorded option. Brokers charge per
+    # contract rather than per order, so this multiplies by the contract count.
+    option_fee_per_contract: Mapped[float] = mapped_column(default=0.0)
+    # Dollars per stock fill, applied whole — share commissions do not scale with size
+    # at any broker Curia is likely to meet.
+    stock_fee_per_trade: Mapped[float] = mapped_column(default=0.0)
+    # Percent, 0-100. Andrew's own estimate of what he will owe on realized gains. The
+    # app multiplies by it and never chooses it: this is arithmetic, not tax advice.
+    tax_rate_pct: Mapped[float] = mapped_column(default=0.0)
+    updated_at: Mapped[str] = mapped_column(default=utcnow)

@@ -7,9 +7,15 @@ from sqlalchemy import delete, select
 from app import quotes
 from app.auth import require_key
 from app.db import SessionLocal
-from app.models import Mark, Option, QuietWeek, Trade, Wheel, utcnow
+from app.models import Mark, Option, QuietWeek, Settings, Trade, Wheel, utcnow
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_key)])
+
+
+class SettingsIn(BaseModel):
+    option_fee_per_contract: float = Field(default=0.0, ge=0)
+    stock_fee_per_trade: float = Field(default=0.0, ge=0)
+    tax_rate_pct: float = Field(default=0.0, ge=0, le=100)
 
 
 class TradeIn(BaseModel):
@@ -97,6 +103,9 @@ class ImportBody(BaseModel):
     options: list[dict] = []
     wheels: list[dict] = []
     quiet_weeks: list[str] = []
+    # Absent from older backups, which must still restore. Missing settings means keep
+    # the defaults, never wipe the ones already configured on this install.
+    settings: Optional[dict] = None
 
 
 def _trade_out(t: Trade) -> dict:
@@ -325,6 +334,46 @@ def delete_wheel(wheel_id: int) -> None:
         s.commit()
 
 
+def _settings_row(s) -> Settings:
+    """The one settings row, created on first read so a fresh install has defaults
+    rather than a 404 the client has to special-case."""
+    row = s.get(Settings, 1)
+    if row is None:
+        row = Settings(id=1)
+        s.add(row)
+        s.commit()
+        s.refresh(row)
+    return row
+
+
+def _settings_out(row: Settings) -> dict:
+    return {
+        "option_fee_per_contract": row.option_fee_per_contract,
+        "stock_fee_per_trade": row.stock_fee_per_trade,
+        "tax_rate_pct": row.tax_rate_pct,
+        "updated_at": row.updated_at,
+    }
+
+
+@router.get("/settings")
+def get_settings() -> dict:
+    with SessionLocal() as s:
+        return _settings_out(_settings_row(s))
+
+
+@router.put("/settings")
+def put_settings(body: SettingsIn) -> dict:
+    with SessionLocal() as s:
+        row = _settings_row(s)
+        row.option_fee_per_contract = body.option_fee_per_contract
+        row.stock_fee_per_trade = body.stock_fee_per_trade
+        row.tax_rate_pct = body.tax_rate_pct
+        row.updated_at = utcnow()
+        s.commit()
+        s.refresh(row)
+        return _settings_out(row)
+
+
 @router.get("/quiet-weeks")
 def list_quiet_weeks() -> list:
     with SessionLocal() as s:
@@ -360,8 +409,9 @@ def export_all() -> dict:
         options = [_option_out(o) for o in s.scalars(select(Option).order_by(Option.id)).all()]
         wheels = [_wheel_out(w) for w in s.scalars(select(Wheel).order_by(Wheel.id)).all()]
         quiet = [q.friday for q in s.scalars(select(QuietWeek).order_by(QuietWeek.friday)).all()]
+        settings = _settings_out(_settings_row(s))
         return {"version": 1, "trades": trades, "marks": marks, "options": options,
-                "wheels": wheels, "quiet_weeks": quiet}
+                "wheels": wheels, "quiet_weeks": quiet, "settings": settings}
 
 
 @router.post("/import")
@@ -390,6 +440,7 @@ def import_all(body: ImportBody) -> dict:
             wheel_rows.append(WheelRow(**row))
         for row in body.quiet_weeks:
             quiet_rows.append(QuietWeekIn(friday=row).friday)
+        imported_settings = SettingsIn(**body.settings) if body.settings else None
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=f"invalid import data: {e}")
 
@@ -399,6 +450,14 @@ def import_all(body: ImportBody) -> dict:
         s.execute(delete(Option))
         s.execute(delete(Wheel))
         s.execute(delete(QuietWeek))
+        # Settings are updated rather than deleted and recreated: the row is a singleton
+        # and a backup without one should leave what is configured here alone.
+        if imported_settings is not None:
+            row = _settings_row(s)
+            row.option_fee_per_contract = imported_settings.option_fee_per_contract
+            row.stock_fee_per_trade = imported_settings.stock_fee_per_trade
+            row.tax_rate_pct = imported_settings.tax_rate_pct
+            row.updated_at = utcnow()
         id_map: dict = {}
         for old_id, data in zip(old_ids, trades):
             t = Trade(**{**data.model_dump(), "symbol": data.symbol.strip().upper()})
