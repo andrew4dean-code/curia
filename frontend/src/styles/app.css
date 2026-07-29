@@ -1,4 +1,15 @@
-.shell { max-width: 640px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px 112px; }
+/* The bottom padding has to clear the fixed tab bar, and the bar's height is not fixed:
+   it grows by the home-indicator inset on a phone. A hardcoded 112px therefore left 45px
+   of clearance in a desktop browser and only 21px on an actual iPhone — the one place it
+   could not be checked. Stated instead as the bar's own content height (59px, which
+   counts its 3px double rule) plus the clearance we want (45px) plus the same inset the
+   bar itself pads by, it holds 45px everywhere. Thicken that rule and this moves.
+
+   min-height keeps every tab at least a screen tall. Settings is the only tab short
+   enough not to scroll, and on iOS Safari a page that cannot scroll never collapses the
+   browser toolbar — which changes env(safe-area-inset-bottom) and makes the bar look a
+   different height on that tab than on the others. */
+.shell { max-width: 640px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px calc(104px + max(env(safe-area-inset-bottom), 10px)); min-height: 100dvh; }
 .hero { text-align: center; padding: 24px 0 8px; }
 .hero .odo { font-family: var(--font-display); font-size: 44px; font-weight: 800; }
 .hero-sub { color: var(--ink-soft); margin-top: 4px; font-size: 13px; }
@@ -10,7 +21,9 @@
 .row-right { grid-area: right; text-align: right; white-space: nowrap; }
 .nb { white-space: nowrap; }
 .row-pl { font-size: 12px; margin-top: 2px; }
-.tabbar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: var(--parchment-card); border-top: 1px solid var(--rule); box-shadow: 0 -3px 12px rgba(31, 27, 18, 0.08); padding-bottom: max(env(safe-area-inset-bottom), 10px); }
+/* The double rule is the letterpress token curia-tokens.css always meant to apply and
+   never did; it is applied here, where it actually wins. */
+.tabbar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: var(--parchment-card); border-top: 3px double var(--rule); box-shadow: 0 -3px 12px rgba(31, 27, 18, 0.08); padding-bottom: max(env(safe-area-inset-bottom), 10px); }
 .tabbar button { flex: 1; padding: 16px 0 14px; background: none; border: none; border-top: 3px solid transparent; margin-top: -1px; font-family: var(--font-display); font-size: 18px; font-weight: 700; letter-spacing: 0.02em; color: var(--ink-soft); }
 .tabbar button.active { color: var(--maroon); border-top-color: var(--maroon); }
 .fab { position: fixed; right: 20px; bottom: calc(92px + max(env(safe-area-inset-bottom), 10px)); width: 56px; height: 56px; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-size: 30px; line-height: 1; border: none; box-shadow: 0 3px 10px rgba(0,0,0,.25); }
@@ -95,7 +108,23 @@
 .wheel-card-sh { font-family: var(--font-mono); font-size: 13px; font-weight: 400; color: var(--ink-soft); white-space: nowrap; }
 .wheel-card-tag { font-size: 10px; letter-spacing: .08em; color: var(--gold-label); text-transform: uppercase; white-space: nowrap; }
 .wheel-card-sub { font-size: 11px; letter-spacing: .07em; color: var(--ink-soft); text-transform: uppercase; margin-top: 2px; }
+/* Version + release notes on Settings. The version reads as a printer's imprint under
+   the section rule, not as a badge. */
+.version-line { font-family: var(--font-display); font-weight: 700; font-size: 20px; color: var(--ink); padding-top: 8px; }
+.release-list { list-style: none; margin: 4px 0 0; padding: 0; }
+.release { padding: 12px 0; border-bottom: 1px solid var(--rule); }
+.release:last-child { border-bottom: none; }
+.release-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.release-version { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--maroon); }
+.release-date { font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; color: var(--ink-soft); }
+.release-notes { margin: 6px 0 0; padding-left: 18px; }
+.release-notes li { font-size: 13px; line-height: 1.55; color: var(--ink-soft); margin: 3px 0; }
+
 .wheel-dial-wrap { display: flex; justify-content: center; margin: 10px 0 2px; }
+/* The dial carries its four station names outside the bezel, upright, so it is wider
+   than it is tall. It scales to the card rather than sitting at a fixed 220px: on a
+   narrow phone the old fixed size forced the labels to overhang the card edge. */
+.wheel-dial { display: block; width: 100%; max-width: 390px; height: auto; margin: 0 auto; }
 .wheel-tiles { display: flex; gap: 8px; margin: 10px 0; }
 .wheel-tile { flex: 1; display: flex; flex-direction: column; justify-content: space-between; background: var(--parchment); border: 1px solid var(--rule); border-radius: 8px; padding: 8px; }
 .wheel-tile b { display: block; min-height: 2.4em; font-size: 9px; letter-spacing: .08em; color: var(--gold-label); text-transform: uppercase; font-weight: 400; }

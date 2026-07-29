@@ -1,23 +1,62 @@
+import { useEffect, useRef, useState } from 'react';
 import type { WheelStage } from '../lib/types';
+import { cubicBezier, prefersReducedMotion } from '../lib/ease';
 
 const ORDER: WheelStage[] = ['SELL_PUT', 'ASSIGNED', 'SELLING_CALLS', 'CALLED_AWAY'];
 
-// The hand is drawn pointing DOWN; each station is a clockwise rotation from there.
-// Cumulative angles keep the transition winding clockwise, never snapping back.
+// The hand is drawn pointing UP; each station is a further quarter turn clockwise.
+// Cumulative angles keep the sweep winding clockwise, never snapping back.
 const HAND_ANGLE: Record<WheelStage, number> = {
-  SELL_PUT: 180,
-  ASSIGNED: 270,
-  SELLING_CALLS: 360,
-  CALLED_AWAY: 450,
-  COMPLETED: 540,
+  SELL_PUT: 0,
+  ASSIGNED: 90,
+  SELLING_CALLS: 180,
+  CALLED_AWAY: 270,
+  COMPLETED: 360,
 };
 
+/* The dial is wider than it is tall: the four station names sit outside the bezel and
+   upright, and "SELLING CALLS" and "CALLED AWAY" need horizontal room to run. Rotating
+   them to fit — which is what this dial used to do — is what made them unreadable. */
+const CX = 195;
+const CY = 120;
+
+const R_FACE = 96; // outer edge of the bezel
+const R_TICK_OUT = 84;
+const R_TICK_IN = 76;
+const R_TICK_IN_MAJOR = 71;
+const R_INNER = 70; // inner hairline, edge of the engine-turned face
+const R_MARKER = 80; // where the four station markers sit
+const R_HUB = 27;
+
+/** One slow sweep, heavy at the start and settling long into the station. */
+const SWEEP_MS = 1900;
+const sweepEase = cubicBezier(0.42, 0, 0.28, 1);
+/** How long a ghost of the hand lingers behind it. */
+const TRAIL_MS = 1100;
+/** Degrees of travel between ghosts. Finer than this and the trail is a solid smear. */
+const TRAIL_STEP_DEG = 1.2;
+
 const STATIONS = [
-  { stage: 'SELL_PUT' as WheelStage, label: 'SELL PUT', x: 105, y: 20, rotate: 0 },
-  { stage: 'ASSIGNED' as WheelStage, label: 'ASSIGNED', x: 190, y: 105, rotate: 90 },
-  { stage: 'SELLING_CALLS' as WheelStage, label: 'SELLING CALLS', x: 105, y: 198, rotate: 0 },
-  { stage: 'CALLED_AWAY' as WheelStage, label: 'CALLED AWAY', x: 20, y: 105, rotate: -90 },
-];
+  { stage: 'SELL_PUT' as WheelStage, label: 'SELL PUT', deg: 0, lx: 0, ly: -R_FACE - 12, anchor: 'middle' },
+  { stage: 'ASSIGNED' as WheelStage, label: 'ASSIGNED', deg: 90, lx: R_FACE + 10, ly: 4, anchor: 'start' },
+  { stage: 'SELLING_CALLS' as WheelStage, label: 'SELLING CALLS', deg: 180, lx: 0, ly: R_FACE + 22, anchor: 'middle' },
+  { stage: 'CALLED_AWAY' as WheelStage, label: 'CALLED AWAY', deg: 270, lx: -R_FACE - 10, ly: 4, anchor: 'end' },
+] as const;
+
+const rad = (deg: number) => (deg * Math.PI) / 180;
+const px = (r: number, deg: number) => +(r * Math.sin(rad(deg))).toFixed(2);
+const py = (r: number, deg: number) => +(-r * Math.cos(rad(deg))).toFixed(2);
+
+/** A tapered pointer with a counterweight tail, drawn pointing up from the hub. A plain
+ *  stroked line reads as a spoke; the taper and the tail are what make it a needle. */
+function handPath(len: number): string {
+  return `M 0 ${-len} L 3.6 ${-len + 16} L 6.4 ${-len + 32} L 3 -14 L 3 12 L -3 12 L -3 -14 L -6.4 ${-len + 32} L -3.6 ${-len + 16} Z`;
+}
+
+interface Ghost {
+  deg: number;
+  born: number;
+}
 
 export function WheelDial({
   stage,
@@ -32,103 +71,200 @@ export function WheelDial({
 }) {
   const idx = stage === 'COMPLETED' ? ORDER.length : ORDER.indexOf(stage);
   const spokes = Math.min(callsSold, 12);
+  const target = HAND_ANGLE[stage];
+
+  const [angle, setAngle] = useState(target);
+  const [ghosts, setGhosts] = useState<Ghost[]>([]);
+  const frame = useRef<number | null>(null);
+  const live = useRef(angle);
+  /** The first render places the hand; only a later change to stage sweeps it. Without
+   *  this every card would wind up from SELL PUT on mount, including on a cold load. */
+  const mounted = useRef(false);
+
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      live.current = target;
+      setAngle(target);
+      return;
+    }
+    if (prefersReducedMotion()) {
+      live.current = target;
+      setAngle(target);
+      setGhosts([]);
+      return;
+    }
+
+    const from = live.current;
+    if (from === target) return;
+    const start = performance.now();
+    const trail: Ghost[] = [];
+
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / SWEEP_MS);
+      const deg = from + (target - from) * sweepEase(t);
+      live.current = deg;
+      if (!trail.length || Math.abs(trail[trail.length - 1].deg - deg) > TRAIL_STEP_DEG) {
+        trail.push({ deg, born: now });
+      }
+      while (trail.length && now - trail[0].born > TRAIL_MS) trail.shift();
+      setAngle(deg);
+      setGhosts([...trail]);
+      // The sweep is over but the trail is not: keep painting until the last ghost dies,
+      // or the glow would be cut off mid-fade the instant the hand lands.
+      if (t < 1 || trail.length) {
+        frame.current = requestAnimationFrame(step);
+      } else {
+        frame.current = null;
+      }
+    };
+    frame.current = requestAnimationFrame(step);
+    return () => {
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+      frame.current = null;
+    };
+  }, [target]);
+
+  const now = typeof performance !== 'undefined' ? performance.now() : 0;
 
   return (
     <svg
       className="wheel-dial"
-      width="220"
-      height="220"
-      viewBox="0 0 210 210"
+      viewBox="0 0 390 252"
       role="img"
       aria-label={`Wheel ${no}, week ${weeks}, stage ${stage.replace('_', ' ').toLowerCase()}, ${callsSold} calls sold`}
     >
-      <circle cx="105" cy="105" r="96" fill="none" stroke="var(--rule)" strokeWidth="2" />
-      <circle cx="105" cy="105" r="78" fill="none" stroke="var(--rule)" strokeWidth="1" />
-      {/* Ticks sit on the diagonals, between the four stations, so they never
-          run through a station label. */}
-      <g stroke="var(--rule)" strokeWidth="1">
-        {[45, 135, 225, 315].map((deg) => {
-          const a = (deg * Math.PI) / 180;
-          return (
-            <line
-              key={deg}
-              x1={105 + 78 * Math.sin(a)}
-              y1={105 - 78 * Math.cos(a)}
-              x2={105 + 96 * Math.sin(a)}
-              y2={105 - 96 * Math.cos(a)}
-            />
-          );
-        })}
+      <defs>
+        <filter id={`dial-glow-${no}`} x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="3.4" result="b" />
+          <feMerge>
+            <feMergeNode in="b" />
+            <feMergeNode in="b" />
+          </feMerge>
+        </filter>
+      </defs>
+      <g transform={`translate(${CX},${CY})`}>
+        {/* bezel: a fat rule between two hairlines, the letterpress double rule */}
+        <circle r={R_FACE} fill="var(--parchment)" />
+        <circle r={R_FACE} fill="none" stroke="var(--rule)" strokeWidth="1" />
+        <circle r={R_FACE - 4.5} fill="none" stroke="var(--rule)" strokeWidth="3" />
+        <circle r={R_FACE - 10} fill="none" stroke="var(--rule)" strokeWidth="0.75" />
+
+        {/* chapter ring: 60 graduations, heavier and longer at the four stations */}
+        <g stroke="var(--rule)">
+          {Array.from({ length: 60 }, (_, i) => {
+            const deg = i * 6;
+            const major = i % 15 === 0;
+            const ri = major ? R_TICK_IN_MAJOR : R_TICK_IN;
+            return (
+              <line
+                key={deg}
+                x1={px(ri, deg)}
+                y1={py(ri, deg)}
+                x2={px(R_TICK_OUT, deg)}
+                y2={py(R_TICK_OUT, deg)}
+                strokeWidth={major ? 2.4 : 1}
+                opacity={major ? 1 : 0.6}
+              />
+            );
+          })}
+        </g>
+        <circle r={R_INNER} fill="none" stroke="var(--rule)" strokeWidth="0.75" />
+
+        {/* engine turning: concentric hairlines across the face */}
+        <g opacity="0.3">
+          {Array.from({ length: 7 }, (_, i) => (
+            <circle key={i} r={36 + i * 5} fill="none" stroke="var(--rule)" strokeWidth="0.5" />
+          ))}
+        </g>
+
+        {/* one gold graduation per call sold, up to twelve */}
+        <g stroke="var(--gold)" strokeWidth="2.2" strokeLinecap="round" opacity="0.9">
+          {Array.from({ length: spokes }, (_, i) => {
+            const deg = i * 30 + 15;
+            return (
+              <line
+                key={i}
+                data-testid="dial-spoke"
+                x1={px(40, deg)}
+                y1={py(40, deg)}
+                x2={px(62, deg)}
+                y2={py(62, deg)}
+              />
+            );
+          })}
+        </g>
+
+        {/* station markers: filled where you are, hollow ahead, green behind */}
+        <g>
+          {STATIONS.map((s, i) => {
+            const passed = i < idx;
+            const current = i === idx;
+            return (
+              <circle
+                key={s.stage}
+                cx={px(R_MARKER, s.deg)}
+                cy={py(R_MARKER, s.deg)}
+                r={current ? 5 : 4}
+                fill={current ? 'var(--maroon)' : passed ? 'var(--pl-green)' : 'none'}
+                stroke={current ? 'none' : passed ? 'none' : 'var(--rule)'}
+                strokeWidth="1.5"
+              />
+            );
+          })}
+        </g>
+
+        {/* the trail: ghosts of the hand along the path it just swept, fading as they age */}
+        <g filter={`url(#dial-glow-${no})`} aria-hidden="true">
+          {ghosts.map((g, i) => {
+            const age = (now - g.born) / TRAIL_MS;
+            if (age >= 1) return null;
+            return (
+              <g key={i} transform={`rotate(${g.deg.toFixed(2)})`} opacity={((1 - age) * 0.34).toFixed(3)}>
+                <path d={handPath(76)} fill="var(--gold)" />
+              </g>
+            );
+          })}
+        </g>
+
+        <g className="wheel-hand" transform={`rotate(${angle.toFixed(2)})`}>
+          <path d={handPath(76)} fill="var(--maroon)" />
+          <circle cy="16" r="9" fill="var(--maroon)" />
+        </g>
+
+        <circle r={R_HUB} fill="var(--maroon)" />
+        <circle r={R_HUB + 3.5} fill="none" stroke="var(--gold)" strokeWidth="0.9" opacity="0.75" />
+        <text x="0" y="-2" fontFamily="var(--font-display)" fontSize="13" fill="var(--parchment)" textAnchor="middle">
+          Nº {no}
+        </text>
+        <text x="0" y="14" fontFamily="var(--font-display)" fontSize="11.5" fill="var(--parchment)" textAnchor="middle" opacity="0.85">
+          wk {weeks}
+        </text>
+
+        {/* Upright, outside the bezel, with room to run. No rotation, no halo knockout:
+            nothing overlaps a ring any more, so nothing needs to be knocked out of one. */}
+        <g fontFamily="var(--font-mono)" fontSize="10.5" letterSpacing="0.14em">
+          {STATIONS.map((s, i) => {
+            const passed = i < idx;
+            const current = i === idx;
+            return (
+              <text
+                key={s.stage}
+                x={s.lx}
+                y={s.ly}
+                textAnchor={s.anchor}
+                fill={passed ? 'var(--pl-green)' : current ? 'var(--maroon)' : 'var(--ink-soft)'}
+                fontWeight={current ? 700 : 400}
+                data-station={s.stage}
+                data-state={passed ? 'passed' : current ? 'current' : 'ahead'}
+              >
+                {s.label}
+                {passed ? ' ✓' : ''}
+              </text>
+            );
+          })}
+        </g>
       </g>
-      <g stroke="var(--gold)" strokeWidth="2" opacity="0.85">
-        {Array.from({ length: spokes }, (_, i) => {
-          const a = ((i * (360 / 12) + 15) * Math.PI) / 180;
-          return (
-            <line
-              key={i}
-              data-testid="dial-spoke"
-              x1={105 + 32 * Math.sin(a)}
-              y1={105 - 32 * Math.cos(a)}
-              x2={105 + 58 * Math.sin(a)}
-              y2={105 - 58 * Math.cos(a)}
-            />
-          );
-        })}
-      </g>
-      {/* paintOrder stroke-then-fill knocks a halo out of the rings behind each
-          label, so a label that crosses a ring reads as engraved, not overlaid. */}
-      <g
-        fontFamily="var(--font-mono)"
-        fontSize="9"
-        textAnchor="middle"
-        letterSpacing="0.08em"
-        stroke="var(--parchment-card)"
-        strokeWidth="4"
-        strokeLinejoin="round"
-        paintOrder="stroke fill"
-      >
-        {STATIONS.map((s, i) => {
-          const passed = i < idx;
-          const current = i === idx;
-          return (
-            <text
-              key={s.stage}
-              x={s.x}
-              y={s.y}
-              transform={s.rotate ? `rotate(${s.rotate} ${s.x} ${s.y})` : undefined}
-              fill={passed ? 'var(--pl-green)' : current ? 'var(--maroon)' : 'var(--ink-soft)'}
-              fontWeight={current ? 700 : 400}
-              data-station={s.stage}
-              data-state={passed ? 'passed' : current ? 'current' : 'ahead'}
-            >
-              {s.label}
-              {passed ? ' ✓' : ''}
-            </text>
-          );
-        })}
-      </g>
-      <line
-        className="wheel-hand"
-        x1="105"
-        y1="105"
-        x2="105"
-        y2="174"
-        stroke="var(--maroon)"
-        strokeWidth="5"
-        strokeLinecap="round"
-        style={{
-          transform: `rotate(${HAND_ANGLE[stage] - 360}deg)`,
-          transformOrigin: '105px 105px',
-          transition: 'transform 1.6s var(--sweep-ease)',
-        }}
-      />
-      <circle cx="105" cy="105" r="26" fill="var(--maroon)" />
-      <text x="105" y="101" fontFamily="var(--font-display)" fontSize="11" fill="var(--parchment)" textAnchor="middle">
-        Nº {no}
-      </text>
-      <text x="105" y="115" fontFamily="var(--font-display)" fontSize="10" fill="var(--parchment)" textAnchor="middle">
-        wk {weeks}
-      </text>
     </svg>
   );
 }
