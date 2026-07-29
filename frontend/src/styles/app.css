@@ -108,6 +108,32 @@
 .wheel-card-sh { font-family: var(--font-mono); font-size: 13px; font-weight: 400; color: var(--ink-soft); white-space: nowrap; }
 .wheel-card-tag { font-size: 10px; letter-spacing: .08em; color: var(--gold-label); text-transform: uppercase; white-space: nowrap; }
 .wheel-card-sub { font-size: 11px; letter-spacing: .07em; color: var(--ink-soft); text-transform: uppercase; margin-top: 2px; }
+/* Corner scrollwork on the wheel card, drawn in as the dial's hand travels.
+   preserveAspectRatio="none" stretches the 100x100 authoring box to the card, so the
+   corners sit in the corners whatever the card's proportions; vector-effect keeps the
+   stroke weight honest under that stretch, which is the whole reason it can be stretched
+   at all. It sits above the card's own background and below everything else, and never
+   takes a pointer event — it is decoration, and the buttons underneath still work. */
+.wheel-card { position: relative; }
+.card-filigree { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+/* A fixed square per corner. One stretched box across a tall card inflates the scrolls
+   into arcs that run the length of the card — they have to keep their own proportions. */
+.fil-corner { position: absolute; width: 78px; height: 78px; overflow: visible; }
+.fil-tl { top: 0; left: 0; }
+.fil-tr { top: 0; right: 0; transform: scaleX(-1); }
+.fil-bl { bottom: 0; left: 0; transform: scaleY(-1); }
+.fil-br { bottom: 0; right: 0; transform: scale(-1, -1); }
+.card-filigree path { fill: none; stroke: var(--rule); stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 100; stroke-dashoffset: 100;
+  animation-name: filigree-draw, filigree-dry;
+  animation-timing-function: cubic-bezier(.42,0,.28,1), ease-in;
+  animation-fill-mode: forwards, forwards; }
+@keyframes filigree-draw { to { stroke-dashoffset: 0; } }
+@keyframes filigree-dry { to { opacity: 0; } }
+/* The card's own content sits above the ornament. */
+.wheel-card > *:not(.card-filigree) { position: relative; z-index: 1; }
+@media (prefers-reduced-motion: reduce) { .card-filigree { display: none; } }
+
 /* Paste-a-confirmation sheet. The read-back is a definition list so the parse can be
    checked at a glance before anything is booked — the whole point is that you see what
    the app understood, not that you trust it. */

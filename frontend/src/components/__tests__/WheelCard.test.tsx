@@ -1,7 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { WheelCard } from '../WheelCard';
-import { WheelDial } from '../WheelDial';
+import { WheelCard, FILIGREE_HOLD_MS, FILIGREE_FADE_MS } from '../WheelCard';
+import { WheelDial, SWEEP_MS } from '../WheelDial';
 import type { WheelSummary } from '../../lib/types';
 
 const base: WheelSummary = {
@@ -97,5 +97,50 @@ describe('WheelCard', () => {
     expect(screen.getByText('Banked this wheel')).toBeInTheDocument();
     screen.getByRole('button', { name: /Complete this wheel/ }).click();
     expect(onComplete).toHaveBeenCalledOnce();
+  });
+});
+
+/* The card's border ornament draws itself in alongside the hand, then dries away. It
+   lives on the card and not on the dial face because that face is already dense — every
+   attempt to ornament it read as dirt. These pin the wiring: the dial tells the card a
+   sweep has begun, and only then. */
+describe('card filigree', () => {
+  const props = { mark: null, openCall: null, onComplete: vi.fn(), onAbandon: vi.fn() };
+  const fil = () => document.querySelector('[data-testid="card-filigree"]');
+
+  it('is absent on a card that has not moved', () => {
+    render(<WheelCard summary={base} {...props} />);
+    expect(fil()).toBeNull();
+  });
+
+  it('draws in when the wheel moves on, and clears itself afterwards', () => {
+    vi.useFakeTimers();
+    // First mount records where the hand sits...
+    const first = render(<WheelCard summary={base} {...props} />);
+    first.unmount();
+    // ...so remounting on a later stage sweeps, and the border draws with it.
+    render(<WheelCard summary={{ ...base, stage: 'CALLED_AWAY' }} {...props} />);
+    expect(fil()).not.toBeNull();
+    expect(fil()!.querySelectorAll('.fil-corner')).toHaveLength(4);
+    // 8 strokes per corner, each drawing on its own delay
+    expect(fil()!.querySelectorAll('path')).toHaveLength(32);
+
+    // Once drawn, held and dried, it unmounts — an idle card carries no running animation.
+    act(() => { vi.advanceTimersByTime(SWEEP_MS + FILIGREE_HOLD_MS + FILIGREE_FADE_MS + 400); });
+    expect(fil()).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('keeps every corner the same square, so none is stretched out of shape', () => {
+    // One box stretched across a tall card turns small scrolls into arcs the length of
+    // the card. Four fixed squares is the whole reason this reads as a corner ornament.
+    vi.useFakeTimers();
+    const first = render(<WheelCard summary={base} {...props} />);
+    first.unmount();
+    render(<WheelCard summary={{ ...base, stage: 'CALLED_AWAY' }} {...props} />);
+    const boxes = [...fil()!.querySelectorAll('.fil-corner')].map((s) => s.getAttribute('viewBox'));
+    expect(new Set(boxes)).toEqual(new Set(['0 0 100 100']));
+    expect(fil()!.querySelector('[preserveAspectRatio="none"]')).toBeNull();
+    vi.useRealTimers();
   });
 });

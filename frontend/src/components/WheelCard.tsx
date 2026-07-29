@@ -1,9 +1,17 @@
+import { useCallback, useRef, useState } from 'react';
 import { WheelDial } from './WheelDial';
+import { CardFiligree } from './CardFiligree';
 import { Odometer } from './Odometer';
 import { useFlash } from '../hooks/useFlash';
 import { expiryLabel } from '../lib/time';
 import { formatMoney, formatSignedMoney, plColor } from '../lib/format';
 import type { Mark, OptionPosition, WheelSummary } from '../lib/types';
+
+/** How long the ornament sits fully drawn before it starts to go, and how long it takes
+ *  to go. Five seconds of drying was the ask: long enough to look at, short enough that
+ *  it is gone before you next touch the card. */
+export const FILIGREE_HOLD_MS = 900;
+export const FILIGREE_FADE_MS = 5000;
 
 function fmtShort(dateStr: string): string {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -27,6 +35,24 @@ export function WheelCard({
   const flat = sharesHeld <= 0;
   const flash = useFlash(closeToday);
 
+  /* The border is drawn on a key rather than a boolean: a second sweep arriving while the
+     first ornament is still drying has to restart the CSS animations, and re-rendering
+     the same element with the same class does not. A fresh key remounts them. */
+  const [run, setRun] = useState<{ id: number; draw: number } | null>(null);
+  const seq = useRef(0);
+  const timer = useRef<number | null>(null);
+  const onSweepStart = useCallback((ms: number) => {
+    seq.current += 1;
+    setRun({ id: seq.current, draw: ms });
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    // Unmount once it has finished drying, so a card sitting idle carries no ornament
+    // and no running animations.
+    timer.current = window.setTimeout(() => {
+      timer.current = null;
+      setRun(null);
+    }, ms + FILIGREE_HOLD_MS + FILIGREE_FADE_MS + 200);
+  }, []);
+
   // Basis walk domain: pad 4% around everything that matters.
   const points = [rawBasis, trueBasis, mark?.price].filter((v): v is number => v != null && v > 0);
   const lo = points.length ? Math.min(...points) * 0.96 : 0;
@@ -35,6 +61,9 @@ export function WheelCard({
 
   return (
     <div className="wheel-card" data-stage={stage}>
+      {run && (
+        <CardFiligree key={run.id} drawMs={run.draw} holdMs={FILIGREE_HOLD_MS} fadeMs={FILIGREE_FADE_MS} />
+      )}
       <div className="wheel-card-head">
         <div className="wheel-card-title">
           {wheel.symbol}
@@ -50,7 +79,7 @@ export function WheelCard({
         Wheel Nº {wheel.no} · started {fmtShort(wheel.opened_at)} · week {summary.weeks}
       </div>
       <div className="wheel-dial-wrap">
-        <WheelDial stage={stage} callsSold={summary.callsSold} no={wheel.no} weeks={summary.weeks} wheelId={wheel.id} />
+        <WheelDial stage={stage} callsSold={summary.callsSold} no={wheel.no} weeks={summary.weeks} wheelId={wheel.id} onSweepStart={onSweepStart} />
       </div>
       <div className="wheel-tiles">
         {/* An em dash is not a figure — only hand the odometer something it can count. */}

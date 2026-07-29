@@ -29,7 +29,7 @@ const R_MARKER = 80; // where the four station markers sit
 const R_HUB = 27;
 
 /** One slow sweep, heavy at the start and settling long into the station. */
-const SWEEP_MS = 1900;
+export const SWEEP_MS = 1900;
 const sweepEase = cubicBezier(0.42, 0, 0.28, 1);
 /** How long a ghost of the hand lingers behind it. */
 const TRAIL_MS = 1100;
@@ -78,6 +78,7 @@ export function WheelDial({
   no,
   weeks,
   wheelId,
+  onSweepStart,
 }: {
   stage: WheelStage;
   callsSold: number;
@@ -86,6 +87,10 @@ export function WheelDial({
   /** Identity for remembering where the hand was left. Without it the dial still works,
    *  it simply never sweeps across a remount. */
   wheelId?: number;
+  /** Fired once when a sweep begins, so the card can draw its border in alongside the
+   *  hand. Deliberately once per sweep, not per frame: the ornament runs on CSS and only
+   *  needs to be told to start, and a per-frame callback would re-render the whole dial. */
+  onSweepStart?: (ms: number) => void;
 }) {
   const idx = stage === 'COMPLETED' ? ORDER.length : ORDER.indexOf(stage);
   const spokes = Math.min(callsSold, 12);
@@ -131,6 +136,7 @@ export function WheelDial({
 
     const from = live.current;
     if (from === target) return;
+    onSweepStart?.(SWEEP_MS);
     const start = performance.now();
     const trail: Ghost[] = [];
 
@@ -157,7 +163,7 @@ export function WheelDial({
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       frame.current = null;
     };
-  }, [target, stage, wheelId]);
+  }, [target, stage, wheelId, onSweepStart]);
 
   const now = typeof performance !== 'undefined' ? performance.now() : 0;
 

@@ -16,6 +16,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.4.0',
+    date: '2026-07-28',
+    notes: [
+      'Paste a broker confirmation and Curia reads it — symbol, strike, expiry, contracts and price — then types the ticket out for you. A bought contract is understood as a buyback and goes to settle instead.',
+      'Symbols you have traded before are one tap away on the trade and option sheets, newest first.',
+      'Picking a symbol now sets put or call from the wheel it belongs to, and the contract count from the shares you hold.',
+      'Engraved scrollwork draws itself into the corners of a wheel card while the hand travels, then dries away.',
+    ],
+  },
+  {
     version: '2.3.0',
     date: '2026-07-28',
     notes: [
