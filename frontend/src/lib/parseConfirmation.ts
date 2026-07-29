@@ -64,8 +64,14 @@ export function parseConfirmation(text: string): ParsedConfirmation | null {
   const strike = Number(contract[3]);
   if (!Number.isFinite(strike) || strike <= 0) return null;
 
-  // "was sold at 1.49" / "was bought at 0.30"
-  const fill = /\bwas\s+(sold|bought)\s+at\s+(\d+(?:\.\d+)?)/i.exec(s);
+  // "was sold at 1.49" / "were sold at 1" / "was bought at 0.30"
+  //
+  // The verb agrees with the CONTRACT COUNT, which is the trap: one contract "was sold",
+  // three contracts "were sold". Anchoring on "was" meant every multi-contract fill —
+  // the ones most worth not retyping — failed to parse, while every single-contract fill
+  // worked, so the bug hid behind the easiest case. The verb is optional entirely now;
+  // "sold at" carries the meaning on its own and no broker omits the price after it.
+  const fill = /\b(?:(?:was|were)\s+)?(sold|bought)\s+at\s+(\d+(?:\.\d+)?)/i.exec(s);
   if (!fill) return null;
   const premium = Number(fill[2]);
   if (!Number.isFinite(premium) || premium < 0) return null;

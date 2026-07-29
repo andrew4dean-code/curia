@@ -16,6 +16,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.4.1',
+    date: '2026-07-28',
+    notes: [
+      'Pasting a fill of more than one contract works. Moomoo writes "were sold" rather than "was sold" when there is more than one, and Curia was only listening for the singular.',
+      'A button that cannot be used now looks like it.',
+    ],
+  },
+  {
     version: '2.4.0',
     date: '2026-07-28',
     notes: [

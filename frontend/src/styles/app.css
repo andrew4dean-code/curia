@@ -37,6 +37,9 @@
 .field input, .field select { font-family: var(--font-mono); font-size: 16px; padding: 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--parchment); color: var(--ink); }
 .btn { width: 100%; padding: 13px; border: none; border-radius: 8px; background: var(--maroon); color: var(--parchment); font-family: var(--font-display); font-size: 16px; font-weight: 700; }
 .btn-ghost { background: none; color: var(--maroon); border: 1px solid var(--maroon); }
+/* A disabled button that looks tappable is a button you tap. Nothing declared this, so
+   "Fill the ticket" sat at full strength under an error saying it could not be filled. */
+.btn:disabled { opacity: .38; }
 .btn-row { display: flex; gap: 10px; margin-top: 6px; }
 .offline { background: var(--gold); color: var(--ink); text-align: center; font-size: 12px; padding: 6px; border-radius: 6px; margin-bottom: 10px; }
 .gate { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 32px; max-width: 400px; margin: 0 auto; text-align: center; }

@@ -6,7 +6,40 @@ import type { OptionPosition } from '../types';
 const MOOMOO =
   'Transaction Reminder: [Order Filled] 1 contract of $TQQQ 260724 70.00P$ was sold at 1.49 on Jul 21, 2026 12:30:16 ET . [Moomoo US]';
 
+/* The verb agrees with the contract count: one "was sold", three "were sold". Anchoring
+   on "was" meant every multi-contract fill failed while every single-contract one worked,
+   so the bug hid behind the easiest case — and this is the exact message that exposed it. */
+const MOOMOO_PLURAL =
+  'Transaction Reminder: [Order Filled] 3 contracts of $TQQQ 260710 69.00P$ were sold at 1 on Jul 7, 2026 10:04:38 ET . [Moomoo US]';
+
 describe('parseConfirmation', () => {
+  it('reads a multi-contract fill, where the broker says "were sold"', () => {
+    expect(parseConfirmation(MOOMOO_PLURAL)).toEqual({
+      symbol: 'TQQQ',
+      optType: 'PUT',
+      expiration: '2026-07-10',
+      strike: 69,
+      contracts: 3,
+      premium: 1,          // a whole-dollar fill, with no decimal point
+      side: 'SOLD',
+      filledOn: '2026-07-07',
+    });
+  });
+
+  it('reads the same sentence whichever verb the broker uses', () => {
+    const one = parseConfirmation('1 contract of $TQQQ 260710 69.00P$ was sold at 1.20');
+    const many = parseConfirmation('3 contracts of $TQQQ 260710 69.00P$ were sold at 1.20');
+    const bare = parseConfirmation('3 contracts of $TQQQ 260710 69.00P$ sold at 1.20');
+    expect(one?.premium).toBe(1.2);
+    expect(many?.premium).toBe(1.2);
+    expect(bare?.premium).toBe(1.2);
+    expect([one?.contracts, many?.contracts, bare?.contracts]).toEqual([1, 3, 3]);
+  });
+
+  it('handles a plural buyback too', () => {
+    expect(parseConfirmation('2 contracts of $TQQQ 260710 69.00P$ were bought at 0.05')?.side).toBe('BOUGHT');
+  });
+
   it('reads every field out of a real Moomoo confirmation', () => {
     expect(parseConfirmation(MOOMOO)).toEqual({
       symbol: 'TQQQ',
