@@ -1,6 +1,51 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import App from '../App';
+import App, { LANDING_MS } from '../App';
+import { DURATION_MS } from '../components/Odometer';
+// @ts-expect-error -- no @types/node in this project.
+import { readFileSync } from 'node:fs';
+// @ts-expect-error -- no @types/node in this project.
+import { fileURLToPath } from 'node:url';
+// @ts-expect-error -- no @types/node in this project.
+import { dirname, join } from 'node:path';
+
+/* The landing window, the count duration and the .roll-slow multiplier live in three
+   different files and have drifted into conflict twice. Nothing rendered proves the
+   relationship — jsdom computes no animation, and by the time it is wrong the only
+   symptom is a highlight clearing under a still-turning figure on a real device. So
+   assert the arithmetic directly, reading the multiplier off the stylesheet on disk
+   rather than restating 1.8 here, where it could go stale exactly like the rest. */
+describe('landing window covers the count it wraps', () => {
+  function rollSlowScale(): number {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(join(here, '..', 'styles', 'curia-tokens.css'), 'utf8');
+    const m = /\.roll-slow\s*\{[^}]*--roll-scale:\s*([\d.]+)/.exec(css);
+    if (!m) throw new Error('.roll-slow --roll-scale not found in curia-tokens.css');
+    return Number(m[1]);
+  }
+
+  it('outlasts the hero odometer at the ceremony roll scale', () => {
+    const scale = rollSlowScale();
+    expect(scale).toBeGreaterThan(1); // a landing that does not slow anything is a dead class
+    const slowestCount = DURATION_MS.hero * scale;
+    expect(
+      LANDING_MS,
+      `LANDING_MS ${LANDING_MS}ms must outlast the hero count under .roll-slow ` +
+        `(${DURATION_MS.hero} x ${scale} = ${slowestCount}ms). Raise LANDING_MS in App.tsx.`,
+    ).toBeGreaterThan(slowestCount);
+  });
+
+  it('leaves the settle ceremony room to finish counting before the certificate', () => {
+    // SettleCeremony runs at scale 1 (landing is false during it): the count is released
+    // at its 'count' stage and the certificate covers the figure when it arrives.
+    const COUNT_STAGE_MS = 1250;
+    const CERTIFICATE_MS = 3800;
+    expect(
+      COUNT_STAGE_MS + DURATION_MS.hero,
+      `the settle count must land before the certificate at ${CERTIFICATE_MS}ms`,
+    ).toBeLessThan(CERTIFICATE_MS);
+  });
+});
 
 describe('App re-lock', () => {
   afterEach(() => {
@@ -84,19 +129,19 @@ describe('App landing timer race', () => {
     await addTradeAndSkipCeremony('AAA', '10');
     expect(isLanding()).toBe(true);
 
-    await flush(1000); // 1s into trade 1's 3s landing window
+    await flush(1000); // 1s into trade 1's landing window
 
     await addTradeAndSkipCeremony('BBB', '20'); // trade 2's onTicket must clear trade 1's pending timer
     expect(isLanding()).toBe(true);
 
-    // Trade 1's stale timer would have fired ~2000ms from here (3000ms after
-    // its own onDone, which landed 1000ms + a hair before this point). Advance
-    // past that mark and confirm trade 2's landing survives.
-    await flush(2500);
+    // Trade 1's stale timer would have fired LANDING_MS - 1000ms from here (it was armed
+    // 1000ms + a hair before this point). Advance just past that mark — but stop short of
+    // trade 2's own deadline — and confirm trade 2's landing survives its predecessor's.
+    await flush(LANDING_MS - 1000 + 100);
     expect(isLanding()).toBe(true);
 
     // Trade 2's own timer (armed fresh at its onDone) should fire by now.
-    await flush(1000);
+    await flush(LANDING_MS);
     expect(isLanding()).toBe(false);
   });
 });

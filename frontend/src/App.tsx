@@ -40,6 +40,12 @@ type Sheet =
   | { kind: 'wheelRecord'; wheel: Wheel }
   | null;
 
+/** How long .roll-slow stays on the shell after a ceremony, winding every odometer out
+ *  before the justAdded highlight clears. It has to outlast the slowest count it wraps:
+ *  the hero figure at DURATION_MS.hero x --roll-scale (1900 x 1.8 = 3420ms), or the
+ *  highlight drops while the number is still turning. Raise the count and raise this. */
+export const LANDING_MS = 3700;
+
 export default function App() {
   const [snap, setSnap] = useState<Snapshot | null>(() => (getPasscode() ? cachedSnapshot() : null));
   const [unlocked, setUnlocked] = useState(() => !!getPasscode());
@@ -307,7 +313,7 @@ export default function App() {
                 landingTimer.current = null;
                 setLanding(false);
                 setJustAdded(null);
-              }, 3000);
+              }, LANDING_MS);
             });
           }}
         />
