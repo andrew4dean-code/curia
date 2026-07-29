@@ -140,7 +140,12 @@
 /* Paste-a-confirmation sheet. The read-back is a definition list so the parse can be
    checked at a glance before anything is booked — the whole point is that you see what
    the app understood, not that you trust it. */
-.field textarea { font-family: var(--font-mono); font-size: 14px; padding: 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--parchment); color: var(--ink); resize: vertical; line-height: 1.5; }
+/* 16px is a FLOOR on every focusable field, not a taste choice: iOS Safari zooms the
+   whole page in when you focus a control whose text is smaller, and it does not zoom back
+   out. This one was 14px, so pasting a confirmation threw the sheet off the side of the
+   screen. Every other field in the app was already 16px, which is why only this one did
+   it. A test holds the floor. */
+.field textarea { font-family: var(--font-mono); font-size: 16px; padding: 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--parchment); color: var(--ink); resize: vertical; line-height: 1.5; }
 .paste-read { border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; background: var(--parchment); }
 .paste-read-head { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--gold-label); margin-bottom: 6px; }
 .paste-read dl { margin: 0; }

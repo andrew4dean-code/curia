@@ -16,6 +16,11 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.4.2',
+    date: '2026-07-28',
+    notes: ['Tapping the paste box no longer zooms the page in and pushes the sheet off the side of the screen.'],
+  },
+  {
     version: '2.4.1',
     date: '2026-07-28',
     notes: [

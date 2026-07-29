@@ -48,6 +48,26 @@ describe('app chrome layout', () => {
     expect(shell).toMatch(/min-height:\s*100dvh/);
   });
 
+  /* iOS Safari zooms the entire page in when a control whose text is under 16px takes
+     focus, and it does not zoom back out — the sheet ends up hanging off the side of the
+     screen with the keyboard up. Nothing catches this: it builds, it types, it passes
+     every jsdom test, and it is invisible in any desktop browser. It has already shipped
+     once, on the paste textarea. */
+  it('never lets a focusable field drop below the 16px iOS zoom floor', () => {
+    const offenders: string[] = [];
+    // Every stylesheet, not just the one that got it wrong last time.
+    for (const file of ['app.css', 'curia-tokens.css', 'ceremony.css', '../index.css']) {
+      for (const m of rules(file).matchAll(/([^{}]*(?:input|textarea|select)[^{}]*)\{([^}]*)\}/g)) {
+        const size = /font-size:\s*([\d.]+)px/.exec(m[2]);
+        if (size && Number(size[1]) < 16) offenders.push(`${file}: ${m[1].trim()} -> ${size[1]}px`);
+      }
+    }
+    expect(
+      offenders,
+      `these fields will make iOS zoom the page on focus:\n  ${offenders.join('\n  ')}`,
+    ).toEqual([]);
+  });
+
   it('pads the tab bar by the home-indicator inset, with a floor', () => {
     const bar = /\.tabbar\s*\{([^}]*)\}/.exec(rules('app.css'))![1];
     expect(bar).toContain('max(env(safe-area-inset-bottom)');
