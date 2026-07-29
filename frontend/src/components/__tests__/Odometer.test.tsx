@@ -1,7 +1,7 @@
 import { Profiler } from 'react';
 import { act, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Odometer } from '../Odometer';
+import { Odometer, resetOdometerMemory } from '../Odometer';
 
 /* The odometer used to hold a fixed 0-9 strip per digit and translate to the target,
    so travel was proportional to the numeric difference: 1->2 hopped one step while
@@ -96,12 +96,23 @@ function playTimed(el: HTMLElement, dt = 16.7, phase = dt) {
   return { seen, elapsed: clock - start };
 }
 
-function mount(value: string, props: { speed?: 'hero' | 'detail'; run?: boolean } = {}) {
+/** Mount an odometer that remembers whatever the registry already holds for "odo".
+ *  Only the cross-mount tests want this; everything else wants a clean slate. */
+function mountKeeping(value: string, props: { speed?: 'hero' | 'detail'; run?: boolean } = {}) {
   const view = render(<Odometer value={value} dataTestid="odo" {...props} />);
   const el = view.getByTestId('odo');
   const to = (next: string, more: typeof props = props) =>
     view.rerender(<Odometer value={next} dataTestid="odo" {...more} />);
   return { ...view, el, to };
+}
+
+/** A figure with no history. The axis sweeps below mount and unmount the same testid
+ *  hundreds of times inside a single test, and an odometer that remembers the previous
+ *  iteration's target starts its next run from there — which is the feature working, and
+ *  ruinous to a test that meant to count from zero. */
+function mount(value: string, props: { speed?: 'hero' | 'detail'; run?: boolean } = {}) {
+  resetOdometerMemory();
+  return mountKeeping(value, props);
 }
 
 /* The quantizer picks its step from the decade of the remaining distance, so which
@@ -370,7 +381,7 @@ describe('Odometer', () => {
   it('keeps one element across a carry that shifts a comma', () => {
     const { el, to } = mount('$980.00');
     to('$1,240.00');
-    expect(el.style.minWidth).toBe('9ch'); // widest of the two, set before the first frame
+    expect(el).toHaveAttribute('data-width-for', '$1,240.00'); // widest, before the first frame
     const node = el;
     const { seen } = play(el);
 
@@ -379,14 +390,69 @@ describe('Odometer', () => {
     expect(seen[seen.length - 1]).toBe('$1,240.00');
   });
 
-  it('pins its width to the longer figure and never clears it', () => {
+  /* Width used to be reserved as `${length}ch`, and ch is the width of a zero. In the
+     display face a zero is full-width while '$', ',', '.' and '+' are much narrower, so
+     N characters of money never fill N ch: "+$176,863.28" reserved 348px to draw 262px
+     and floated in 87px of dead space, which shoved the word following it off the number.
+     It is now measured from the real string. The measurement needs a canvas and a
+     laid-out font, so what is asserted here is the input to it — that the width is always
+     computed from the longest figure drawn, and never falls back to a shorter one. */
+  it('sizes itself from the longest figure it has drawn, and never a shorter one', () => {
     const { el, to } = mount('$980.00');
+    expect(el).toHaveAttribute('data-width-for', '$980.00');
     to('$1,240.00');
-    expect(el.style.minWidth).toBe('9ch');
+    expect(el).toHaveAttribute('data-width-for', '$1,240.00'); // grew, before the first frame
     play(el);
-    expect(el.style.minWidth).toBe('9ch'); // still pinned once the run has landed
+    expect(el).toHaveAttribute('data-width-for', '$1,240.00');
     to('$1.00');
-    expect(el.style.minWidth).toBe('9ch');
+    expect(el).toHaveAttribute('data-width-for', '$1,240.00'); // never shrinks back
+    // ...and it never reserves width in ch, whatever the figure.
+    expect(el.style.minWidth).not.toMatch(/ch$/);
+  });
+
+  /* Tabs are keyed on the active tab, so leaving one and returning remounts it. A fresh
+     odometer has nothing on screen to count from and used to paint its target outright —
+     sell an option, come back to Portfolio, and the new book value had simply appeared.
+     It now remembers the figure it was left showing, keyed by testid. */
+  describe('memory across mounts', () => {
+    it('counts up from the figure it was left showing when it is mounted again', () => {
+      const first = mount('$100.00');
+      play(first.el);
+      expect(first.el).toHaveTextContent('$100.00');
+      first.unmount();
+
+      // Same odometer (same testid), remounted with a value that moved while it was gone.
+      const again = mountKeeping('$400.00');
+      const { seen } = play(again.el);
+      expect(seen.length).toBeGreaterThan(15); // it counted rather than printed
+      expect(seen[0]).toBe('$100.00'); // ...starting from where it was left
+      expect(seen[seen.length - 1]).toBe('$400.00');
+    });
+
+    it('prints outright on a cold mount, with nothing remembered', () => {
+      const { el } = mount('$400.00');
+      expect(el).toHaveTextContent('$400.00');
+      expect(pending.size).toBe(0); // no count was ever scheduled
+    });
+
+    it('does not count when the figure is unchanged since it was last seen', () => {
+      const first = mount('$250.00');
+      play(first.el);
+      first.unmount();
+      const again = mountKeeping('$250.00');
+      expect(again.el).toHaveTextContent('$250.00');
+      expect(pending.size).toBe(0);
+    });
+
+    it('remembers nothing for an odometer with no identity', () => {
+      const view = render(<Odometer value="$100.00" />);
+      view.unmount();
+      const second = render(<Odometer value="$900.00" />);
+      // No testid, so no entry in the registry, so no count and no cross-talk between
+      // the many unnamed detail figures that share a screen.
+      expect(second.container.textContent).toBe('$900.00');
+      expect(pending.size).toBe(0);
+    });
   });
 
   it('settles a detail row before the hero figure it sits under', () => {

@@ -79,10 +79,57 @@ function rollScale(el: HTMLElement | null): number {
   return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
-function firstPaint(value: string, run: boolean): string {
-  if (run) return value;
+/** What to draw before the first frame of any count.
+ *
+ *  Held at zero when the ceremony has not released the figure yet. Otherwise the
+ *  remembered figure if there is one and it differs, so a remount opens on the number
+ *  the eye last saw and counts to the new one — painting the target first and then
+ *  starting the count from the remembered value flashes the answer and snaps back to it. */
+function firstPaint(value: string, run: boolean, key?: string): string {
   const p = parseMoney(value);
-  return p ? build(0, p.signed) : value;
+  if (!run) return p ? build(0, p.signed) : value;
+  const remembered = key ? MEMORY.get(key) : undefined;
+  if (remembered !== undefined && p && remembered !== p.n) return build(remembered, p.signed);
+  return value;
+}
+
+/** Width reserved for the figure, in real pixels.
+ *
+ *  This used to be `${length}ch`, and ch is the width of the digit zero. In Playfair a
+ *  zero is a full-width lining figure while '$', ',', '.' and '+' are far narrower, so
+ *  N characters of money never occupy N ch — "+$176,863.28" reserved 348px to draw 262px
+ *  and sat in 87px of dead space, which on the hero's sub-line pushed the word after it
+ *  clean off the number. Measuring the actual string removes the guess.
+ *
+ *  Under-measuring is harmless: min-width cannot clip an inline-block, the box just grows
+ *  to its content. Over-measuring is the bug, so a rough measure is strictly better than
+ *  a wrong unit. */
+const gauge: HTMLCanvasElement | null = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+
+function measure(text: string, el: HTMLElement | null): string {
+  if (!el || !gauge || typeof getComputedStyle !== 'function') return '';
+  const ctx = gauge.getContext('2d');
+  if (!ctx) return ''; // jsdom has no canvas: fall through to natural width
+  const cs = getComputedStyle(el);
+  ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  const tracking = parseFloat(cs.letterSpacing);
+  const extra = Number.isFinite(tracking) ? tracking * Math.max(0, text.length - 1) : 0;
+  const w = ctx.measureText(text).width + extra;
+  return w > 0 ? `${Math.ceil(w)}px` : '';
+}
+
+/** The last number each figure was left showing, surviving unmount.
+ *
+ *  Tabs are keyed on the active tab, so switching away and back remounts the whole tab:
+ *  a fresh Odometer has no previous value and paints its target outright. Sell an option,
+ *  come back to Portfolio, and the new book value simply appeared. Keyed by dataTestid,
+ *  so only figures with a stable identity remember anything. */
+const MEMORY = new Map<string, number>();
+
+/** Tests share a module registry; without this, one test's final figure is the next
+ *  test's starting point and counts appear from nowhere. Called from the test setup. */
+export function resetOdometerMemory(): void {
+  MEMORY.clear();
 }
 
 export function Odometer({ value, speed = 'hero', className, dataTestid, run = true }: OdometerProps) {
@@ -91,20 +138,39 @@ export function Odometer({ value, speed = 'hero', className, dataTestid, run = t
   /** The number currently on screen — updated every painted frame, so a value that
    *  changes mid-count picks up from what the eye last saw. */
   const cur = useRef<number | null>(null);
-  const [shown, setShown] = useState(() => firstPaint(value, run));
+  const [shown, setShown] = useState(() => firstPaint(value, run, dataTestid));
   const shownRef = useRef(shown);
-  const [minWidth, setMinWidth] = useState(() => `${value.length}ch`);
+  const [minWidth, setMinWidth] = useState('');
+  /** The longest figure this odometer has had to draw. Width never shrinks back, or a
+   *  count that passes through a comma would jog the layout as it crosses.
+   *
+   *  Grown during render, not in the effect. A ref written in an effect does not trigger
+   *  the re-render that would publish it, and the accompanying setMinWidth cannot be
+   *  relied on to do so either — where the measurement is unavailable it sets the same
+   *  empty string twice and React correctly bails out, leaving the rendered attribute
+   *  describing the previous figure. */
+  const widest = useRef(value);
+  if (value.length > widest.current.length) widest.current = value;
 
   useEffect(() => {
     // Only re-render on frames where the figure actually changes: at 44px Playfair a
     // repaint per frame with no visible change is a strobe, not a count.
     const paint = (next: string) => {
+      // Recorded before the early return, not after. On a cold mount the initial state
+      // already equals the value, so paint() short-circuits — and this is the one call
+      // that establishes what the figure was left showing. Recording after the guard
+      // meant a figure that never moved was never remembered, which is precisely the
+      // figure a returning tab needs to count from.
+      if (dataTestid) {
+        const p = parseMoney(next);
+        if (p) MEMORY.set(dataTestid, p.n);
+      }
       if (next === shownRef.current) return;
       shownRef.current = next;
       setShown(next);
     };
 
-    setMinWidth(`${Math.max(shownRef.current.length, value.length)}ch`);
+    setMinWidth(measure(widest.current, host.current));
 
     const to = parseMoney(value);
     if (!to || build(to.n, to.signed) !== value) {
@@ -122,12 +188,18 @@ export function Odometer({ value, speed = 'hero', className, dataTestid, run = t
       return;
     }
 
-    const from = cur.current;
+    // A fresh mount has no on-screen figure to count from, but it may have a remembered
+    // one: the same figure, before this tab was last left. That is what turns "switch to
+    // Options, sell a call, switch back" from a number that has silently changed into a
+    // number that counts up to what it changed to. A cold load remembers nothing and
+    // still paints outright, which is right — nothing has changed yet to show.
+    const from = cur.current ?? (dataTestid ? MEMORY.get(dataTestid) ?? null : null);
     if (from === null || from === to.n) {
       cur.current = to.n;
       paint(value);
       return;
     }
+    cur.current = from;
 
     const dur = DURATION_MS[speed] * rollScale(host.current);
     const start = performance.now();
@@ -170,11 +242,22 @@ export function Odometer({ value, speed = 'hero', className, dataTestid, run = t
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       frame.current = null;
     };
-  }, [value, run, speed]);
+  }, [value, run, speed, dataTestid]);
 
   const cls = ['odo', speed === 'detail' ? 'odo-detail' : '', className].filter(Boolean).join(' ');
   return (
-    <span ref={host} className={cls} data-value={value} data-testid={dataTestid} style={{ minWidth }}>
+    <span
+      ref={host}
+      className={cls}
+      data-value={value}
+      // The string the reserved width was measured from. The measurement itself needs a
+      // canvas and a laid-out font, neither of which jsdom has, so this is what a test
+      // can hold onto: the width never being computed from a shorter figure than the
+      // longest one drawn.
+      data-width-for={widest.current}
+      data-testid={dataTestid}
+      style={minWidth ? { minWidth } : undefined}
+    >
       {shown}
     </span>
   );
