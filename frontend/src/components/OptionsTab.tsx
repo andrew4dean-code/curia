@@ -13,7 +13,7 @@ function fmtShort(dateStr: string): string {
   return `${MONTHS[m - 1].slice(0, 3)} ${d}`;
 }
 
-export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onMarkQuiet, onClearQuiet, strikingOptionId }: TabProps) {
+export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onMarkQuiet, onClearQuiet, strikingOptionId, onPasteFill }: TabProps) {
   const now = new Date();
   const [ym, setYm] = useState<[number, number]>([now.getFullYear(), now.getMonth() + 1]);
   // Undefined until the chevrons actually move the month: the board-in-left/
@@ -51,6 +51,13 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onM
         <div className="board-score">
           <Odometer className="board-score-amount" value={formatMoney(score)} speed="hero" dataTestid="month-score" /> collected this month
         </div>
+        {onPasteFill && (
+          <div className="link-row" style={{ margin: '2px 0 10px' }}>
+            <button type="button" onClick={onPasteFill} data-testid="paste-confirmation">
+              paste a confirmation
+            </button>
+          </div>
+        )}
       </div>
       <div className="board-weeks" data-slide={slide} key={`${year}-${month}`}>
         {fridays.map((friday, i) => {

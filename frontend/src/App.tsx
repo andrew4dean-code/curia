@@ -24,6 +24,9 @@ import { SettleCeremony } from './components/SettleCeremony';
 import type { SettleData } from './components/SettleCeremony';
 import { summarizeWheel } from './lib/wheelMath';
 import { recentSymbols } from './lib/symbols';
+import { matchOpenOption } from './lib/parseConfirmation';
+import type { ParsedConfirmation } from './lib/parseConfirmation';
+import { PasteSheet } from './components/PasteSheet';
 import { deleteWheel } from './lib/api';
 import { TradeCeremony } from './components/TradeCeremony';
 import type { TicketData } from './components/TradeCeremony';
@@ -32,9 +35,10 @@ type Sheet =
   | { kind: 'trade'; trade: Trade | null; prefill?: { side: Side; symbol: string; qty: number } }
   | { kind: 'position'; position: OpenPosition }
   | { kind: 'optionEdit'; option: OptionPosition }
-  | { kind: 'sellOption'; expiration: string }
+  | { kind: 'sellOption'; expiration: string; prefill?: ParsedConfirmation | null }
+  | { kind: 'paste'; problem?: string }
   | { kind: 'mark'; symbol: string }
-  | { kind: 'settle'; option: OptionPosition }
+  | { kind: 'settle'; option: OptionPosition; buyback?: number }
   | { kind: 'record'; option: OptionPosition }
   | { kind: 'freshWheel' }
   | { kind: 'completeWheel'; summary: WheelSummary }
@@ -198,6 +202,7 @@ export default function App() {
     onSettleOption: (option: OptionPosition) => setSheet({ kind: 'settle', option }),
     onEditOption: (option: OptionPosition) => setSheet({ kind: 'optionEdit', option }),
     onSellWeek: (expiration: string) => setSheet({ kind: 'sellOption', expiration }),
+    onPasteFill: () => setSheet({ kind: 'paste' }),
     onViewRecord: (option: OptionPosition) => setSheet({ kind: 'record', option }),
     onMarkQuiet: (friday: string) => { void markQuietWeek(friday).then(() => refresh()); },
     onClearQuiet: (friday: string) => { void clearQuietWeek(friday).then(() => refresh()); },
@@ -304,7 +309,32 @@ export default function App() {
         />
       )}
       {sheet?.kind === 'sellOption' && (
-        <OptionSellSheet expiration={sheet.expiration} wheels={snap.wheels} trades={snap.trades} options={snap.options} onDone={onTicket} onCancel={() => setSheet(null)} />
+        <OptionSellSheet expiration={sheet.expiration} prefill={sheet.prefill} wheels={snap.wheels} trades={snap.trades} options={snap.options} onDone={onTicket} onCancel={() => setSheet(null)} />
+      )}
+      {sheet?.kind === 'paste' && (
+        <PasteSheet
+          problem={sheet.problem}
+          onUse={(p) => {
+            if (p.side === 'SOLD') {
+              // The confirmation carries its own expiry, so this bypasses the week line.
+              setSheet({ kind: 'sellOption', expiration: p.expiration, prefill: p });
+              return;
+            }
+            // A buyback closes something. Which something has to be unambiguous.
+            const match = matchOpenOption(p, snap.options);
+            if (!match) {
+              setSheet({
+                kind: 'paste',
+                problem:
+                  `No single open ${p.symbol} $${p.strike} ${p.optType} expiring ${p.expiration} to close. ` +
+                  'Settle it from its week line instead.',
+              });
+              return;
+            }
+            setSheet({ kind: 'settle', option: match, buyback: p.premium });
+          }}
+          onCancel={() => setSheet(null)}
+        />
       )}
       {sheet?.kind === 'mark' && (
         <MarkSheet symbol={sheet.symbol} onDone={async () => { setSheet(null); await refresh(); }} onCancel={() => setSheet(null)} />
@@ -312,6 +342,7 @@ export default function App() {
       {sheet?.kind === 'settle' && (
         <SettleSheet
           option={sheet.option}
+          buybackPrefill={sheet.buyback}
           onDone={async (c) => { setSheet(null); setSettleCeremony(c); }}
           onDeleted={onOptionDeleted}
           onEdit={() => setSheet({ kind: 'optionEdit', option: sheet.option })}

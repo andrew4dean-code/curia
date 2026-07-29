@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { createOption, updateOption } from '../lib/api';
 import { todayIso } from '../lib/time';
@@ -8,6 +8,7 @@ import type { OptionDraft, OptionPosition, OptionType, Trade, Wheel } from '../l
 import { SymbolChips } from './SymbolChips';
 import { recentSymbols } from '../lib/symbols';
 import { optionDefaults } from '../lib/optionEntry';
+import type { ParsedConfirmation } from '../lib/parseConfirmation';
 import type { TicketData } from './TradeCeremony';
 
 function fmtDate(iso: string): string {
@@ -21,6 +22,7 @@ export function OptionSellSheet({
   wheels,
   trades = [],
   options = [],
+  prefill,
   onDone,
   onCancel,
 }: {
@@ -29,6 +31,9 @@ export function OptionSellSheet({
   wheels: Wheel[];
   trades?: Trade[];
   options?: OptionPosition[];
+  /** A confirmation that has already been read. Authoritative — it beats anything the
+   *  wheel would infer, because it is a record of what actually filled. */
+  prefill?: ParsedConfirmation | null;
   onDone: (ticket: TicketData) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -46,8 +51,36 @@ export function OptionSellSheet({
   /* Once you have chosen a side or a size yourself, the wheel stops choosing it for you.
      Filling a field you already set — because you happened to retype the symbol — is the
      kind of help that costs more trust than it saves. */
-  const [chosenType, setChosenType] = useState(false);
-  const [chosenContracts, setChosenContracts] = useState(false);
+  const [chosenType, setChosenType] = useState(!!prefill);
+  const [chosenContracts, setChosenContracts] = useState(!!prefill);
+  const [typing, setTyping] = useState(!!prefill);
+
+  /* A pasted fill types itself into the ticket, field by field, the way the ceremony
+     types a ticket — but with none of its machinery. It is the same idea at a smaller
+     scale: you watch the numbers land, so you read them instead of trusting them. */
+  useEffect(() => {
+    if (!prefill) return;
+    setOptType(prefill.optType);
+    if (prefill.filledOn) setDate(prefill.filledOn);
+    const steps: Array<[(v: string) => void, string]> = [
+      [setSymbol, prefill.symbol],
+      [setStrike, String(prefill.strike)],
+      [setContracts, String(prefill.contracts)],
+      [setPremium, String(prefill.premium)],
+    ];
+    const timers: number[] = [];
+    let at = 140;
+    for (const [set, value] of steps) {
+      for (let i = 1; i <= value.length; i++) {
+        const slice = value.slice(0, i);
+        timers.push(window.setTimeout(() => set(slice), at));
+        at += 34;
+      }
+      at += 120; // a beat between fields, so they read as separate facts
+    }
+    timers.push(window.setTimeout(() => setTyping(false), at));
+    return () => timers.forEach(clearTimeout);
+  }, [prefill]);
 
   /** Apply what the symbol's open wheel implies. Never while editing an existing option:
    *  those fields are the record, not a guess. */
@@ -134,7 +167,7 @@ export function OptionSellSheet({
           <label htmlFor="os-note">Note (optional)</label>
           <input id="os-note" value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
-        <button className="btn" disabled={busy || !symbol || !strike || !premium}>
+        <button className="btn" disabled={typing || busy || !symbol || !strike || !premium}>
           {busy ? 'Saving…' : option ? 'Save changes' : `Sell to open — collect ${formatMoney(take)}`}
         </button>
         <div className="btn-row">

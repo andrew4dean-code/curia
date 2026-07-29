@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { parseConfirmation } from '../parseConfirmation';
+import { matchOpenOption, parseConfirmation } from '../parseConfirmation';
+import type { OptionPosition } from '../types';
 
 /** The exact string a Moomoo fill arrives as. */
 const MOOMOO =
@@ -68,5 +69,37 @@ describe('parseConfirmation', () => {
   it('rejects an impossible expiry rather than shifting it into a real date', () => {
     // 261340 is not a month or a day. Date maths would silently roll it into 2027.
     expect(parseConfirmation('1 contract of $TQQQ 261340 70.00P$ was sold at 1.49')).toBeNull();
+  });
+});
+
+describe('matchOpenOption', () => {
+  const parsed = parseConfirmation('1 contract of $TQQQ 260724 70.00P$ was bought at 0.30')!;
+  const opt = (over: Partial<OptionPosition> = {}): OptionPosition =>
+    ({ id: 1, symbol: 'TQQQ', opt_type: 'PUT', strike: 70, expiration: '2026-07-24', contracts: 1,
+       premium: 1.49, fees: 0, opened_at: '2026-07-21', note: '', status: 'OPEN',
+       closed_at: null, buyback_price: 0, ...over } as OptionPosition);
+
+  it('finds the open contract the buyback closes', () => {
+    expect(matchOpenOption(parsed, [opt()])?.id).toBe(1);
+  });
+
+  it('treats 70 and 70.00 as the same strike', () => {
+    expect(matchOpenOption(parsed, [opt({ strike: 70.0 })])?.id).toBe(1);
+  });
+
+  it('will not settle a contract that is already closed', () => {
+    expect(matchOpenOption(parsed, [opt({ status: 'EXPIRED' })])).toBeNull();
+  });
+
+  it('refuses to choose between two identical open contracts', () => {
+    // Guessing here settles a leg you did not mean; the caller must ask.
+    expect(matchOpenOption(parsed, [opt({ id: 1 }), opt({ id: 2 })])).toBeNull();
+  });
+
+  it('requires every one of symbol, type, strike and expiry to agree', () => {
+    expect(matchOpenOption(parsed, [opt({ symbol: 'NVDA' })])).toBeNull();
+    expect(matchOpenOption(parsed, [opt({ opt_type: 'CALL' })])).toBeNull();
+    expect(matchOpenOption(parsed, [opt({ strike: 71 })])).toBeNull();
+    expect(matchOpenOption(parsed, [opt({ expiration: '2026-07-31' })])).toBeNull();
   });
 });

@@ -108,6 +108,19 @@
 .wheel-card-sh { font-family: var(--font-mono); font-size: 13px; font-weight: 400; color: var(--ink-soft); white-space: nowrap; }
 .wheel-card-tag { font-size: 10px; letter-spacing: .08em; color: var(--gold-label); text-transform: uppercase; white-space: nowrap; }
 .wheel-card-sub { font-size: 11px; letter-spacing: .07em; color: var(--ink-soft); text-transform: uppercase; margin-top: 2px; }
+/* Paste-a-confirmation sheet. The read-back is a definition list so the parse can be
+   checked at a glance before anything is booked — the whole point is that you see what
+   the app understood, not that you trust it. */
+.field textarea { font-family: var(--font-mono); font-size: 14px; padding: 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--parchment); color: var(--ink); resize: vertical; line-height: 1.5; }
+.paste-read { border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; background: var(--parchment); }
+.paste-read-head { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--gold-label); margin-bottom: 6px; }
+.paste-read dl { margin: 0; }
+.paste-read dl > div { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+.paste-read dt { font-size: 12px; color: var(--ink-soft); }
+.paste-read dd { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 14px; text-align: right; }
+.paste-miss { font-size: 12px; line-height: 1.6; color: var(--pl-red); margin-bottom: 12px; }
+.paste-miss code { font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft); }
+
 /* Tap-a-symbol row under a symbol field. Wraps rather than scrolls: a row you have to
    swipe hides the symbol you wanted behind a gesture you have to discover. 34px tall
    with generous horizontal padding — below the 44px tap target used elsewhere, because

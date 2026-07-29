@@ -20,6 +20,8 @@ export interface TabProps {
   onSettleOption: (o: OptionPosition) => void;
   onEditOption: (o: OptionPosition) => void;
   onSellWeek?: (expiration: string) => void;
+  /** Open the paste-a-confirmation sheet. */
+  onPasteFill?: () => void;
   onViewRecord?: (o: OptionPosition) => void;
   onMarkQuiet?: (friday: string) => void;
   onClearQuiet?: (friday: string) => void;

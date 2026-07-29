@@ -10,19 +10,25 @@ import type { OptionPosition, OptionStatus } from '../lib/types';
 
 export function SettleSheet({
   option,
+  buybackPrefill,
   onDone,
   onDeleted,
   onEdit,
   onCancel,
 }: {
   option: OptionPosition;
+  /** Buyback price read off a pasted confirmation, in dollars per share. */
+  buybackPrefill?: number;
   onDone: (c: SettleData) => Promise<void>;
   onDeleted?: (id?: number) => Promise<void>;
   onEdit: () => void;
   onCancel: () => void;
 }) {
-  const [outcome, setOutcome] = useState<Exclude<OptionStatus, 'OPEN'> | null>(null);
-  const [buyback, setBuyback] = useState('');
+  // A pasted buyback names both the outcome and the price; there is nothing left to pick.
+  const [outcome, setOutcome] = useState<Exclude<OptionStatus, 'OPEN'> | null>(
+    buybackPrefill !== undefined ? 'BOUGHT_BACK' : null,
+  );
+  const [buyback, setBuyback] = useState(buybackPrefill !== undefined ? String(buybackPrefill) : '');
   const [date, setDate] = useState(settleDateDefault(option.expiration, todayIso()));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');

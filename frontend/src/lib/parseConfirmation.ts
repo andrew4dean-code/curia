@@ -1,4 +1,4 @@
-import type { OptionType } from './types';
+import type { OptionPosition, OptionType } from './types';
 
 /** What a broker confirmation yields, once read.
  *
@@ -94,4 +94,28 @@ export function parseConfirmation(text: string): ParsedConfirmation | null {
     side: fill[1].toLowerCase() === 'sold' ? 'SOLD' : 'BOUGHT',
     filledOn,
   };
+}
+
+/** The open contract a buyback confirmation refers to.
+ *
+ *  A bought confirmation closes something. Which something matters: settling the wrong
+ *  leg books the premium against the wrong wheel. All four of symbol, type, strike and
+ *  expiry must agree, and only OPEN positions are candidates — a contract already settled
+ *  cannot be settled again, and matching one would silently overwrite a closed record.
+ *
+ *  Strikes are compared with a cent of tolerance because they arrive as text and 70 and
+ *  70.00 are the same contract.
+ */
+export function matchOpenOption(p: ParsedConfirmation, options: OptionPosition[]): OptionPosition | null {
+  const hits = options.filter(
+    (o) =>
+      o.status === 'OPEN' &&
+      o.symbol.trim().toUpperCase() === p.symbol &&
+      o.opt_type === p.optType &&
+      o.expiration === p.expiration &&
+      Math.abs(o.strike - p.strike) < 0.005,
+  );
+  // Two open contracts identical in all four is ambiguous; picking one at random would
+  // settle a leg you did not mean. The caller should ask rather than guess.
+  return hits.length === 1 ? hits[0] : null;
 }

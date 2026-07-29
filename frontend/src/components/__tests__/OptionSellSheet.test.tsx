@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../lib/api';
 import { OptionSellSheet } from '../OptionSellSheet';
@@ -150,5 +150,60 @@ describe('OptionSellSheet wheel-derived entry', () => {
     expect(isOn('PUT')).toBe(true); // not flipped to CALL by the wheel behind it
     expect(screen.getByLabelText('Contracts')).toHaveValue(1);
     expect(screen.queryByTestId('implied-note')).toBeNull();
+  });
+});
+
+/* A pasted confirmation is a record of what filled, so it outranks anything the wheel
+   would infer — and it types itself in rather than appearing, so the numbers get read. */
+describe('OptionSellSheet from a pasted confirmation', () => {
+  const prefill = {
+    symbol: 'TQQQ', optType: 'PUT' as const, expiration: '2026-07-24', strike: 70,
+    contracts: 2, premium: 1.49, side: 'SOLD' as const, filledOn: '2026-07-21',
+  };
+
+  it('types every field in, and will not submit until it has finished', () => {
+    vi.useFakeTimers();
+    render(
+      <OptionSellSheet
+        expiration="2026-07-24"
+        prefill={prefill}
+        wheels={[]}
+        onDone={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
+      />,
+    );
+    // Mid-typing the ticket must not be submittable: a half-typed premium would book.
+    act(() => { vi.advanceTimersByTime(200); });
+    expect(screen.getByRole('button', { name: /Sell to open|collect/ })).toBeDisabled();
+
+    act(() => { vi.advanceTimersByTime(4000); });
+    expect(screen.getByLabelText('Symbol')).toHaveValue('TQQQ');
+    expect(screen.getByLabelText('Strike')).toHaveValue(70);
+    expect(screen.getByLabelText('Contracts')).toHaveValue(2);
+    expect(screen.getByLabelText('Premium / share')).toHaveValue(1.49);
+    expect(screen.getByRole('button', { name: /collect \$298\.00/ })).toBeEnabled(); // 1.49 x 100 x 2
+    vi.useRealTimers();
+  });
+
+  it('beats what the wheel would have inferred', () => {
+    vi.useFakeTimers();
+    // This wheel holds shares, so unaided the sheet would choose CALL and 4 contracts.
+    const wheel = { id: 1, symbol: 'TQQQ', no: 1, opened_at: '2026-01-01', closed_at: null };
+    const shares = { id: 1, symbol: 'TQQQ', side: 'BUY', qty: 400, price: 100, fees: 0,
+                     executed_at: '2026-02-01', note: '' } as never;
+    render(
+      <OptionSellSheet
+        expiration="2026-07-24"
+        prefill={prefill}
+        wheels={[wheel]}
+        trades={[shares]}
+        onDone={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn()}
+      />,
+    );
+    act(() => { vi.advanceTimersByTime(4000); });
+    expect(screen.getByRole('button', { name: 'PUT' }).className).toContain('on'); // not CALL
+    expect(screen.getByLabelText('Contracts')).toHaveValue(2);                     // not 4
+    vi.useRealTimers();
   });
 });
