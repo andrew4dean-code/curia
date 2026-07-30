@@ -16,6 +16,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.6.0',
+    date: '2026-07-30',
+    notes: [
+      'A price you type now stays. The automatic quote pull used to write over it within the second, so a mark you set by hand was gone before you looked away. Curia leaves yours alone until you tap "Use the live price".',
+      'Editing a trade no longer changes what it cost. Fixing a note used to restamp the fee at whatever Settings says today — including on the share fill an assignment books, which has no commission on purpose — and realized P/L and the tax set-aside moved with it. A recorded fee is history now. Correcting an option\'s contract count still scales its fee, at the rate it was booked at.',
+      'Shares you already owned when you declared a wheel have a row again. A wheel only counts from its start date, so those shares were showing in neither the wheel card nor the holdings list, while still counting toward your book value.',
+      'Every tap used to wait on a symbol-by-symbol trip to the quote feed. The figures land first now and prices catch up behind them, at most once a minute.',
+      'A confirmation that spells its month out in capitals is read properly, and a contract dated to a day that does not exist is refused rather than quietly booked.',
+    ],
+  },
+  {
     version: '2.5.0',
     date: '2026-07-29',
     notes: [

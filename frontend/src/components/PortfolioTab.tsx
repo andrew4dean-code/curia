@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Snapshot } from '../lib/api';
 import type { OpenPosition, OptionPosition, Trade, Wheel, WheelSummary } from '../lib/types';
-import { computeOpenPositions } from '../lib/positions';
+import { computeOpenPositions, computeUnwheeledPositions } from '../lib/positions';
 import { memberOptions, summarizeWheel } from '../lib/wheelMath';
 import { optionRealizedPl } from '../lib/optionsMath';
 import { WheelCard } from './WheelCard';
@@ -13,7 +13,8 @@ import { agoLabel } from '../lib/time';
 
 export interface TabProps {
   snap: Snapshot;
-  onRefresh: () => Promise<void>;
+  /** Re-read the server. Resolves with the new snapshot, or null if the read failed. */
+  onRefresh: () => Promise<Snapshot | null>;
   onEditTrade: (t: Trade | null) => void;
   onMark: (symbol: string) => void;
   onPosition?: (p: OpenPosition) => void;
@@ -64,7 +65,10 @@ export function PortfolioTab({
     .sort((a, b) => b.wheel.id - a.wheel.id);
 
   const positions = computeOpenPositions(snap.trades, snap.marks);
-  const holdings = positions.filter((p) => !wheelSymbols.has(p.symbol));
+  // Not "every position whose symbol has no wheel" — a wheel only claims trades from the
+  // day it opened, so shares owned before that belong to no wheel and were falling out of
+  // both this list and the card above it.
+  const holdings = computeUnwheeledPositions(snap.trades, snap.marks, snap.wheels);
   const bookValue = positions.reduce((s, p) => s + (p.marketValue ?? p.qty * p.avgCost), 0);
   const unrealized = positions.reduce((s, p) => s + (p.unrealizedPl ?? 0), 0);
   const flash = useFlash(bookValue);
@@ -128,6 +132,7 @@ export function PortfolioTab({
       {holdings.map((p) => (
         <button
           key={p.symbol}
+          data-testid={`holding-${p.symbol}`}
           className={justAdded?.kind === 'trade' && justAdded.symbol === p.symbol ? 'row stamp-in' : 'row'}
           style={rowButtonStyle}
           onClick={() => (onPosition ? onPosition(p) : onMark(p.symbol))}
@@ -140,6 +145,11 @@ export function PortfolioTab({
                 ? `marked ${agoLabel(p.mark.marked_at)}${p.mark.source === 'manual' ? ' by you' : ''}`
                 : 'no mark yet — tap to set price'}
             </div>
+            {wheelSymbols.has(p.symbol) && (
+              <div className="row-sub">
+                not on the wheel — bought before it began
+              </div>
+            )}
           </div>
           <div className="row-right">
             <div>{p.marketValue != null ? formatMoney(p.marketValue) : '—'}</div>

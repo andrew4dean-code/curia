@@ -53,6 +53,26 @@ describe('PortfolioTab', () => {
     expect(screen.getAllByText('NVDA').length).toBeGreaterThan(0);
   });
 
+  it('shares owned before the wheel opened keep a row of their own', () => {
+    // Bought Jul 1, wheel declared Jul 10: the wheel does not count these, so something
+    // has to. They used to show in neither place while still counting toward the hero.
+    const preWheel: Snapshot = {
+      ...snap,
+      wheels: [{ id: 1, symbol: 'AAPL', no: 1, opened_at: '2026-07-10', closed_at: null }],
+    };
+    render(<PortfolioTab snap={preWheel} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()}
+                         onSettleOption={vi.fn()} onEditOption={vi.fn()} onFreshWheel={vi.fn()} />);
+    const row = screen.getByTestId('holding-AAPL');
+    expect(row).toHaveTextContent('10 sh');
+    expect(row).toHaveTextContent(/not on the wheel/i);
+  });
+
+  it('says nothing about the wheel for a holding that has none', () => {
+    render(<PortfolioTab snap={snap} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()}
+                         onSettleOption={vi.fn()} onEditOption={vi.fn()} />);
+    expect(screen.getByTestId('holding-NVDA')).not.toHaveTextContent(/not on the wheel/i);
+  });
+
   it('with no wheels, invites a fresh one', () => {
     const onFreshWheel = vi.fn();
     render(<PortfolioTab snap={snap} onRefresh={vi.fn()} onEditTrade={vi.fn()} onMark={vi.fn()}

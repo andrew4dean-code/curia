@@ -12,6 +12,39 @@ const MOOMOO =
 const MOOMOO_PLURAL =
   'Transaction Reminder: [Order Filled] 3 contracts of $TQQQ 260710 69.00P$ were sold at 1 on Jul 7, 2026 10:04:38 ET . [Moomoo US]';
 
+describe('parseConfirmation dates', () => {
+  const fill = (contract: string, on = 'Jul 21, 2026') =>
+    `Transaction Reminder: [Order Filled] 1 contract of $TQQQ ${contract}$ was sold at 1.49 on ${on} 12:30:16 ET . [Moomoo US]`;
+
+  it('refuses a day that month does not have', () => {
+    // 260231 is February the 31st. Accepting it wrote an expiry no contract can carry,
+    // which then sorts and compares against real dates as if it were one.
+    expect(parseConfirmation(fill('260231 70.00P'))).toBeNull();
+  });
+
+  it('refuses February the 30th in a leap year too', () => {
+    expect(parseConfirmation(fill('240230 70.00P'))).toBeNull();
+  });
+
+  it('keeps February the 29th when the year really has one', () => {
+    expect(parseConfirmation(fill('280229 70.00P'))?.expiration).toBe('2028-02-29');
+  });
+
+  it('reads a month written out in capitals', () => {
+    // Three-letter caps always worked; a spelled-out JULY did not, and the sheet quietly
+    // dated the fill today instead of saying it had not understood.
+    expect(parseConfirmation(fill('260724 70.00P', 'JULY 21, 2026'))?.filledOn).toBe('2026-07-21');
+  });
+
+  it('still reads the ordinary mixed-case month', () => {
+    expect(parseConfirmation(fill('260724 70.00P', 'September 3, 2026'))?.filledOn).toBe('2026-09-03');
+  });
+
+  it('leaves the fill date unread rather than inventing an impossible one', () => {
+    expect(parseConfirmation(fill('260724 70.00P', 'Feb 31, 2026'))?.filledOn).toBeNull();
+  });
+});
+
 describe('parseConfirmation', () => {
   it('reads a multi-contract fill, where the broker says "were sold"', () => {
     expect(parseConfirmation(MOOMOO_PLURAL)).toEqual({

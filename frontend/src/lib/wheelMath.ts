@@ -7,7 +7,7 @@ const DAY_MS = 86_400_000;
 
 // A wheel owns, for its symbol, records with opened_at <= record-date (<= closed_at).
 // An open wheel (closed_at null) has no upper bound.
-function inWindow(w: Wheel, date: string): boolean {
+export function inWindow(w: Wheel, date: string): boolean {
   return w.opened_at <= date && (w.closed_at === null || date <= w.closed_at);
 }
 

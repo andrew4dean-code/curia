@@ -145,7 +145,7 @@ export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord, striking
                       // edit-sheet delete uses, so this row strikes too instead of just
                       // vanishing. Fall back to a plain refresh if no handler is wired.
                       void deleteTrade(t.id)
-                        .then(() => (onDeleted ? onDeleted(t.id) : onRefresh()))
+                        .then(async () => { if (onDeleted) await onDeleted(t.id); else await onRefresh(); })
                         .catch(() => {}); // failed delete: no strike, no fold — the row stays put
                     }
                   }}

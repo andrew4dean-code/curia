@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './styles/app.css';
-import { ApiError, cachedSnapshot, clearPasscode, fetchSnapshot, getPasscode, markQuietWeek, clearQuietWeek, refreshMarks } from './lib/api';
+import { ApiError, cachedSnapshot, clearPasscode, fetchSnapshot, getPasscode, markQuietWeek, clearQuietWeek } from './lib/api';
+import { pullQuotes } from './lib/quotePull';
 import type { Snapshot } from './lib/api';
 import type { OpenPosition, OptionPosition, Side, Trade, Wheel, WheelSummary } from './lib/types';
 import { PasscodeGate } from './components/PasscodeGate';
@@ -125,12 +126,22 @@ export default function App() {
     clearCoverTimer();
   }, [clearLandingTimer, clearStrikeTimer, clearCoverTimer]);
 
-  const refresh = useCallback(async () => {
+  /** Re-read the server, and hand back what it said.
+   *
+   *  Returns the new snapshot so a caller can compare it against what it captured before
+   *  — reading it back out of a setSnap updater instead meant doing work inside a function
+   *  React expects to be pure, and StrictMode runs those twice.
+   *
+   *  The quote pull runs BEHIND this, not in front of it. It used to be awaited first, so
+   *  every action in the app queued behind a symbol-by-symbol walk of Yahoo. Now the
+   *  figures land immediately and prices catch up a moment later, on the rare refresh
+   *  where a pull is actually due.
+   */
+  const refresh = useCallback(async (): Promise<Snapshot | null> => {
+    let latest: Snapshot | null = null;
     try {
-      // best-effort quote pull first, so the snapshot below carries fresh auto-marks;
-      // a Stooq outage or offline phone must never block the snapshot itself
-      await refreshMarks().catch(() => undefined);
-      setSnap(await fetchSnapshot());
+      latest = await fetchSnapshot();
+      setSnap(latest);
       setOffline(false);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -139,7 +150,13 @@ export default function App() {
       } else {
         setOffline(true);
       }
+      return null;
     }
+    void pullQuotes().then((pulled) => {
+      // Only re-read when a pull actually ran; otherwise this is the snapshot above.
+      if (pulled) void fetchSnapshot().then(setSnap).catch(() => undefined);
+    });
+    return latest;
   }, []);
 
   useEffect(() => {
@@ -337,7 +354,12 @@ export default function App() {
         />
       )}
       {sheet?.kind === 'mark' && (
-        <MarkSheet symbol={sheet.symbol} onDone={async () => { setSheet(null); await refresh(); }} onCancel={() => setSheet(null)} />
+        <MarkSheet
+          symbol={sheet.symbol}
+          mark={snap.marks.find((m) => m.symbol === sheet.symbol) ?? null}
+          onDone={async () => { setSheet(null); await refresh(); }}
+          onCancel={() => setSheet(null)}
+        />
       )}
       {sheet?.kind === 'settle' && (
         <SettleSheet
@@ -368,15 +390,12 @@ export default function App() {
             // Where the wheels stood before this booking was folded in. Captured after
             // the envelope has closed and before the refresh that may move one along.
             const before = wheelStages(snap);
-            void refresh().then(() => {
+            void refresh().then((latest) => {
               // The dial keeps its own memory of where each hand was left, so landing on
               // Portfolio makes the arm travel to the new stage rather than already be
               // there. Only switch when a wheel actually moved: being thrown to another
               // tab for a booking that changed nothing would be worse than staying put.
-              setSnap((latest) => {
-                if (movedWheel(before, wheelStages(latest))) setTab('portfolio');
-                return latest;
-              });
+              if (movedWheel(before, wheelStages(latest))) setTab('portfolio');
               landingTimer.current = window.setTimeout(() => {
                 landingTimer.current = null;
                 setLanding(false);

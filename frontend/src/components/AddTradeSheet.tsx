@@ -62,8 +62,12 @@ export function AddTradeSheet({
         side,
         qty: Number(qty),
         price: Number(price),
-        // Share commissions do not scale with size, so this is applied whole.
-        fees: settings.stock_fee_per_trade,
+        // Share commissions do not scale with size, so a new fill takes this whole.
+        // An edit keeps what was already recorded: the fee is part of the record, not a
+        // setting to be re-read. Restating it meant fixing a note on the share trade an
+        // assignment books — recorded at zero on purpose — stamped a commission on a fill
+        // that never had one, and moved realized P/L with it.
+        fees: trade ? trade.fees : settings.stock_fee_per_trade,
         executed_at: date,
         note,
       };

@@ -27,14 +27,24 @@ const MONTHS: Record<string, string> = {
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
+/** A real calendar day, or null. Checking the day against 31 alone let February the 31st
+ *  through, and a date that does not exist still sorts and compares against ones that do —
+ *  it lands on the board, ages, and asks to be settled, all without ever having been a day. */
+function calendarDate(year: number, month: number, day: number): string | null {
+  if (!(month >= 1 && month <= 12) || !(day >= 1)) return null;
+  const d = new Date(year, month - 1, day);
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+  return `${year}-${pad(month)}-${pad(day)}`;
+}
+
 /** yymmdd as brokers write an option's expiry -> yyyy-mm-dd. Two-digit years are read as
  *  20xx: these are contracts, and none of them expire in the 1900s. */
 function expandExpiry(yymmdd: string): string | null {
-  const yy = Number(yymmdd.slice(0, 2));
-  const mm = Number(yymmdd.slice(2, 4));
-  const dd = Number(yymmdd.slice(4, 6));
-  if (!(mm >= 1 && mm <= 12) || !(dd >= 1 && dd <= 31)) return null;
-  return `${2000 + yy}-${pad(mm)}-${pad(dd)}`;
+  return calendarDate(
+    2000 + Number(yymmdd.slice(0, 2)),
+    Number(yymmdd.slice(2, 4)),
+    Number(yymmdd.slice(4, 6)),
+  );
 }
 
 /** Read a pasted broker confirmation.
@@ -82,12 +92,15 @@ export function parseConfirmation(text: string): ParsedConfirmation | null {
   if (!Number.isInteger(contracts) || contracts < 1) return null;
 
   // "on Jul 21, 2026" — optional; the sheet falls back to today without it.
+  //
+  // The tail is [A-Za-z]* rather than [a-z]*: a bare JUL always matched, but a spelled-out
+  // JULY did not, because the Y had nowhere to go. A confirmation that shouts its months
+  // then dated every fill today without saying it had failed to read one.
   let filledOn: string | null = null;
-  const when = /\b([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})\b/.exec(s);
+  const when = /\b([A-Za-z]{3})[A-Za-z]*\.?\s+(\d{1,2}),?\s+(\d{4})\b/.exec(s);
   if (when) {
     const mm = MONTHS[when[1].toLowerCase()];
-    const dd = Number(when[2]);
-    if (mm && dd >= 1 && dd <= 31) filledOn = `${when[3]}-${mm}-${pad(dd)}`;
+    if (mm) filledOn = calendarDate(Number(when[3]), Number(mm), Number(when[2]));
   }
 
   return {

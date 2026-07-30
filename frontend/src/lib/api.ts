@@ -103,6 +103,10 @@ export const putMark = (symbol: string, price: number) =>
     method: 'PUT',
     body: JSON.stringify({ price }),
   });
+/** Forget a price, handing the symbol back to the quote pull. The pull refuses to
+ *  overwrite a manual mark, so this is the way out of one. */
+export const dropMark = (symbol: string) =>
+  request<void>(`/api/marks/${encodeURIComponent(symbol)}`, { method: 'DELETE' });
 export const refreshMarks = () =>
   request<Mark[]>('/api/marks/refresh', { method: 'POST' });
 export const exportBackup = () => request<unknown>('/api/export');

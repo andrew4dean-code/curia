@@ -196,6 +196,20 @@ def put_mark(symbol: str, body: MarkIn) -> dict:
         return _mark_out(m)
 
 
+@router.delete("/marks/{symbol}", status_code=204)
+def drop_mark(symbol: str) -> None:
+    """Forget a price, handing the symbol back to the quote pull.
+
+    The only way out of a manual mark, now that the pull refuses to overwrite one."""
+    sym = symbol.strip().upper()
+    with SessionLocal() as s:
+        m = s.get(Mark, sym)
+        if m is None:
+            raise HTTPException(status_code=404, detail="no mark for that symbol")
+        s.delete(m)
+        s.commit()
+
+
 @router.post("/marks/refresh")
 def refresh_marks() -> list[dict]:
     with SessionLocal() as s:
@@ -207,10 +221,17 @@ def refresh_marks() -> list[dict]:
             m = s.get(Mark, sym)
             if m is None:
                 s.add(Mark(symbol=sym, price=price, marked_at=utcnow(), source="auto"))
-            else:
-                m.price = price
-                m.marked_at = utcnow()
-                m.source = "auto"
+                continue
+            # A price set by hand outranks one Yahoo guessed. Andrew types a mark
+            # precisely when the quote is wrong — stale after hours, or a symbol the
+            # feed prices badly — so overwriting it is overwriting the correction. It
+            # used to happen within the same second, because the app refreshes after
+            # every action. Drop the mark to hand the symbol back to the pull.
+            if m.source == "manual":
+                continue
+            m.price = price
+            m.marked_at = utcnow()
+            m.source = "auto"
         s.commit()
         return [_mark_out(m) for m in s.scalars(select(Mark).order_by(Mark.symbol)).all()]
 

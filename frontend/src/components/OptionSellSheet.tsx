@@ -18,6 +18,25 @@ function fmtDate(iso: string): string {
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+/** What this ticket's fee should be once saved.
+ *
+ *  A new sale takes the current setting, worst case and per contract: brokers charge by
+ *  the contract, not the order. An EDIT keeps the rate the position was booked at, because
+ *  a recorded fee is history — re-reading Settings on the update path restated what an old
+ *  position had cost every time the fee changed. The rate still follows the contract count,
+ *  since that is the one field an edit can legitimately correct and the fee is per contract
+ *  by construction. A record with no fee on it stays at nothing.
+ */
+export function recordedFee(
+  option: OptionPosition | null | undefined,
+  contracts: number,
+  currentPerContract: number,
+): number {
+  if (!option) return currentPerContract * contracts;
+  if (!option.contracts) return option.fees;
+  return (option.fees / option.contracts) * contracts;
+}
+
 export function OptionSellSheet({
   expiration,
   option,
@@ -109,8 +128,7 @@ export function OptionSellSheet({
     const draft: OptionDraft = {
       symbol: symbol.trim().toUpperCase(), opt_type: optType, strike: Number(strike),
       expiration: exp, contracts: Number(contracts), premium: Number(premium),
-      // Worst case, and per contract: brokers charge by the contract, not the order.
-      fees: settings.option_fee_per_contract * Number(contracts || 0),
+      fees: recordedFee(option, Number(contracts || 0), settings.option_fee_per_contract),
       opened_at: date, note,
     };
     try {
