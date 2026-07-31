@@ -13,7 +13,7 @@ describe('OptionSellSheet', () => {
     localStorage.clear();
   });
 
-  it('locks the expiration to the tapped week and quotes the take', async () => {
+  it('defaults the expiration to the tapped week and quotes the take', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ id: 12 }), { status: 201 }),
     );
@@ -21,7 +21,7 @@ describe('OptionSellSheet', () => {
     const onDone = vi.fn().mockResolvedValue(undefined);
     render(<OptionSellSheet expiration="2026-08-21" wheels={[]} onDone={onDone} onCancel={vi.fn()} />);
     expect(screen.getByText(/week of Fri Aug 21/)).toBeInTheDocument();
-    expect(screen.queryByLabelText('Expiration')).toBeNull(); // no date field
+    expect(screen.getByLabelText('Expiration')).toHaveValue('2026-08-21'); // a default, not a lock
     fireEvent.change(screen.getByLabelText('Symbol'), { target: { value: 'tqqq' } });
     fireEvent.change(screen.getByLabelText('Strike'), { target: { value: '62' } });
     fireEvent.change(screen.getByLabelText('Contracts'), { target: { value: '2' } });
@@ -32,6 +32,50 @@ describe('OptionSellSheet', () => {
     const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
     expect(body).toMatchObject({ symbol: 'TQQQ', opt_type: 'PUT', expiration: '2026-08-21', strike: 62 });
     expect(onDone.mock.calls[0][0]).toMatchObject({ no: 12, title: 'OPTION TICKET', symbol: 'TQQQ' });
+  });
+
+  /* Sold on a Friday, expiring the Friday after: the board's live row is today, so the
+     tapped line books a same-day expiry unless the sheet lets you say otherwise. */
+  it('books the expiration you change it to, and the title follows its week', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: 14 }), { status: 201 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const onDone = vi.fn().mockResolvedValue(undefined);
+    render(<OptionSellSheet expiration="2026-07-31" wheels={[]} onDone={onDone} onCancel={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('Expiration'), { target: { value: '2026-08-07' } });
+    expect(screen.getByText(/week of Fri Aug 7/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Symbol'), { target: { value: 'TQQQ' } });
+    fireEvent.change(screen.getByLabelText('Strike'), { target: { value: '75' } });
+    fireEvent.change(screen.getByLabelText('Contracts'), { target: { value: '5' } });
+    fireEvent.change(screen.getByLabelText('Premium / share'), { target: { value: '0.5' } });
+    fireEvent.click(screen.getByRole('button', { name: /Sell to open/ }));
+    await waitFor(() => expect(onDone).toHaveBeenCalledOnce());
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.expiration).toBe('2026-08-07');
+    expect(onDone.mock.calls[0][0].lines.join(' ')).toContain('exp Aug 7');
+  });
+
+  it('lets an edit correct a misbooked expiration', async () => {
+    const misbooked = {
+      id: 21, symbol: 'TQQQ', opt_type: 'CALL', strike: 75, expiration: '2026-07-31',
+      contracts: 5, premium: 0.5, fees: 0, opened_at: '2026-07-31', note: '', status: 'OPEN',
+      closed_at: null, buyback_price: 0, close_fees: 0, assigned_trade_id: null,
+    } as never;
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: 21 }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const onDone = vi.fn().mockResolvedValue(undefined);
+    render(
+      <OptionSellSheet option={misbooked} expiration="2026-07-31" wheels={[]} onDone={onDone} onCancel={vi.fn()} />,
+    );
+    expect(screen.getByLabelText('Expiration')).toHaveValue('2026-07-31');
+    fireEvent.change(screen.getByLabelText('Expiration'), { target: { value: '2026-08-07' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
+    await waitFor(() => expect(onDone).toHaveBeenCalledOnce());
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.expiration).toBe('2026-08-07');
   });
 
   it('CALL toggle flips opt_type', () => {

@@ -16,6 +16,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.7.0',
+    date: '2026-07-31',
+    notes: [
+      'The sell sheet now has an Expiration field. It still starts at the week you tapped, but a contract that runs longer — sold on a Friday, expiring the Friday after — can be booked as what it is instead of a same-day expiry.',
+      'Editing an option can correct its expiration, so a contract booked to the wrong week is no longer stuck there.',
+    ],
+  },
+  {
     version: '2.6.0',
     date: '2026-07-30',
     notes: [

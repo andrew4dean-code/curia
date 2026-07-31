@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { createOption, updateOption } from '../lib/api';
+import { weekFridayFor } from '../lib/board';
 import { todayIso } from '../lib/time';
 import { wheelWindowNote } from '../lib/wheelMath';
 import { formatMoney } from '../lib/format';
@@ -61,7 +62,10 @@ export function OptionSellSheet({
   onCancel: () => void;
 }) {
   const symbolOptions = recentSymbols(trades, options);
-  const exp = option ? option.expiration : expiration;
+  /* The tapped line is a default, not a lock. Sold on a Friday, the live row IS today —
+     a contract expiring any later week could only be misbooked, and an edit that cannot
+     touch the expiration could never repair it. */
+  const [exp, setExp] = useState(option ? option.expiration : expiration);
   const [optType, setOptType] = useState<OptionType>(option?.opt_type ?? 'PUT');
   const [symbol, setSymbol] = useState(option?.symbol ?? '');
   const [strike, setStrike] = useState(option ? String(option.strike) : '');
@@ -152,8 +156,8 @@ export function OptionSellSheet({
   return (
     <div className="sheet-backdrop" onClick={onCancel}>
       <form className="sheet" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
-        <h2>{option ? 'Edit option' : `Sell — week of Fri ${fmtDate(exp)}`}</h2>
-        <div className="hero-sub" style={{ marginBottom: 12 }}>expiration set by the line you tapped</div>
+        <h2>{option ? 'Edit option' : `Sell — week of Fri ${fmtDate(weekFridayFor(exp || expiration))}`}</h2>
+        <div className="hero-sub" style={{ marginBottom: 12 }}>expiration follows the line you tapped — change it if your contract runs longer</div>
         <div className="toggle-row">
           <button type="button" className={optType === 'PUT' ? 'on' : ''} onClick={() => { setChosenType(true); setOptType('PUT'); }}>PUT</button>
           <button type="button" className={optType === 'CALL' ? 'on' : ''} onClick={() => { setChosenType(true); setOptType('CALL'); }}>CALL</button>
@@ -173,6 +177,10 @@ export function OptionSellSheet({
         <div className="field">
           <label htmlFor="os-strike">Strike</label>
           <input id="os-strike" type="number" inputMode="decimal" step="any" min="0" value={strike} onChange={(e) => setStrike(e.target.value)} required />
+        </div>
+        <div className="field">
+          <label htmlFor="os-expiration">Expiration</label>
+          <input id="os-expiration" type="date" value={exp} onChange={(e) => setExp(e.target.value)} required />
         </div>
         <div className="field">
           <label htmlFor="os-contracts">Contracts</label>
