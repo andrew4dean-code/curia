@@ -1,5 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { Snapshot } from '../lib/api';
+
+/** Which wheels you have folded shut. Persisted because App remounts this tab on every
+ *  switch, so component state alone forgets the choice the moment you look at Options. */
+const FOLDED_WHEELS_KEY = 'curia-folded-wheels';
 import type { OpenPosition, OptionPosition, Trade, Wheel, WheelSummary } from '../lib/types';
 import { computeOpenPositions, computeUnwheeledPositions } from '../lib/positions';
 import { memberOptions, summarizeWheel } from '../lib/wheelMath';
@@ -49,35 +53,39 @@ export function PortfolioTab({
   justAdded,
 }: TabProps) {
   const [showArchive, setShowArchive] = useState(false);
-  /* Wheels open folded. Each card ran 559px — 69% of the screen — so two of them pushed the
-     book value to y=1225 and made your net worth the third thing on your own portfolio.
-     Folded they are ~80px and the hero is above the fold again.
+  /* Wheels open EXPANDED, and stay that way until you fold one yourself.
 
-     A wheel the ceremony just moved opens itself: App switches to this tab on a change
-     precisely so the dial's hand travels to its new stage, and a folded card has no dial to
-     travel. justAdded already carries the symbol, so no new prop is needed.
+     They shipped folded-by-default to keep the book value above the fold, which mattered
+     when the card ran 559px. In use that was wrong twice over. With a single active wheel
+     there is no density problem to solve, and worse, the open/closed choice lived in
+     component state while App keys the tab wrapper on `tab` — so switching to Options and
+     back UNMOUNTED this component and threw the choice away. A card you had just opened
+     was folded again the next time you looked at it.
 
-     It SEEDS the set rather than being OR-ed into `expanded`. OR-ing meant the prop
-     outranked the user for as long as it was set: clicking "collapse" on the very card the
-     ceremony had just opened did nothing visible and quietly pinned it open instead, and
-     when justAdded cleared at LANDING_MS the card folded itself shut under the reader.
-     Seeded once, the card opens the same way and the toggle owns it from then on. */
-  const [openWheels, setOpenWheels] = useState<Set<number>>(new Set());
-  const seeded = useRef<string | null>(null);
-  useEffect(() => {
-    const symbol = justAdded?.symbol;
-    // Seed once per justAdded symbol. Re-seeding on every render would re-open a card the
-    // reader had just closed, which is the bug in a second costume.
-    if (!symbol || seeded.current === symbol) {
-      if (!symbol) seeded.current = null;
-      return;
+     So: the set records what you FOLDED, not what you opened, and it is persisted. Default
+     open, your choice survives a tab switch, a reload, and a new session. */
+  const [foldedWheels, setFoldedWheels] = useState<Set<number>>(() => {
+    try {
+      const raw = localStorage.getItem(FOLDED_WHEELS_KEY);
+      return new Set<number>(raw ? (JSON.parse(raw) as number[]) : []);
+    } catch {
+      return new Set<number>();
     }
-    seeded.current = symbol;
-    // snap.wheels, not the derived activeWheels array: that one is rebuilt every render and
-    // would re-run this effect continuously.
-    const moved = snap.wheels.filter((w) => w.closed_at === null && w.symbol === symbol).map((w) => w.id);
-    if (moved.length) setOpenWheels((prev) => new Set([...prev, ...moved]));
-  }, [justAdded?.symbol, snap.wheels]);
+  });
+
+  function toggleWheel(id: number) {
+    setFoldedWheels((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      try {
+        localStorage.setItem(FOLDED_WHEELS_KEY, JSON.stringify([...next]));
+      } catch {
+        /* private mode, a full quota — the fold still works for this session. */
+      }
+      return next;
+    });
+  }
 
   const activeWheels = snap.wheels.filter((w) => w.closed_at === null);
   const completedWheels = [...snap.wheels]
@@ -112,15 +120,8 @@ export function PortfolioTab({
             openCall={openCall}
             onComplete={() => onCompleteWheel?.(s)}
             onAbandon={() => onAbandonWheel?.(s.wheel)}
-            expanded={openWheels.has(s.wheel.id)}
-            onToggle={() =>
-              setOpenWheels((prev) => {
-                const next = new Set(prev);
-                if (next.has(s.wheel.id)) next.delete(s.wheel.id);
-                else next.add(s.wheel.id);
-                return next;
-              })
-            }
+            expanded={!foldedWheels.has(s.wheel.id)}
+            onToggle={() => toggleWheel(s.wheel.id)}
           />
         );
       })}

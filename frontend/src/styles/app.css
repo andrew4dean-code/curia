@@ -96,7 +96,10 @@
    premium column now lands, so every amount was printed over a giant ghost digit. Moved down
    behind the actions row, where the card is empty on the right whether or not it holds
    contracts. Still clipped by .wk's overflow, which is what keeps it feeling stamped on. */
-.wk-num { position: absolute; right: 10px; bottom: -14px; font-family: var(--font-display); font-weight: 800; font-size: 64px; line-height: 1; color: var(--ink); opacity: .07; pointer-events: none; }
+/* Fully inside the card. It used to hang 14px below the edge and be cropped by .wk's
+   overflow — meant as "stamped into the corner", read as a rendering fault. Ornament that
+   looks broken is worse than no ornament. */
+.wk-num { position: absolute; right: 12px; bottom: 6px; font-family: var(--font-display); font-weight: 800; font-size: 56px; line-height: .8; color: var(--ink); opacity: .07; pointer-events: none; }
 .wk-label { font-size: 12px; letter-spacing: .07em; color: var(--ink-soft); text-transform: uppercase; }
 .wk.live .wk-label { color: var(--maroon); font-weight: 700; }
 .wk-rule { border-top: 2px solid var(--rule); margin: 8px 0 4px; }

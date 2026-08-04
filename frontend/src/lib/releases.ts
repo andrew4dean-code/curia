@@ -16,6 +16,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.8.1',
+    date: '2026-08-03',
+    notes: [
+      'Wheels stay open. They started folded and, worse, forgot whether you had opened one the moment you looked at another tab — so a card you opened was shut again every time you came back. Open is the default now, and if you do fold one it stays folded through a tab switch, a reload and tomorrow.',
+      'The week number in the corner of each week is no longer cut off by the edge of its card.',
+    ],
+  },
+  {
     version: '2.8.0',
     date: '2026-08-03',
     notes: [
