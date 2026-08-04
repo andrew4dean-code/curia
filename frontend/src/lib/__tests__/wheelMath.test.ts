@@ -271,6 +271,93 @@ describe('the ceiling an open call puts on the figure', () => {
   });
 });
 
+/* The mirror of the ceiling. A sold put is a promise to BUY at the strike, so below it
+   the banked premium is paying for shares you are already down on — and a flat wheel
+   showing premium alone reads as clean profit the whole way down. */
+describe('the obligation an open put puts on the figure', () => {
+  function sellingPuts(puts: { strike: number; contracts: number }[], price: number | null) {
+    const w = wheel({ symbol: 'AAPL', opened_at: '2026-07-01' });
+    // premium 2.00/share, so premiumBanked is 200 x total contracts.
+    const options = puts.map((p) =>
+      opt({
+        symbol: 'AAPL', opt_type: 'PUT', opened_at: '2026-07-10',
+        strike: p.strike, contracts: p.contracts, premium: 2.0, status: 'OPEN',
+      }),
+    );
+    return summarizeWheel(w, [], options, price === null ? [] : [mark('AAPL', price)]);
+  }
+
+  it('costs nothing while the put is out of the money', () => {
+    const s = sellingPuts([{ strike: 50, contracts: 1 }], 55);
+    expect(s.closeToday).toBeCloseTo(200); // the premium, clean
+    expect(s.putExposure!.underwater).toBe(0);
+    expect(s.putExposure!.shares).toBe(100);
+    expect(s.putExposure!.strike).toBeNull();
+  });
+
+  it('eats into the banked premium once the stock falls through the strike', () => {
+    // Sold a 50 put for $2.00, stock now 48. Assigned, you pay 50 for something worth 48.
+    const s = sellingPuts([{ strike: 50, contracts: 1 }], 48);
+    // 200 premium less (50 - 48) * 100 = 200 -> exactly flat, which is the point of the
+    // figure: the premium has been entirely consumed by where the stock went.
+    expect(s.closeToday).toBeCloseTo(0);
+    expect(s.putExposure!.underwater).toBeCloseTo(200);
+    expect(s.putExposure!.strike).toBe(50);
+  });
+
+  it('goes negative when the fall is bigger than the premium', () => {
+    const s = sellingPuts([{ strike: 50, contracts: 1 }], 44);
+    // 200 premium less (50 - 44) * 100 = 600 -> -400
+    expect(s.closeToday).toBeCloseTo(-400);
+    expect(s.putExposure!.underwater).toBeCloseTo(600);
+  });
+
+  it('obliges every put on its own, with no shares to share out between them', () => {
+    // Both are in the money and both must be honoured: 100 sh at 50 AND 200 sh at 55.
+    const s = sellingPuts([{ strike: 50, contracts: 1 }, { strike: 55, contracts: 2 }], 48);
+    expect(s.putExposure!.shares).toBe(300);
+    // (50-48)*100 + (55-48)*200 = 200 + 1400 = 1600
+    expect(s.putExposure!.underwater).toBeCloseTo(1600);
+    expect(s.putExposure!.strike).toBeNull(); // two strikes in the money, name neither
+    expect(s.closeToday).toBeCloseTo(600 - 1600); // premium 3 contracts x 200 = 600
+  });
+
+  it('counts only the put that is in the money when the other is not', () => {
+    const s = sellingPuts([{ strike: 50, contracts: 1 }, { strike: 40, contracts: 1 }], 48);
+    expect(s.putExposure!.underwater).toBeCloseTo(200); // the 40 expires worthless
+    expect(s.putExposure!.strike).toBe(50);
+  });
+
+  it('says nothing without a price', () => {
+    const s = sellingPuts([{ strike: 50, contracts: 1 }], null);
+    expect(s.putExposure).toBeNull();
+    expect(s.closeToday).toBeCloseTo(200); // unchanged, not guessed at
+  });
+
+  it('still obliges you while you are holding shares under a call', () => {
+    // Shares AND a short put at once: the two are independent, and both bite.
+    const w = wheel({ symbol: 'AAPL', opened_at: '2026-07-01' });
+    const trades = [t({ symbol: 'AAPL', side: 'BUY', qty: 100, price: 50, executed_at: '2026-07-01' })];
+    const call = opt({ symbol: 'AAPL', opt_type: 'CALL', opened_at: '2026-07-10', strike: 60, contracts: 1, premium: 1, status: 'OPEN' });
+    const put = opt({ symbol: 'AAPL', opt_type: 'PUT', opened_at: '2026-07-10', strike: 70, contracts: 1, premium: 1, status: 'OPEN' });
+    const s = summarizeWheel(w, trades, [call, put], [mark('AAPL', 65)]);
+    // shares: capped at the 60 call -> (60-50)*100 = 1000; premium 100 + 100 = 200
+    // put at 70 with the stock at 65 is in the money -> (70-65)*100 = 500 owed
+    expect(s.cap!.giveUp).toBeCloseTo(500);
+    expect(s.putExposure!.underwater).toBeCloseTo(500);
+    expect(s.closeToday).toBeCloseTo(1000 + 200 - 500);
+  });
+
+  it('is not obliged by a put that has already settled', () => {
+    const w = wheel({ symbol: 'AAPL', opened_at: '2026-07-01' });
+    // An assigned put is discharged: it produced the shares, it no longer obliges you.
+    const settled = opt({ symbol: 'AAPL', opt_type: 'PUT', opened_at: '2026-07-10', strike: 50, contracts: 1, premium: 2, fees: 0, status: 'EXPIRED' });
+    const s = summarizeWheel(w, [], [settled], [mark('AAPL', 44)]);
+    expect(s.putExposure).toBeNull();
+    expect(s.closeToday).toBeCloseTo(200); // kept in full, however far the stock fell after
+  });
+});
+
 describe('callsSold', () => {
   it('counts member CALL options regardless of status, ignores PUTs and non-members', () => {
     const w = wheel({ symbol: 'AAPL', opened_at: '2026-07-01' });

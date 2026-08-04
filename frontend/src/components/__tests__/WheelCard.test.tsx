@@ -16,6 +16,7 @@ const base: WheelSummary = {
   callsSold: 3,
   weeks: 3,
   cap: null,
+  putExposure: null,
 };
 
 describe('WheelDial', () => {
@@ -152,6 +153,27 @@ describe('WheelCard under an open call', () => {
     expect(screen.getByTestId('wheel-naked-1')).toHaveTextContent(
       '2 contracts with no shares behind them',
     );
+  });
+
+  /* The put mirror: a flat wheel showing banked premium reads as clean profit all the way
+     down, when below the strike that premium is buying shares you are already down on. */
+  it('says what assignment would cost when the stock is under a sold put', () => {
+    card({
+      ...base, stage: 'SELL_PUT', sharesHeld: 0, rawBasis: null, trueBasis: null,
+      closeToday: 0, putExposure: { shares: 100, underwater: 200, strike: 85 },
+    });
+    expect(screen.getByText('If assigned at $85.00')).toBeInTheDocument();
+    // The label names the strike, the line names the price it has fallen to.
+    expect(screen.getByTestId('wheel-underwater-1')).toHaveTextContent('$200.00 under water at $80.00');
+  });
+
+  it('still says banked while the put is out of the money', () => {
+    card({
+      ...base, stage: 'SELL_PUT', sharesHeld: 0, rawBasis: null, trueBasis: null,
+      closeToday: 200, putExposure: { shares: 100, underwater: 0, strike: null },
+    });
+    expect(screen.getByText('Banked this wheel')).toBeInTheDocument();
+    expect(screen.queryByTestId('wheel-underwater-1')).toBeNull();
   });
 
   it('shows the one call it has, and a count once there is more than one', () => {

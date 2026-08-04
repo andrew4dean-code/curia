@@ -276,7 +276,7 @@
 .wheel-giveup { color: var(--gold-label); }
 /* An uncovered contract is not a footnote, it is exposure the figure above does not
    price. Maroon carries that without a whole alert box. */
-.wheel-naked { color: var(--pl-red); }
+.wheel-naked, .wheel-underwater { color: var(--pl-red); }
 .fresh-wheel-panel { display: block; width: 100%; text-align: center; background: var(--parchment-card); border: 2px dashed var(--rule); border-radius: 12px; padding: 22px 16px; margin: 12px 0; font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--maroon); }
 .fresh-wheel-panel small { display: block; font-family: var(--font-mono); font-size: 11px; font-weight: 400; color: var(--ink-soft); margin-top: 6px; }
 .fresh-wheel-crest { display: block; font-size: 34px; margin-bottom: 4px; }

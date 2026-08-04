@@ -1,6 +1,8 @@
 import { computeClosedTrades, openLots } from './fifo';
 import { optionRealizedPl, premiumCollected } from './optionsMath';
-import type { Mark, OptionPosition, Trade, Wheel, WheelCap, WheelStage, WheelSummary } from './types';
+import type {
+  Mark, OptionPosition, Trade, Wheel, WheelCap, WheelPutExposure, WheelStage, WheelSummary,
+} from './types';
 
 const EPS = 1e-9;
 const DAY_MS = 86_400_000;
@@ -77,6 +79,44 @@ export function computeCap(
   };
 }
 
+export function openPuts(options: OptionPosition[]): OptionPosition[] {
+  return options.filter((o) => o.status === 'OPEN' && o.opt_type === 'PUT');
+}
+
+/** Price the obligation the open puts represent.
+ *
+ *  No allocation to do here, unlike the call side: shares are scarce and had to be shared
+ *  out between calls, but every sold put obliges you to buy its own 100 a contract
+ *  regardless of what the others do. So each is simply priced on its own.
+ */
+export function computePutExposure(
+  puts: OptionPosition[],
+  markPrice: number,
+): WheelPutExposure | null {
+  if (puts.length === 0) return null;
+
+  let shares = 0;
+  let underwater = 0;
+  const itmStrikes = new Set<number>();
+
+  for (const p of puts) {
+    const obliged = p.contracts * 100;
+    shares += obliged;
+    // Above the strike the put expires and you keep the premium clean: no exposure.
+    const below = p.strike - markPrice;
+    if (below > EPS) {
+      underwater += below * obliged;
+      itmStrikes.add(p.strike);
+    }
+  }
+
+  return {
+    shares,
+    underwater,
+    strike: itmStrikes.size === 1 ? [...itmStrikes][0] : null,
+  };
+}
+
 // Whole weeks since opened_at (local calendar days), clamped to a minimum of 1.
 function weeksSince(openedAt: string, today: Date): number {
   const [y, m, d] = openedAt.split('-').map(Number);
@@ -132,25 +172,36 @@ export function summarizeWheel(
   let closeToday: number;
   let markMissing = false;
   let cap: WheelCap | null = null;
+  let putExposure: WheelPutExposure | null = null;
   if (stage === 'COMPLETED') {
     // All member options are settled by now (open ones still count their collected premium).
     const realizedPl = computeClosedTrades(members).reduce((s, c) => s + c.realizedPl, 0);
     closeToday = realizedPl + premiumBanked;
-  } else if (sharesHeld > EPS) {
-    const mark = marks.find((m) => m.symbol === w.symbol) ?? null;
-    if (mark) {
-      // Subtracting giveUp from the uncapped figure is the same arithmetic as valuing
-      // each covered share at min(mark, strike), and it keeps the ceiling and the cost
-      // of the ceiling as one number the card can show on its own.
-      cap = computeCap(openCalls(memberOpts), sharesHeld, mark.price);
-      closeToday =
-        (mark.price - (rawBasis as number)) * sharesHeld + premiumBanked - (cap?.giveUp ?? 0);
-    } else {
-      markMissing = true;
-      closeToday = premiumBanked; // share leg valued at rawBasis -> contributes 0
-    }
   } else {
-    closeToday = premiumBanked;
+    const mark = marks.find((m) => m.symbol === w.symbol) ?? null;
+    // A sold put obliges you whether or not you already hold shares, so this is priced
+    // outside the has-shares branch rather than only on a flat wheel.
+    if (mark) putExposure = computePutExposure(openPuts(memberOpts), mark.price);
+    const underwater = putExposure?.underwater ?? 0;
+
+    if (sharesHeld > EPS) {
+      if (mark) {
+        // Subtracting giveUp from the uncapped figure is the same arithmetic as valuing
+        // each covered share at min(mark, strike), and it keeps the ceiling and the cost
+        // of the ceiling as one number the card can show on its own.
+        cap = computeCap(openCalls(memberOpts), sharesHeld, mark.price);
+        closeToday =
+          (mark.price - (rawBasis as number)) * sharesHeld +
+          premiumBanked -
+          (cap?.giveUp ?? 0) -
+          underwater;
+      } else {
+        markMissing = true;
+        closeToday = premiumBanked; // share leg valued at rawBasis -> contributes 0
+      }
+    } else {
+      closeToday = premiumBanked - underwater;
+    }
   }
 
   return {
@@ -165,6 +216,7 @@ export function summarizeWheel(
     callsSold,
     weeks,
     cap,
+    putExposure,
   };
 }
 

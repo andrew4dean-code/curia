@@ -127,6 +127,24 @@ export interface WheelCap {
   strike: number | null;
 }
 
+/** The other half of the same idea as WheelCap.
+ *
+ *  A sold put is a promise to BUY at the strike. Below it you are obliged to pay more
+ *  than the shares are worth, and a wheel sitting on premium alone shows none of that —
+ *  it reads as pure profit right up to the moment it becomes a position you are already
+ *  down on. Unlike calls there is no scarcity to allocate: every put obliges you
+ *  independently, so each one is priced on its own.
+ */
+export interface WheelPutExposure {
+  /** Shares you would have to buy: 100 x contracts, across every open put. */
+  shares: number;
+  /** What assignment would cost you at today's price. Zero while every put is out of
+   *  the money, and while it is zero the figure is untouched. */
+  underwater: number;
+  /** The strike you would be assigned at, or null when more than one is in the money. */
+  strike: number | null;
+}
+
 export interface WheelSummary {
   wheel: Wheel;
   stage: WheelStage;
@@ -141,4 +159,7 @@ export interface WheelSummary {
   weeks: number;
   /** Null when nothing caps the figure: no open calls, no shares, or no price yet. */
   cap: WheelCap | null;
+  /** Null when no put is sold, or there is no price yet. Independent of `cap`: a wheel
+   *  can be holding shares under a call AND short a put at the same time. */
+  putExposure: WheelPutExposure | null;
 }

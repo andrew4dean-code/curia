@@ -16,6 +16,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.10.0',
+    date: '2026-08-04',
+    notes: [
+      'The other half of the same problem. A sold put is a promise to buy at the strike, so once the stock falls through it, the premium you banked is paying for shares you are already down on — but a wheel with no shares yet showed that premium as clean profit the whole way down. It now reads "If assigned at $85", with a line saying what assignment would cost at today\'s price. Above your strike nothing changes.',
+      'A put still obliges you while you are holding shares under a call, so both now count against the same figure rather than only the one that matched the wheel\'s stage.',
+    ],
+  },
+  {
     version: '2.9.0',
     date: '2026-08-04',
     notes: [

@@ -39,7 +39,7 @@ describe('CompleteWheelSheet', () => {
     const summary: WheelSummary = {
       wheel: { id: 9, symbol: 'NVDA', no: 1, opened_at: '2026-05-04', closed_at: null },
       stage: 'CALLED_AWAY', sharesHeld: 0, rawBasis: null, premiumBanked: 1241,
-      trueBasis: null, closeToday: 1241, markMissing: false, callsSold: 7, weeks: 8, cap: null,
+      trueBasis: null, closeToday: 1241, markMissing: false, callsSold: 7, weeks: 8, cap: null, putExposure: null,
     };
     const onDone = vi.fn().mockResolvedValue(undefined);
     render(<CompleteWheelSheet summary={summary} onDone={onDone} onCancel={vi.fn()} />);

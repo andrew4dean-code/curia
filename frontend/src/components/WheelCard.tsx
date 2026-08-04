@@ -39,7 +39,7 @@ export function WheelCard({
   expanded: boolean;
   onToggle: () => void;
 }) {
-  const { wheel, stage, sharesHeld, rawBasis, premiumBanked, trueBasis, closeToday, markMissing, cap } = summary;
+  const { wheel, stage, sharesHeld, rawBasis, premiumBanked, trueBasis, closeToday, markMissing, cap, putExposure } = summary;
   const flat = sharesHeld <= 0;
   const flash = useFlash(closeToday);
 
@@ -48,8 +48,16 @@ export function WheelCard({
      is still "if you closed today". Above one, the shares go at the strike and saying
      "closed today" would be describing a trade you cannot make. */
   const capped = cap != null && cap.giveUp > 0;
+  /* The mirror on the put side. A flat wheel showing banked premium reads as pure profit
+     right up until the stock falls through the strike, at which point the premium is
+     paying for shares you are already down on. */
+  const exposed = putExposure != null && putExposure.underwater > 0;
   const totalLabel = flat
-    ? 'Banked this wheel'
+    ? exposed
+      ? putExposure.strike != null
+        ? `If assigned at ${formatMoney(putExposure.strike)}`
+        : 'If assigned'
+      : 'Banked this wheel'
     : capped
       ? cap.strike != null
         ? `If called away at ${formatMoney(cap.strike)}`
@@ -175,6 +183,15 @@ export function WheelCard({
           <small className="wheel-giveup" data-testid={`wheel-giveup-${wheel.id}`}>
             giving up {formatMoney(cap.giveUp)}{' '}
             {cap.strike != null ? `above ${formatMoney(cap.strike)}` : 'above your strikes'}
+          </small>
+        )}
+        {/* The label names the strike, so this names the price it has fallen to — the two
+            lines together say what assignment costs and how far the stock has gone. */}
+        {exposed && (
+          <small className="wheel-underwater" data-testid={`wheel-underwater-${wheel.id}`}>
+            {formatMoney(putExposure.underwater)} under water
+            {mark ? ` at ${formatMoney(mark.price)}` : ''}
+            {flat ? '' : ` on ${putExposure.shares} sh you would have to buy`}
           </small>
         )}
         {cap != null && cap.nakedContracts > 0 && (
