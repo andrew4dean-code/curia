@@ -104,6 +104,29 @@ export interface Wheel {
 
 export type WheelStage = 'SELL_PUT' | 'ASSIGNED' | 'SELLING_CALLS' | 'CALLED_AWAY' | 'COMPLETED';
 
+/** What an open covered call does to the figure.
+ *
+ *  A call you have sold is a promise to hand shares over at the strike. Valuing those
+ *  shares at today's price while ALSO banking the whole premium counts the same money
+ *  twice: above the strike you cannot both keep the stock's gain and keep the premium.
+ *  Capping a covered share at its strike is arithmetically identical to buying the call
+ *  back at intrinsic value, which is the other honest way to say the same thing.
+ */
+export interface WheelCap {
+  /** Shares actually spoken for by open calls, never more than you hold. */
+  coveredShares: number;
+  /** Contracts with no shares behind them. Nonzero means the position is naked, and
+   *  the cap below deliberately does not pretend to price that risk. */
+  nakedContracts: number;
+  /** What the cap costs at today's price: the money sitting above your strikes. Zero
+   *  while every call is out of the money, which is most of the time — and while it is
+   *  zero the capped figure equals the uncapped one. */
+  giveUp: number;
+  /** The strike doing the capping, or null when more than one distinct strike is in
+   *  the money, because no single number names the ceiling then. */
+  strike: number | null;
+}
+
 export interface WheelSummary {
   wheel: Wheel;
   stage: WheelStage;
@@ -111,8 +134,11 @@ export interface WheelSummary {
   rawBasis: number | null;
   premiumBanked: number;
   trueBasis: number | null;
+  /** Already net of `cap.giveUp` — the ceiling, not the uncapped share move. */
   closeToday: number;
   markMissing: boolean;
   callsSold: number;
   weeks: number;
+  /** Null when nothing caps the figure: no open calls, no shares, or no price yet. */
+  cap: WheelCap | null;
 }

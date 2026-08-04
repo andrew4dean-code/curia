@@ -1,6 +1,6 @@
 import { computeClosedTrades, openLots } from './fifo';
 import { optionRealizedPl, premiumCollected } from './optionsMath';
-import type { Mark, OptionPosition, Trade, Wheel, WheelStage, WheelSummary } from './types';
+import type { Mark, OptionPosition, Trade, Wheel, WheelCap, WheelStage, WheelSummary } from './types';
 
 const EPS = 1e-9;
 const DAY_MS = 86_400_000;
@@ -26,6 +26,55 @@ function sumPremiumBanked(options: OptionPosition[]): number {
     sum += o.status === 'OPEN' ? premiumCollected(o) : (optionRealizedPl(o) ?? 0);
   }
   return sum;
+}
+
+export function openCalls(options: OptionPosition[]): OptionPosition[] {
+  return options.filter((o) => o.status === 'OPEN' && o.opt_type === 'CALL');
+}
+
+/** Price the promise the open calls represent.
+ *
+ *  Shares are answered to the LOWEST strike first: the tightest promise is the one your
+ *  first shares are spoken for by. Contracts beyond the shares you hold cover nothing —
+ *  they are naked, and reported rather than quietly folded into the ceiling, because
+ *  pretending to cap shares that do not exist is the same class of lie as not capping
+ *  at all.
+ */
+export function computeCap(
+  calls: OptionPosition[],
+  sharesHeld: number,
+  markPrice: number,
+): WheelCap | null {
+  if (calls.length === 0 || sharesHeld <= EPS) return null;
+
+  const byStrike = [...calls].sort((a, b) => a.strike - b.strike);
+  let remaining = sharesHeld;
+  let coveredShares = 0;
+  let nakedShares = 0;
+  let giveUp = 0;
+  const itmStrikes = new Set<number>();
+
+  for (const c of byStrike) {
+    const wanted = c.contracts * 100;
+    const covered = Math.min(wanted, Math.max(0, remaining));
+    nakedShares += wanted - covered;
+    remaining -= covered;
+    coveredShares += covered;
+
+    // Out of the money, the call expires and the shares are yours at market: no cap.
+    const above = markPrice - c.strike;
+    if (above > EPS && covered > EPS) {
+      giveUp += above * covered;
+      itmStrikes.add(c.strike);
+    }
+  }
+
+  return {
+    coveredShares,
+    nakedContracts: nakedShares / 100,
+    giveUp,
+    strike: itmStrikes.size === 1 ? [...itmStrikes][0] : null,
+  };
 }
 
 // Whole weeks since opened_at (local calendar days), clamped to a minimum of 1.
@@ -82,6 +131,7 @@ export function summarizeWheel(
 
   let closeToday: number;
   let markMissing = false;
+  let cap: WheelCap | null = null;
   if (stage === 'COMPLETED') {
     // All member options are settled by now (open ones still count their collected premium).
     const realizedPl = computeClosedTrades(members).reduce((s, c) => s + c.realizedPl, 0);
@@ -89,7 +139,12 @@ export function summarizeWheel(
   } else if (sharesHeld > EPS) {
     const mark = marks.find((m) => m.symbol === w.symbol) ?? null;
     if (mark) {
-      closeToday = (mark.price - (rawBasis as number)) * sharesHeld + premiumBanked;
+      // Subtracting giveUp from the uncapped figure is the same arithmetic as valuing
+      // each covered share at min(mark, strike), and it keeps the ceiling and the cost
+      // of the ceiling as one number the card can show on its own.
+      cap = computeCap(openCalls(memberOpts), sharesHeld, mark.price);
+      closeToday =
+        (mark.price - (rawBasis as number)) * sharesHeld + premiumBanked - (cap?.giveUp ?? 0);
     } else {
       markMissing = true;
       closeToday = premiumBanked; // share leg valued at rawBasis -> contributes 0
@@ -109,6 +164,7 @@ export function summarizeWheel(
     markMissing,
     callsSold,
     weeks,
+    cap,
   };
 }
 

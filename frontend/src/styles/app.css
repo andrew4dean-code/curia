@@ -270,6 +270,13 @@
 .wheel-total { text-align: center; margin: 12px 0 10px; padding-top: 10px; border-top: 3px double var(--rule); }
 .wheel-total b { display: block; font-size: 10px; letter-spacing: .1em; color: var(--gold-label); text-transform: uppercase; font-weight: 400; }
 .wheel-total-amount { font-family: var(--font-display); font-size: 30px; font-weight: 800; margin-top: 2px; }
+/* The lines under the figure qualify it, so they read as a footnote to the number and
+   never compete with it. Block, because two of them can be on screen at once. */
+.wheel-total small { display: block; font-family: var(--font-mono); font-size: 11px; line-height: 1.45; color: var(--ink-soft); margin-top: 4px; }
+.wheel-giveup { color: var(--gold-label); }
+/* An uncovered contract is not a footnote, it is exposure the figure above does not
+   price. Maroon carries that without a whole alert box. */
+.wheel-naked { color: var(--pl-red); }
 .fresh-wheel-panel { display: block; width: 100%; text-align: center; background: var(--parchment-card); border: 2px dashed var(--rule); border-radius: 12px; padding: 22px 16px; margin: 12px 0; font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--maroon); }
 .fresh-wheel-panel small { display: block; font-family: var(--font-mono); font-size: 11px; font-weight: 400; color: var(--ink-soft); margin-top: 6px; }
 .fresh-wheel-crest { display: block; font-size: 34px; margin-bottom: 4px; }

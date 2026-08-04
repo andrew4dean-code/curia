@@ -23,7 +23,7 @@ const STAGE_WORDS: Record<string, string> = {
 export function WheelCard({
   summary,
   mark,
-  openCall,
+  openCalls,
   onComplete,
   onAbandon,
   expanded,
@@ -31,15 +31,30 @@ export function WheelCard({
 }: {
   summary: WheelSummary;
   mark: Mark | null;
-  openCall: OptionPosition | null;
+  /** Every open call on the wheel, not just the first. Two strikes on one symbol is a
+   *  real position, and showing one of them names the wrong ceiling. */
+  openCalls: OptionPosition[];
   onComplete: () => void;
   onAbandon: () => void;
   expanded: boolean;
   onToggle: () => void;
 }) {
-  const { wheel, stage, sharesHeld, rawBasis, premiumBanked, trueBasis, closeToday, markMissing } = summary;
+  const { wheel, stage, sharesHeld, rawBasis, premiumBanked, trueBasis, closeToday, markMissing, cap } = summary;
   const flat = sharesHeld <= 0;
   const flash = useFlash(closeToday);
+
+  /* The figure is always the ceiling. What changes is whether the ceiling is binding:
+     below every strike the calls expire and the cap costs nothing, so the honest label
+     is still "if you closed today". Above one, the shares go at the strike and saying
+     "closed today" would be describing a trade you cannot make. */
+  const capped = cap != null && cap.giveUp > 0;
+  const totalLabel = flat
+    ? 'Banked this wheel'
+    : capped
+      ? cap.strike != null
+        ? `If called away at ${formatMoney(cap.strike)}`
+        : 'If called away'
+      : 'If you closed today';
 
   /* The border is drawn on a key rather than a boolean: a second sweep arriving while the
      first ornament is still drying has to restart the CSS animations, and re-rendering
@@ -79,10 +94,13 @@ export function WheelCard({
             {wheel.symbol}
             {!flat && rawBasis != null && <span className="wheel-card-sh"> · {sharesHeld} sh</span>}
           </div>
-          {expanded && openCall && (
+          {expanded && openCalls.length === 1 && (
             <span className="wheel-card-tag">
-              CC ${openCall.strike} · exp {expiryLabel(openCall.expiration)}
+              CC ${openCalls[0].strike} · exp {expiryLabel(openCalls[0].expiration)}
             </span>
+          )}
+          {expanded && openCalls.length > 1 && (
+            <span className="wheel-card-tag">{openCalls.length} calls out</span>
           )}
           {/* Folded, the card is a one-line summary: the figure the wheel exists to produce
               sits on the title line, because that is the whole reason to glance at it. */}
@@ -146,10 +164,25 @@ export function WheelCard({
         </div>
       )}
       <div className="wheel-total">
-        <b>{flat ? 'Banked this wheel' : 'If you closed today'}</b>
+        <b>{totalLabel}</b>
         <div className={`wheel-total-amount ${flash}`} style={{ color: plColor(closeToday) }}>
           <Odometer value={formatSignedMoney(closeToday)} speed="detail" dataTestid={`wheel-total-${wheel.id}`} />
         </div>
+        {/* The ceiling alone hides how far the stock has run past it. This line is the
+            difference between the two, so the cap is visible as a cost and not as a
+            figure that has mysteriously stopped moving. */}
+        {capped && (
+          <small className="wheel-giveup" data-testid={`wheel-giveup-${wheel.id}`}>
+            giving up {formatMoney(cap.giveUp)}{' '}
+            {cap.strike != null ? `above ${formatMoney(cap.strike)}` : 'above your strikes'}
+          </small>
+        )}
+        {cap != null && cap.nakedContracts > 0 && (
+          <small className="wheel-naked" data-testid={`wheel-naked-${wheel.id}`}>
+            {cap.nakedContracts} contract{cap.nakedContracts === 1 ? '' : 's'} with no shares behind{' '}
+            {cap.nakedContracts === 1 ? 'it' : 'them'} — not in the figure above
+          </small>
+        )}
         {markMissing && !flat && <small>no current price — share leg valued at raw basis</small>}
       </div>
       {stage === 'CALLED_AWAY' && (

@@ -6,7 +6,7 @@ import type { Snapshot } from '../lib/api';
 const FOLDED_WHEELS_KEY = 'curia-folded-wheels';
 import type { OpenPosition, OptionPosition, Trade, Wheel, WheelSummary } from '../lib/types';
 import { computeOpenPositions, computeUnwheeledPositions } from '../lib/positions';
-import { memberOptions, summarizeWheel } from '../lib/wheelMath';
+import { memberOptions, openCalls, summarizeWheel } from '../lib/wheelMath';
 import { optionRealizedPl } from '../lib/optionsMath';
 import { WheelCard } from './WheelCard';
 import { Odometer } from './Odometer';
@@ -108,16 +108,16 @@ export function PortfolioTab({
   return (
     <div>
       {summaries.map((s) => {
-        const openCall =
-          memberOptions(s.wheel, snap.options).find(
-            (o) => o.status === 'OPEN' && o.opt_type === 'CALL',
-          ) ?? null;
+        // Every open call, not the first one found: the cap is set by all of them, and
+        // a card naming one strike while a second is in the money reads as a promise
+        // the position does not make.
+        const calls = openCalls(memberOptions(s.wheel, snap.options));
         return (
           <WheelCard
             key={s.wheel.id}
             summary={s}
             mark={snap.marks.find((m) => m.symbol === s.wheel.symbol) ?? null}
-            openCall={openCall}
+            openCalls={calls}
             onComplete={() => onCompleteWheel?.(s)}
             onAbandon={() => onAbandonWheel?.(s.wheel)}
             expanded={!foldedWheels.has(s.wheel.id)}

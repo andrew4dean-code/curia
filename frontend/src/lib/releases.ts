@@ -16,6 +16,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.9.0',
+    date: '2026-08-04',
+    notes: [
+      'A wheel with calls sold against it now shows what you could actually take. Selling a call is a promise to hand the shares over at the strike, so once the price is above it, the rest is not yours — but the figure was counting the stock\'s full gain AND the whole premium, which is the same money twice. It reads "If called away at $75" now, and below your strike nothing has changed.',
+      'Under that figure, a line says what the ceiling is costing you at today\'s price. A capped number that simply stops climbing looks broken; this says why it stopped.',
+      'A wheel with two calls out at different strikes only ever looked at the first one, so the card could name a ceiling the position did not have. It accounts for all of them now. Contracts sold with no shares behind them are called out on their own line, because no ceiling can be worked out for stock you do not hold.',
+    ],
+  },
+  {
     version: '2.8.2',
     date: '2026-08-04',
     notes: [

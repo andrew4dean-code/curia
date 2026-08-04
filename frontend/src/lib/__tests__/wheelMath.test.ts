@@ -122,7 +122,12 @@ describe('closeToday', () => {
     const w = wheel({ symbol: 'AAPL', opened_at: '2026-07-01' });
     const trades = [t({ symbol: 'AAPL', side: 'BUY', qty: 100, price: 50, fees: 5, executed_at: '2026-07-01' })];
     const settledPut = opt({ symbol: 'AAPL', opt_type: 'PUT', opened_at: '2026-07-01', premium: 1.0, contracts: 1, fees: 2, status: 'ASSIGNED' });
-    const openCall = opt({ symbol: 'AAPL', opt_type: 'CALL', opened_at: '2026-07-15', premium: 0.8, contracts: 1, status: 'OPEN' });
+    // strike 55 is deliberate: the mark below is 53, so this call is out of the money and
+    // caps nothing, which is what these two cases were always testing. It used to carry
+    // the opt() default of strike 0 — a call to hand 100 shares over for nothing — and
+    // once an open call actually constrains the figure, that fixture stops meaning what
+    // it says.
+    const openCall = opt({ symbol: 'AAPL', opt_type: 'CALL', opened_at: '2026-07-15', strike: 55, premium: 0.8, contracts: 1, status: 'OPEN' });
     return { w, trades, options: [settledPut, openCall] };
   }
   // premiumBanked = ASSIGNED put (1.00*100*1 - fees 2 = 98) + open call (0.80*100*1 = 80) = 178
@@ -145,6 +150,124 @@ describe('closeToday', () => {
     // share leg valued at rawBasis => (rawBasis - rawBasis) * 100 = 0, so closeToday = premiumBanked = 178
     expect(s.closeToday).toBeCloseTo(178);
     expect(s.markMissing).toBe(true);
+    expect(s.cap).toBeNull(); // no price, so nothing can be said about a ceiling
+  });
+});
+
+/* A sold call is a promise to deliver shares at the strike. Valuing those shares at
+   today's price while also banking the whole premium spends the same money twice, and
+   the figure only lies once the stock is above the strike — which is exactly when you
+   would be looking at it. Every case here fixes the raw basis at 50 and varies only the
+   strike, the contract count and the price. */
+describe('the ceiling an open call puts on the figure', () => {
+  function sellingCalls(
+    shares: number,
+    calls: { strike: number; contracts: number }[],
+    price: number | null,
+  ) {
+    const w = wheel({ symbol: 'AAPL', opened_at: '2026-07-01' });
+    const trades = [t({ symbol: 'AAPL', side: 'BUY', qty: shares, price: 50, executed_at: '2026-07-01' })];
+    // premium 1.00/share throughout, so premiumBanked is just 100 x total contracts.
+    const options = calls.map((c) =>
+      opt({
+        symbol: 'AAPL', opt_type: 'CALL', opened_at: '2026-07-10',
+        strike: c.strike, contracts: c.contracts, premium: 1.0, status: 'OPEN',
+      }),
+    );
+    return summarizeWheel(w, trades, options, price === null ? [] : [mark('AAPL', price)]);
+  }
+
+  it('costs nothing while the call is out of the money', () => {
+    // 200 sh, 2 contracts @ 60, price 55. The call expires, the shares stay yours.
+    const s = sellingCalls(200, [{ strike: 60, contracts: 2 }], 55);
+    // (55 - 50) * 200 + 200 premium = 1200, uncapped, because the ceiling is above the price
+    expect(s.closeToday).toBeCloseTo(1200);
+    expect(s.cap!.giveUp).toBe(0);
+    expect(s.cap!.coveredShares).toBe(200);
+    expect(s.cap!.strike).toBeNull(); // nothing in the money to name
+  });
+
+  it('caps the shares at the strike once the price passes it', () => {
+    // 200 sh, 2 contracts @ 60, price 65.
+    const s = sellingCalls(200, [{ strike: 60, contracts: 2 }], 65);
+    // Uncapped this reads (65 - 50) * 200 + 200 = 3200, which you cannot collect: the
+    // shares go at 60. Called away: (60 - 50) * 200 + 200 premium = 2200.
+    expect(s.closeToday).toBeCloseTo(2200);
+    expect(s.cap!.giveUp).toBeCloseTo(1000); // (65 - 60) * 200, the money above the strike
+    expect(s.cap!.strike).toBe(60);
+  });
+
+  it('caps only the shares actually covered, leaving the rest at the market', () => {
+    // 500 sh but only 3 contracts sold: 300 are spoken for, 200 are free to run.
+    const s = sellingCalls(500, [{ strike: 60, contracts: 3 }], 65);
+    // 300 called at 60 = 3000, 200 free at 65 = 3000, + 300 premium = 6300
+    expect(s.closeToday).toBeCloseTo(6300);
+    expect(s.cap!.coveredShares).toBe(300);
+    expect(s.cap!.giveUp).toBeCloseTo(1500); // (65 - 60) * 300 only
+    expect(s.cap!.nakedContracts).toBe(0);
+  });
+
+  it('sums the give-up across two strikes and names neither when both are in the money', () => {
+    const s = sellingCalls(200, [{ strike: 55, contracts: 1 }, { strike: 60, contracts: 1 }], 65);
+    // 100 called at 55 = 500, 100 called at 60 = 1000, + 200 premium = 1700
+    expect(s.closeToday).toBeCloseTo(1700);
+    expect(s.cap!.giveUp).toBeCloseTo(1500); // (65-55)*100 + (65-60)*100
+    // No single figure is the ceiling here, so the card must not print one.
+    expect(s.cap!.strike).toBeNull();
+  });
+
+  it('names the one strike that is in the money when the other is not', () => {
+    const s = sellingCalls(200, [{ strike: 55, contracts: 1 }, { strike: 80, contracts: 1 }], 60);
+    // (60 - 50) * 200 + 200 = 2200 uncapped, less (60 - 55) * 100 for the 55s only
+    expect(s.closeToday).toBeCloseTo(1700);
+    expect(s.cap!.giveUp).toBeCloseTo(500);
+    expect(s.cap!.strike).toBe(55);
+  });
+
+  it('answers the lowest strike first, because that is the tightest promise', () => {
+    // 100 shares against two contracts: only one can be covered. The 55 binds, not the 80.
+    const s = sellingCalls(100, [{ strike: 80, contracts: 1 }, { strike: 55, contracts: 1 }], 65);
+    expect(s.cap!.strike).toBe(55);
+    expect(s.cap!.coveredShares).toBe(100);
+    expect(s.cap!.giveUp).toBeCloseTo(1000); // (65 - 55) * 100
+    // (65 - 50) * 100 + 200 premium = 1700, less 1000
+    expect(s.closeToday).toBeCloseTo(700);
+  });
+
+  it('reports contracts with no shares behind them instead of capping shares you do not hold', () => {
+    // 3 contracts against 100 shares: 2 of them are naked, and no ceiling can be
+    // computed for stock that is not there.
+    const s = sellingCalls(100, [{ strike: 55, contracts: 3 }], 65);
+    expect(s.cap!.coveredShares).toBe(100);
+    expect(s.cap!.nakedContracts).toBe(2);
+    expect(s.cap!.giveUp).toBeCloseTo(1000); // (65 - 55) * 100, not * 300
+    // (65 - 50) * 100 + 300 premium = 1800, less 1000
+    expect(s.closeToday).toBeCloseTo(800);
+  });
+
+  it('is not capped by a call that has already settled', () => {
+    const w = wheel({ symbol: 'AAPL', opened_at: '2026-07-01' });
+    const trades = [t({ symbol: 'AAPL', side: 'BUY', qty: 100, price: 50, executed_at: '2026-07-01' })];
+    const settled = opt({ symbol: 'AAPL', opt_type: 'CALL', opened_at: '2026-07-10', strike: 55, contracts: 1, premium: 1, status: 'EXPIRED' });
+    const s = summarizeWheel(w, trades, [settled], [mark('AAPL', 65)]);
+    expect(s.cap).toBeNull(); // the promise is discharged; the shares are unencumbered
+    expect(s.closeToday).toBeCloseTo(1600); // (65 - 50) * 100 + 100 premium
+  });
+
+  it('is not capped by an open put', () => {
+    const w = wheel({ symbol: 'AAPL', opened_at: '2026-07-01' });
+    const trades = [t({ symbol: 'AAPL', side: 'BUY', qty: 100, price: 50, executed_at: '2026-07-01' })];
+    const put = opt({ symbol: 'AAPL', opt_type: 'PUT', opened_at: '2026-07-10', strike: 55, contracts: 1, premium: 1, status: 'OPEN' });
+    const s = summarizeWheel(w, trades, [put], [mark('AAPL', 65)]);
+    expect(s.cap).toBeNull(); // a short put obliges you to BUY; it puts no lid on shares held
+  });
+
+  it('has no ceiling to report on a flat wheel', () => {
+    const w = wheel({ symbol: 'AAPL', opened_at: '2026-07-01' });
+    const openCall = opt({ symbol: 'AAPL', opt_type: 'CALL', opened_at: '2026-07-10', strike: 55, contracts: 1, premium: 1, status: 'OPEN' });
+    const s = summarizeWheel(w, [], [openCall], [mark('AAPL', 65)]);
+    expect(s.sharesHeld).toBe(0);
+    expect(s.cap).toBeNull();
   });
 });
 
