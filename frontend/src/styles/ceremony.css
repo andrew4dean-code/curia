@@ -855,11 +855,16 @@
   70%  { opacity: 1; transform: rotate(-9deg) scale(.96); }
   100% { opacity: .92; transform: rotate(-12deg) scale(1); }
 }
-/* On the blow, not 186ms after it: the swing bottoms out at 420, so the paper answers at 420. */
-.settle-verdict .settle-ticket { animation: ticket-jolt .3s .42s cubic-bezier(.36,.07,.19,.97) both; }
+/* On the blow, not 186ms after it. Keyed off the stage the component is actually in rather
+   than a matching CSS delay: a hardcoded delay here is a SECOND clock, and the two drift the
+   moment either side is retimed — which is exactly how the count came to be cut off. */
+.settle-verdict[data-stage='hit'] .settle-ticket,
+.settle-verdict[data-stage='count'] .settle-ticket { animation: ticket-jolt .3s cubic-bezier(.36,.07,.19,.97) both; }
 @keyframes ticket-jolt { 0%, 100% { transform: translateY(0); } 22% { transform: translateY(7px) rotate(.6deg); } 55% { transform: translateY(-3px) rotate(-.3deg); } }
-.settle-amount { margin-top: 10px; text-align: center; font-size: 30px; color: var(--stamp);
-  animation: amount-rise .4s .58s cubic-bezier(.3,1.4,.5,1) both; }
+/* Also keyed off the stage, for the same reason as the jolt: the figure rises exactly when
+   the component releases the count, not on a delay that happens to be near it today. */
+.settle-amount { margin-top: 10px; text-align: center; font-size: 30px; color: var(--stamp); opacity: 0; }
+.settle-verdict[data-stage='count'] .settle-amount { animation: amount-rise .4s cubic-bezier(.3,1.4,.5,1) both; }
 @keyframes amount-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ---- the exchange: assigned ---- */
@@ -939,17 +944,44 @@
   opacity: .85; clip-path: inset(0 100% 0 0); animation: xc-frame-draw .5s 1.15s cubic-bezier(.35,.8,.3,1) both; }
 @keyframes xc-frame-draw { to { clip-path: inset(0 0 0 0); } }
 
-/* the sleeve reacts to receiving something — the old one never moved at all */
+/* The sleeve arrives, then reacts to receiving something.
+   ONE animation, not two. Declaring `xc-sleeve-in ... both, xc-sleeve-take ... both` put two
+   animations on one element that both animate `transform`, and the later name in the list
+   wins for a shared property — including during its own delay, because `both` fills
+   backwards with its 0% keyframe. So xc-sleeve-take pinned translateY(0) from the first
+   frame and the rise never rendered: the sleeve only ever cross-faded in place. Two
+   animations on one element must not touch the same property; a test now enforces that.
+   Percentages are over the 970ms from 1.95s to 2.92s: 35% = the rise landing at 2.29s,
+   69% = the take beginning at 2.62s, 83% = its low point. */
 .xc-sleeve { position: absolute; left: 56px; right: 56px; top: 266px; height: 52px;
   border-radius: 5px 5px 3px 3px; background: linear-gradient(var(--parchment) 0%, var(--parchment-card) 60%);
   border: 1px solid var(--rule); box-shadow: 0 -3px 10px rgba(46,40,32,.18); z-index: 3;
-  animation: xc-sleeve-in .34s 1.95s cubic-bezier(.3,.9,.35,1) both, xc-sleeve-take .3s 2.62s ease-out both; }
-@keyframes xc-sleeve-in { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-@keyframes xc-sleeve-take { 0%, 100% { transform: translateY(0); } 45% { transform: translateY(-3px); } }
+  animation: xc-sleeve .97s 1.95s both; }
+@keyframes xc-sleeve {
+  0%   { transform: translateY(16px); opacity: 0; animation-timing-function: cubic-bezier(.3,.9,.35,1); }
+  35%  { transform: translateY(0); opacity: 1; animation-timing-function: linear; }
+  69%  { transform: translateY(0); animation-timing-function: ease-out; }
+  83%  { transform: translateY(-3px); animation-timing-function: ease-out; }
+  100% { transform: translateY(0); }
+}
 .xc-filed { position: absolute; left: 0; right: 0; top: 326px; text-align: center;
   font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
   color: var(--ink-soft); animation: xc-verdict-in .4s 2.95s ease-out both; }
+/* --stamp is maroon on tone 'assign'; before this the variable was set for a branch that
+   rendered nothing reading it. */
+.xc-kept { color: var(--stamp); font-weight: 700; }
 
-/* The veil lets go with the ceremony, not 333ms before it. */
-.settle-exchange { animation: xc-veil-out .5s 2.9s ease-out both; }
-@keyframes xc-veil-out { to { background: rgba(31,27,18,0); } }
+/* The veil, whole: in at the start, out with the ceremony rather than 333ms before it.
+   `animation` is a SHORTHAND — this rule sits on the same element as .ceremony (line 5) at
+   equal specificity and 950 lines later, so declaring only the fade-out here replaced
+   ceremony-in wholesale and the assign backdrop slammed straight to 55% while every other
+   ceremony faded up. Adding it back as a second name in the list would not have worked
+   either: both animate `background`, and the later one's backwards fill wins through its own
+   delay. One keyframe owns the property for the whole 3.4s. 8.8% = 300ms in, 85% = 2.9s. */
+.settle-exchange { animation: xc-veil 3.4s both; }
+@keyframes xc-veil {
+  0%    { background: rgba(31,27,18,0); animation-timing-function: ease-out; }
+  8.8%  { background: rgba(31,27,18,.55); animation-timing-function: linear; }
+  85%   { background: rgba(31,27,18,.55); animation-timing-function: ease-out; }
+  100%  { background: rgba(31,27,18,0); }
+}

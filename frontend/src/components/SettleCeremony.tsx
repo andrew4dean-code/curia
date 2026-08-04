@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Odometer } from './Odometer';
+import { DURATION_MS, Odometer } from './Odometer';
 
 /** The two sides of an assignment. Assignment is not a verdict on a trade — it is a
  *  conversion, and the ceremony says so by moving both halves at once: what left goes one
@@ -36,12 +36,21 @@ export interface SettleData {
 type VerdictStage = 'swing' | 'hit' | 'count';
 type ExchangeStage = 'close' | 'swap' | 'settled' | 'file';
 
-/** Verdict: the stamp lands at 420 and the paper answers ON the impact. It used to jolt at
- *  620 — 186ms after the stamp had already bottomed out — so the reaction read as unrelated
- *  to the blow. Ends at 2400, not 3800: the old tail held a byte-identical frame for 1.6s. */
-const VERDICT_MS = { hit: 420, count: 700, done: 2400 };
-/** Exchange: contract closes, the two sides cross, the certificate is filed. 3400, not 6400. */
-const EXCHANGE_MS = { swap: 620, settled: 1700, file: 2340, done: 3400 };
+/** Verdict: the stamp lands at 420 and the paper answers ON the impact — it used to jolt at
+ *  620, 186ms after the stamp had already bottomed out, so the reaction read as unrelated to
+ *  the blow.
+ *
+ *  `done` is DERIVED, not chosen. Cutting the old 3800 tail (which held a byte-identical
+ *  frame for 1.6s) down to a flat 2400 left the figure only 1700ms of the 2200 its count
+ *  needs, so every expiry and buyback tore the overlay down at ~96% and the last thing on
+ *  screen was the wrong number. The count's own duration is the floor now, plus a beat to
+ *  read the landed figure. Change DURATION_MS.hero and this follows; a test asserts it. */
+export const VERDICT_MS = { hit: 420, count: 700 };
+export const VERDICT_HOLD_MS = 260;
+export const VERDICT_DONE_MS = VERDICT_MS.count + DURATION_MS.hero + VERDICT_HOLD_MS;
+/** Exchange: contract closes, the two sides cross, the certificate is filed. 3400, not 6400.
+ *  Nothing counts on this branch, so it owes the odometer nothing. */
+export const EXCHANGE_MS = { swap: 620, settled: 1700, file: 2340, done: 3400 };
 
 export function SettleCeremony({ data, onDone }: { data: SettleData; onDone: () => void }) {
   const isExchange = !!data.exchange;
@@ -59,7 +68,7 @@ export function SettleCeremony({ data, onDone }: { data: SettleData; onDone: () 
     } else {
       at(VERDICT_MS.hit, () => setStage('hit'));
       at(VERDICT_MS.count, () => setStage('count'));
-      at(VERDICT_MS.done, finish);
+      at(VERDICT_DONE_MS, finish);
     }
     const t = timers.current;
     return () => t.forEach(clearTimeout);
@@ -105,7 +114,12 @@ export function SettleCeremony({ data, onDone }: { data: SettleData; onDone: () 
             </div>
           </div>
           <div className="xc-sleeve" aria-hidden="true" />
-          <div className="xc-filed">{x.filedTo}</div>
+          {/* The premium kept. SettleSheet builds `amount` for every outcome, but the
+              exchange had no place for it, so an assignment was the one settle that never
+              told you what the contract earned. */}
+          <div className="xc-filed">
+            {x.filedTo} · kept <span className="xc-kept" data-testid="settle-amount">{data.amount}</span>
+          </div>
         </div>
       </div>
     );

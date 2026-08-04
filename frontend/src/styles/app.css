@@ -52,7 +52,10 @@
    248px of the 251px left beside the box and wrapped, leaving that one row taller than
    its neighbours. The wording earns its keep — a worst-case fee is not your real one — so
    the type gives way, not the words. */
-.field-inline label { flex: 1; min-width: 0; font-size: 10px; line-height: 1.35; }
+/* .field.field-inline, not .field-inline: `.field label` is declared two lines below this
+   at the same specificity, so at (0,1,1) it won on source order and the 10px never applied
+   — the declaration this comment justifies was dead from the day it was written. */
+.field.field-inline label { flex: 1; min-width: 0; font-size: 10px; line-height: 1.35; }
 .field-inline input { flex: none; width: 96px; text-align: right; font-variant-numeric: tabular-nums; }
 .field label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--gold-label); }
 .field input, .field select { font-family: var(--font-mono); font-size: 16px; padding: 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--parchment); color: var(--ink); }
@@ -146,7 +149,11 @@
    rather than the whole line turning green and outshouting the live one above it. */
 .wk-row.settled .wk-row-what { color: var(--ink-soft); }
 .wk-tag { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--gold-label); }
-.wk-todo { display: inline-block; margin-left: 8px; padding: 2px 7px; border: 1px solid var(--maroon); border-radius: 999px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; color: var(--maroon); white-space: nowrap; }
+/* No margin-left: it used to sit inline after the contract description inside the old chip,
+   where 8px was the gap. It lives in .wk-row-meta now — its own grid row, with its own gap —
+   so that 8px only pushed the row's second line right of the first, ragging the left edge
+   the .wk-row grid exists to keep straight. */
+.wk-todo { padding: 2px 7px; border: 1px solid var(--maroon); border-radius: 999px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; color: var(--maroon); white-space: nowrap; }
 .wk-quiet { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); font-style: italic; }
 .wk-quiet-undo { min-height: 44px; padding: 0 6px; background: none; border: none; font-family: var(--font-mono); font-size: 13px; color: var(--gold-label); text-decoration: underline; }
 .wk:not(.past) .wk-quiet-undo:active { color: var(--maroon); }

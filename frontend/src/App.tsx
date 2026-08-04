@@ -403,7 +403,12 @@ export default function App() {
               // arm travel to its new stage rather than already be there — and the book
               // value rolls on arrival for the far commoner case of a plain stock fill.
               // A booking that moved nothing still leaves you where you were.
-              if (portfolioFigures(latest) !== before) setTab('portfolio');
+              //
+              // `latest === null` means the refresh FAILED, not that the books are empty.
+              // portfolioFigures(null) is '', which no real snapshot can equal, so comparing
+              // it would throw you to Portfolio on every dropped connection — to look at
+              // pre-booking figures under an offline banner. Learning nothing moves nothing.
+              if (latest && portfolioFigures(latest) !== before) setTab('portfolio');
               landingTimer.current = window.setTimeout(() => {
                 landingTimer.current = null;
                 setLanding(false);

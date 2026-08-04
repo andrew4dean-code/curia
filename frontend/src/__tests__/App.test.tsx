@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App, { LANDING_MS, portfolioFigures, wheelStages } from '../App';
+import { VERDICT_DONE_MS, VERDICT_MS } from '../components/SettleCeremony';
 import { DURATION_MS } from '../components/Odometer';
 // @ts-expect-error -- no @types/node in this project.
 import { readFileSync } from 'node:fs';
@@ -35,15 +36,19 @@ describe('landing window covers the count it wraps', () => {
     ).toBeGreaterThan(slowestCount);
   });
 
-  it('leaves the settle ceremony room to finish counting before the certificate', () => {
-    // SettleCeremony runs at scale 1 (landing is false during it): the count is released
-    // at its 'count' stage and the certificate covers the figure when it arrives.
-    const COUNT_STAGE_MS = 1250;
-    const CERTIFICATE_MS = 3800;
+  /* This guard existed before and went vacuous: it hardcoded COUNT_STAGE_MS = 1250 and
+     CERTIFICATE_MS = 3800 as local constants, and when the ceremony was retimed those two
+     numbers were deleted from the component while the test kept asserting on them. It stayed
+     green against values that existed nowhere, while the real ceremony tore its figure down
+     at 96% of the way to the total. Imported from the component now, so it cannot drift
+     again — if the two clocks disagree, this fails. */
+  it('leaves the settle ceremony room to finish counting before it closes', () => {
+    // SettleCeremony runs at scale 1: `landing` is false during a settle.
     expect(
-      COUNT_STAGE_MS + DURATION_MS.hero,
-      `the settle count must land before the certificate at ${CERTIFICATE_MS}ms`,
-    ).toBeLessThan(CERTIFICATE_MS);
+      VERDICT_MS.count + DURATION_MS.hero,
+      `the settle count is released at ${VERDICT_MS.count}ms and needs ${DURATION_MS.hero}ms, ` +
+        `but the ceremony closes at ${VERDICT_DONE_MS}ms — the figure would be cut off mid-count`,
+    ).toBeLessThanOrEqual(VERDICT_DONE_MS);
   });
 });
 
@@ -487,9 +492,20 @@ describe('ceremony landing', () => {
     expect(after).not.toBe(before);
   });
 
-  it('stays put when the booking changed nothing', () => {
-    const same = { trades: [buy(100, 60)] };
-    expect(portfolioFigures(snap(same))).toBe(portfolioFigures(snap(same)));
+  /* The over-sensitivity half of the contract. Comparing the function to itself on one value
+     could only fail on nondeterminism — it held for ANY implementation, including
+     `JSON.stringify(snap)`, which switches tabs after every ceremony because fetchedAt moves.
+     These feed it two genuinely DIFFERENT snapshots that must fingerprint the same. */
+  it('stays put when the refresh changed nothing the Portfolio shows', () => {
+    const before = snap({ trades: [buy(100, 60)], fetchedAt: '2026-01-01T00:00:00.000Z' });
+    const after = snap({ trades: [buy(100, 60)], fetchedAt: '2026-01-01T00:05:00.000Z' });
+    expect(portfolioFigures(after)).toBe(portfolioFigures(before));
+  });
+
+  it('stays put when only a note was edited', () => {
+    const before = snap({ trades: [{ ...buy(100, 60), note: '' }] });
+    const after = snap({ trades: [{ ...buy(100, 60), note: 'fixed the typo' }] });
+    expect(portfolioFigures(after)).toBe(portfolioFigures(before));
   });
 
   it('reads nothing at all from a missing snapshot', () => {

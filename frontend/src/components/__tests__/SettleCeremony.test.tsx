@@ -1,7 +1,25 @@
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SettleCeremony } from '../SettleCeremony';
+// @ts-expect-error -- no @types/node in this project.
+import { readFileSync } from 'node:fs';
+// @ts-expect-error -- no @types/node in this project.
+import { fileURLToPath } from 'node:url';
+// @ts-expect-error -- no @types/node in this project.
+import { dirname, join } from 'node:path';
+import { SettleCeremony, VERDICT_DONE_MS } from '../SettleCeremony';
 import type { SettleExchange } from '../SettleCeremony';
+
+/** The ceremony's behaviour lives in CSS that jsdom will never compute. Read it off disk and
+ *  assert the relationships directly — a rendered assertion cannot tell a working ceremony
+ *  from a broken one here. */
+function ceremonyCss(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  return readFileSync(join(here, '..', '..', 'styles', 'ceremony.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+}
+function rule(selector: string): string | null {
+  const m = new RegExp(`\\${selector}\\s*\\{([^}]*)\\}`).exec(ceremonyCss());
+  return m ? m[1] : null;
+}
 
 const data = { word: 'EXPIRED', tone: 'up' as const, amount: '$148.00', symbol: 'TQQQ' };
 
@@ -28,16 +46,26 @@ describe('SettleCeremony — the verdict (expired, bought back)', () => {
 
   /* The stamp used to be absolutely positioned at top 46% while the amount sat in normal
      flow — nothing coordinated them, and they overlapped by a measured 228x45px, printing
-     the word straight through the figure. The berth is what keeps them apart, so its
-     presence is the thing worth pinning: jsdom computes no layout and cannot see the
-     collision itself. */
-  it('gives the stamp its own berth in flow, so it cannot print over the figure', () => {
-    const { container } = render(<SettleCeremony data={data} onDone={vi.fn()} />);
-    const berth = container.querySelector('.settle-stamp-berth');
-    expect(berth).not.toBeNull();
-    expect(berth!.querySelector('.settle-stamp')).not.toBeNull();
-    // Out of flow again and the collision is back.
-    expect(container.querySelector('.settle-stamp')!.closest('.settle-stamp-berth')).toBe(berth);
+     the word straight through the figure.
+
+     Asserting the berth EXISTS in the JSX is worthless: it restates markup two lines apart
+     in the component and stays green with `position: absolute` put straight back on the
+     stamp. The property that actually prevents the collision lives in the stylesheet, so
+     that is what this reads — the same trick chrome-layout.test.ts uses, and for the same
+     reason: jsdom computes no layout and cannot see the overlap itself. */
+  it('keeps the stamp in flow, so it cannot print over the figure', () => {
+    const stamp = rule('.settle-stamp');
+    expect(stamp, '.settle-stamp rule not found in ceremony.css').not.toBeNull();
+    expect(stamp, 'the stamp is out of flow again — it will print over the amount').not.toMatch(
+      /position:\s*(absolute|fixed)/,
+    );
+    // And the berth has to actually reserve the room the rotated word needs.
+    const berth = rule('.settle-stamp-berth');
+    expect(berth, '.settle-stamp-berth rule not found').not.toBeNull();
+    const h = /height:\s*(\d+)px/.exec(berth!);
+    expect(h, 'the berth must reserve a fixed height').not.toBeNull();
+    // 220px of word at -12deg needs 220*sin12 + 48*cos12 = 93px.
+    expect(Number(h![1])).toBeGreaterThanOrEqual(93);
   });
 
   it('the count stage actually counts: the figure holds at zero, then winds up', () => {
@@ -74,8 +102,42 @@ describe('SettleCeremony — the verdict (expired, bought back)', () => {
     vi.useFakeTimers();
     const onDone = vi.fn();
     render(<SettleCeremony data={data} onDone={onDone} />);
-    vi.advanceTimersByTime(2500);
+    // Off the constant, not a number typed here: a literal is how the previous guard went
+    // stale and let the count get cut off.
+    vi.advanceTimersByTime(VERDICT_DONE_MS);
     expect(onDone).toHaveBeenCalledOnce();
+  });
+
+  /* The regression the review caught. The count is released at 'count' and needs
+     DURATION_MS.hero to reach the total; the ceremony used to close 500ms before that, so
+     the last frame the user saw read $142.70 against a target of $148.00. Driven off one
+     clock — the rAF the Odometer counts on AND the timer that closes the ceremony — because
+     stepping only one of them is what let the original version of this test pass while the
+     figure was being torn down mid-wind. */
+  it('lands the figure on its real total before it closes', () => {
+    const queue: FrameRequestCallback[] = [];
+    let clock = 0;
+    vi.useFakeTimers();
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => queue.push(cb));
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+
+    const onDone = vi.fn();
+    render(<SettleCeremony data={data} onDone={onDone} />);
+    const amount = screen.getByTestId('settle-amount');
+
+    // One clock: advance the timers and the frames together, 16.7ms at a time.
+    while (!onDone.mock.calls.length && clock < 10_000) {
+      act(() => { vi.advanceTimersByTime(16.7); });
+      clock += 16.7;
+      const due = queue.splice(0);
+      act(() => due.forEach((cb) => cb(clock)));
+    }
+    expect(onDone).toHaveBeenCalledOnce();
+    expect(
+      amount.textContent,
+      'the ceremony closed while the figure was still counting — the last thing on screen was a wrong number',
+    ).toBe('$148.00');
   });
 
   it('never reaches the filing stage — only an assignment is filed', () => {
@@ -112,16 +174,36 @@ describe('SettleCeremony — the exchange (assigned)', () => {
   });
 
   /* The certificate has to go BEHIND the sleeve. The old ceremony faded it out at opacity 0
-     on top of one, which is why nothing ever read as filed. The clipping window is the
-     mechanism, and jsdom cannot see clip-path take effect — so pin the structure: the
-     travelling card must be inside the window, and the sleeve must not be. */
-  it('files the certificate through a clipping window the sleeve sits outside of', () => {
+     on top of one, which is why nothing ever read as filed.
+
+     Sibling order alone does not prove that: delete the clip-path and push the sleeve off
+     the stage and an order-only assertion is still green while the defect is fully restored.
+     What makes filing work is arithmetic — the window's clipped floor has to land exactly on
+     the sleeve's mouth — so compute it from the stylesheet and check it. */
+  it('clips the filing window off exactly at the sleeve mouth', () => {
+    const win = rule('.xc-window');
+    const sleeve = rule('.xc-sleeve');
+    expect(win, '.xc-window rule not found').not.toBeNull();
+    expect(sleeve, '.xc-sleeve rule not found').not.toBeNull();
+
+    const top = Number(/top:\s*(\d+)px/.exec(win!)![1]);
+    const height = Number(/height:\s*(\d+)px/.exec(win!)![1]);
+    const inset = /clip-path:\s*inset\(\s*0\s+0\s+(\d+)px/.exec(win!);
+    expect(inset, '.xc-window must clip its bottom, or the card files in front of nothing').not.toBeNull();
+    const sleeveTop = Number(/top:\s*(\d+)px/.exec(sleeve!)![1]);
+
+    expect(
+      top + height - Number(inset![1]),
+      'the clipped floor must sit on the sleeve mouth, or the certificate is cut off in mid-air ' +
+        'or slides visibly past the sleeve instead of behind it',
+    ).toBe(sleeveTop);
+  });
+
+  it('puts the travelling card inside that window and the sleeve outside it', () => {
     const { container } = render(<SettleCeremony data={assigned} onDone={vi.fn()} />);
-    const window_ = container.querySelector('.xc-window');
-    const sleeve = container.querySelector('.xc-sleeve');
-    expect(window_!.querySelector('.xc-filing .xc-swap')).not.toBeNull();
-    expect(sleeve).not.toBeNull();
-    expect(window_!.contains(sleeve)).toBe(false);
+    const win = container.querySelector('.xc-window');
+    expect(win!.querySelector('.xc-filing .xc-swap')).not.toBeNull();
+    expect(win!.contains(container.querySelector('.xc-sleeve'))).toBe(false);
   });
 
   it('runs longer than a verdict, and finishes', () => {

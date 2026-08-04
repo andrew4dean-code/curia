@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Snapshot } from '../lib/api';
 import type { OpenPosition, OptionPosition, Trade, Wheel, WheelSummary } from '../lib/types';
 import { computeOpenPositions, computeUnwheeledPositions } from '../lib/positions';
@@ -53,10 +53,31 @@ export function PortfolioTab({
      book value to y=1225 and made your net worth the third thing on your own portfolio.
      Folded they are ~80px and the hero is above the fold again.
 
-     A wheel the ceremony just moved opens itself: App switches to this tab on a wheel change
+     A wheel the ceremony just moved opens itself: App switches to this tab on a change
      precisely so the dial's hand travels to its new stage, and a folded card has no dial to
-     travel. justAdded already carries the symbol, so no new prop is needed. */
+     travel. justAdded already carries the symbol, so no new prop is needed.
+
+     It SEEDS the set rather than being OR-ed into `expanded`. OR-ing meant the prop
+     outranked the user for as long as it was set: clicking "collapse" on the very card the
+     ceremony had just opened did nothing visible and quietly pinned it open instead, and
+     when justAdded cleared at LANDING_MS the card folded itself shut under the reader.
+     Seeded once, the card opens the same way and the toggle owns it from then on. */
   const [openWheels, setOpenWheels] = useState<Set<number>>(new Set());
+  const seeded = useRef<string | null>(null);
+  useEffect(() => {
+    const symbol = justAdded?.symbol;
+    // Seed once per justAdded symbol. Re-seeding on every render would re-open a card the
+    // reader had just closed, which is the bug in a second costume.
+    if (!symbol || seeded.current === symbol) {
+      if (!symbol) seeded.current = null;
+      return;
+    }
+    seeded.current = symbol;
+    // snap.wheels, not the derived activeWheels array: that one is rebuilt every render and
+    // would re-run this effect continuously.
+    const moved = snap.wheels.filter((w) => w.closed_at === null && w.symbol === symbol).map((w) => w.id);
+    if (moved.length) setOpenWheels((prev) => new Set([...prev, ...moved]));
+  }, [justAdded?.symbol, snap.wheels]);
 
   const activeWheels = snap.wheels.filter((w) => w.closed_at === null);
   const completedWheels = [...snap.wheels]
@@ -91,7 +112,7 @@ export function PortfolioTab({
             openCall={openCall}
             onComplete={() => onCompleteWheel?.(s)}
             onAbandon={() => onAbandonWheel?.(s.wheel)}
-            expanded={openWheels.has(s.wheel.id) || justAdded?.symbol === s.wheel.symbol}
+            expanded={openWheels.has(s.wheel.id)}
             onToggle={() =>
               setOpenWheels((prev) => {
                 const next = new Set(prev);

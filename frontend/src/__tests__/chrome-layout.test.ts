@@ -93,6 +93,92 @@ describe('app chrome layout', () => {
     ).toEqual([]);
   });
 
+  /* Two animations on one element that touch the same property is a silent bug, and it has
+     now shipped twice: `xc-sleeve-in ... both, xc-sleeve-take ... both` both animated
+     transform, and because `both` fills BACKWARDS through a delay, the later name in the list
+     was already emitting its 0% keyframe from frame one — so the sleeve's entrance never
+     rendered at all. Nothing catches this. It builds, it passes every jsdom test, and in a
+     browser it just looks like the animation was never written.
+
+     So: for every rule declaring more than one animation, intersect the properties their
+     keyframes actually touch. Any overlap is a defect — split them onto separate elements,
+     or fold them into one keyframe timeline. */
+  it('never puts two animations that touch the same property on one element', () => {
+    const offenders: string[] = [];
+    for (const file of ['app.css', 'curia-tokens.css', 'ceremony.css']) {
+      const css = rules(file);
+
+      /* Brace-counting, not a regex. Keyframes nest, and this file writes them both as one
+         line and across many — a `[\s\S]*?\n\}` pattern silently skips every single-line
+         block, which is most of them. A guard that quietly matches nothing is worse than no
+         guard: the first version of this test passed against the very defect it was written
+         for, which is the whole lesson of the review that produced it. */
+      const propsOf = new Map<string, Set<string>>();
+      const kfRe = /@keyframes\s+([\w-]+)\s*\{/g;
+      let kf: RegExpExecArray | null;
+      while ((kf = kfRe.exec(css))) {
+        let depth = 1;
+        let i = kf.index + kf[0].length;
+        for (; i < css.length && depth > 0; i++) {
+          if (css[i] === '{') depth++;
+          else if (css[i] === '}') depth--;
+        }
+        const body = css.slice(kf.index + kf[0].length, i - 1);
+        const props = new Set<string>();
+        for (const decl of body.matchAll(/([a-z-]+)\s*:/g)) {
+          if (decl[1] !== 'animation-timing-function') props.add(decl[1]);
+        }
+        propsOf.set(kf[1], props);
+      }
+      // Strip the keyframe blocks so their inner `from {}` / `50% {}` are not read as rules.
+      const flat = css.replace(/@keyframes\s+[\w-]+\s*\{(?:[^{}]|\{[^{}]*\})*\}/g, '');
+
+      for (const r of flat.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+        const selector = r[1].trim();
+        if (selector.startsWith('@') || selector.startsWith('%') || /^\d/.test(selector)) continue;
+        const decl = /(?:^|[;\s])animation:\s*([^;]+)/.exec(r[2]);
+        if (!decl || decl[1].split(',').length < 2) continue;
+        /* Sharing a property is not by itself a bug — two animations that hand off cleanly
+           are fine, and the envelope throat does exactly that on purpose. What breaks is the
+           LATER one being able to emit while the earlier one is still working, because the
+           later name wins any property they share. That happens when their active windows
+           overlap, or when the later one fills BACKWARDS (both/backwards) across a delay
+           that starts after the earlier one — which is the .xc-sleeve bug: a 2.62s delay
+           with `both` was already painting its 0% keyframe at frame one. `forwards` alone
+           emits nothing before it starts and is safe. */
+        const parts = decl[1].split(',').map((part) => {
+          const toks = part.trim().split(/\s+/);
+          const name = toks.find((t) => propsOf.has(t));
+          const times = toks.filter((t) => /^-?[\d.]+m?s$/.test(t)).map((t) => (t.endsWith('ms') ? parseFloat(t) : parseFloat(t) * 1000));
+          const fill = toks.find((t) => ['none', 'forwards', 'backwards', 'both'].includes(t)) ?? 'none';
+          return { name, dur: times[0] ?? 0, delay: times[1] ?? 0, fill };
+        });
+        for (let i = 0; i < parts.length; i++) {
+          for (let j = i + 1; j < parts.length; j++) {
+            const a = parts[i];
+            const b = parts[j];
+            if (!a.name || !b.name) continue;
+            const shared = [...(propsOf.get(a.name) ?? [])].filter((p) => propsOf.get(b.name!)?.has(p));
+            if (!shared.length) continue;
+            const overlap = b.delay < a.delay + a.dur && a.delay < b.delay + b.dur;
+            const masksBackwards = (b.fill === 'both' || b.fill === 'backwards') && b.delay > a.delay;
+            if (overlap || masksBackwards) {
+              offenders.push(
+                `${file}: ${selector} — ${b.name} (${b.fill}, ${b.delay}ms) ${masksBackwards ? 'fills backwards over' : 'overlaps'} ` +
+                  `${a.name} (${a.delay}ms), and both animate ${shared.join(', ')}`,
+              );
+            }
+          }
+        }
+      }
+    }
+    expect(
+      offenders,
+      `the later animation in the list wins these properties, including backwards through its ` +
+        `own delay, so the earlier one silently never renders:\n  ${offenders.join('\n  ')}`,
+    ).toEqual([]);
+  });
+
   it('pads the tab bar by the home-indicator inset, with a floor', () => {
     const bar = /\.tabbar\s*\{([^}]*)\}/.exec(rules('app.css'))![1];
     expect(bar).toMatch(/max\(env\(safe-area-inset-bottom\)|var\(--safe-bottom\)/);
