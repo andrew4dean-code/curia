@@ -140,12 +140,23 @@ describe('SettleCeremony — the verdict (expired, bought back)', () => {
     ).toBe('$148.00');
   });
 
-  it('never reaches the filing stage — only an assignment is filed', () => {
-    vi.useFakeTimers();
-    const { container } = render(<SettleCeremony data={data} onDone={vi.fn()} />);
-    act(() => { vi.advanceTimersByTime(2300); });
-    expect(container.querySelector('.settle-ceremony')?.getAttribute('data-stage')).not.toBe('file');
-    expect(container.querySelector('.xc-swap')).toBeNull();
+  /* Replaces a test that asserted a verdict never reaches the 'file' stage and renders no
+     .xc-swap. Both were true by construction once the branches split — 'file' is not in the
+     verdict's stage union and the exchange JSX sits behind an early return — so it passed
+     even with the verdict render entirely broken.
+
+     What CAN break is which branch gets picked. It keys off the exchange payload, not the
+     tone word, so that a tone of 'assign' with nothing to exchange still degrades to a
+     readable verdict rather than an empty stage. */
+  it('picks its branch off the exchange payload, not the tone word', () => {
+    const noExchange = render(<SettleCeremony data={{ ...data, word: 'ASSIGNED', tone: 'assign' as const }} onDone={vi.fn()} />);
+    expect(noExchange.container.querySelector('.settle-verdict')).not.toBeNull();
+    expect(noExchange.container.querySelector('.xc-swap')).toBeNull();
+    expect(noExchange.container.querySelector('.settle-stamp')).toHaveTextContent('ASSIGNED');
+
+    const withExchange = render(<SettleCeremony data={{ ...data, tone: 'up' as const, exchange }} onDone={vi.fn()} />);
+    expect(withExchange.container.querySelector('.settle-exchange')).not.toBeNull();
+    expect(withExchange.container.querySelector('.settle-stamp')).toBeNull();
   });
 });
 

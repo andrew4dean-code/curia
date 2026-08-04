@@ -482,13 +482,23 @@ describe('ceremony landing', () => {
     expect(after).not.toBe(before);
   });
 
-  it('notices the book value moving on a fresh mark alone', () => {
+  /* refresh() kicks off a background quote pull and a ceremony runs for seconds, so a price
+     can land between the two fingerprints. Folding marks in meant that read as "your booking
+     changed something" — a note-only edit could throw you off the board because an unrelated
+     symbol ticked while the envelope was closing. A quote is not a booking. */
+  it('ignores a price moving under it — that is not something the booking did', () => {
     const held = { trades: [buy(100, 60)] };
     const before = portfolioFigures(snap(held));
     const after = portfolioFigures(snap({
       ...held,
-      marks: [{ symbol: 'TQQQ', price: 71, marked_at: '2026-01-03T00:00:00.000Z', source: 'manual' as const }],
+      marks: [{ symbol: 'TQQQ', price: 71, marked_at: '2026-01-03T00:00:00.000Z', source: 'auto' as const }],
     }));
+    expect(after).toBe(before);
+  });
+
+  it('notices shares arriving, which only a booking can do', () => {
+    const before = portfolioFigures(snap({ trades: [buy(100, 60)] }));
+    const after = portfolioFigures(snap({ trades: [buy(100, 60), { ...buy(100, 60), id: 2 }] }));
     expect(after).not.toBe(before);
   });
 

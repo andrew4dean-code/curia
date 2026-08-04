@@ -66,21 +66,25 @@ export function wheelStages(snap: Snapshot | null): Map<number, string> {
   return stages;
 }
 
-/** Everything the Portfolio tab puts on screen, as one comparable string: the book value,
- *  what is unrealized against it, and where every wheel stands.
+/** What the BOOKING you just made can move: what you hold, what it cost, and where every
+ *  wheel stands. Compared either side of the ceremony's refresh to decide whether to land
+ *  you on the Portfolio to watch it.
  *
- *  The landing used to switch tabs only when a WHEEL moved, which read "nothing changed"
- *  as "no wheel changed" — so a plain stock buy, which always moves the book value, played
- *  its whole ceremony and then left you on the board that cannot show you the figure it
- *  just changed. Compared either side of the ceremony's refresh, this catches that;
- *  an edit that genuinely alters nothing still leaves you where you are. */
+ *  The landing used to switch tabs only when a WHEEL moved, which read "nothing changed" as
+ *  "no wheel changed" — so a plain stock buy, which always moves the book value, played its
+ *  whole ceremony and then left you on the board that cannot show you the figure it changed.
+ *
+ *  Deliberately blind to MARKS. Folding live prices in meant any quote landing mid-ceremony
+ *  counted as "this booking changed something": refresh() kicks off a background pull, a
+ *  ceremony runs for seconds, and a note-only edit that moved nothing could still throw you
+ *  off the board because a price ticked while the envelope was closing. Quantities and cost
+ *  basis only move when you book something, which is exactly the question being asked. */
 export function portfolioFigures(snap: Snapshot | null): string {
   if (!snap) return '';
   const positions = computeOpenPositions(snap.trades, snap.marks);
-  const book = positions.reduce((s, p) => s + (p.marketValue ?? p.qty * p.avgCost), 0);
-  const unrealized = positions.reduce((s, p) => s + (p.unrealizedPl ?? 0), 0);
+  const held = positions.map((p) => `${p.symbol}:${p.qty}@${p.avgCost.toFixed(4)}`).join(',');
   const stages = [...wheelStages(snap)].map(([id, st]) => `${id}:${st}`).sort().join(',');
-  return `${book.toFixed(2)}|${unrealized.toFixed(2)}|${stages}`;
+  return `${held}|${stages}`;
 }
 
 export default function App() {

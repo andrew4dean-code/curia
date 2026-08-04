@@ -16,6 +16,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.8.2',
+    date: '2026-08-04',
+    notes: [
+      'A price ticking while a ceremony was on screen no longer counts as something your entry changed. Curia pulls quotes in the background, and a ceremony runs for several seconds, so an edit that moved nothing could still throw you off the board because an unrelated symbol moved. It now watches what you hold and what it cost — the things only a booking can change.',
+    ],
+  },
+  {
     version: '2.8.1',
     date: '2026-08-03',
     notes: [
