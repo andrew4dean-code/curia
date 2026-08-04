@@ -1,31 +1,74 @@
 import { useEffect, useRef, useState } from 'react';
-import { Odometer } from './Odometer';
+import { DURATION_MS, Odometer } from './Odometer';
+
+/** The two sides of an assignment. Assignment is not a verdict on a trade — it is a
+ *  conversion, and the ceremony says so by moving both halves at once: what left goes one
+ *  way, what arrived comes the other. Structured rather than one pre-formatted sentence,
+ *  because each half is drawn in its own column and they must be laid out independently. */
+export interface SettleExchange {
+  goneLabel: string;
+  goneFigure: string;
+  gotLabel: string;
+  gotFigure: string;
+  /** One line naming what happened, in the app's voice. */
+  verdict: string;
+  /** Where the certificate is filed, printed under the sleeve once it lands. */
+  filedTo: string;
+}
 
 export interface SettleData {
   word: string;
   tone: 'up' | 'down' | 'assign';
   amount: string;
   symbol: string;
-  shares?: string;
+  exchange?: SettleExchange;
 }
 
-type Stage = 'swing' | 'hit' | 'count' | 'certificate' | 'file';
+/* Two shapes, because two different things happen.
+
+   A contract that expired or was bought back IS a verdict, and keeps the stamp. What it
+   loses is the collision: the stamp used to be position:absolute at top 46% while the
+   amount sat in normal flow, so nothing coordinated them and on a card this short they
+   always met — measured at 228x45px of overlap, which is why the figure was unreadable
+   through the word. Both are in flow now, in a column, and cannot reach each other.
+
+   An assignment gets the exchange above. */
+type VerdictStage = 'swing' | 'hit' | 'count';
+type ExchangeStage = 'close' | 'swap' | 'settled' | 'file';
+
+/** Verdict: the stamp lands at 420 and the paper answers ON the impact — it used to jolt at
+ *  620, 186ms after the stamp had already bottomed out, so the reaction read as unrelated to
+ *  the blow.
+ *
+ *  `done` is DERIVED, not chosen. Cutting the old 3800 tail (which held a byte-identical
+ *  frame for 1.6s) down to a flat 2400 left the figure only 1700ms of the 2200 its count
+ *  needs, so every expiry and buyback tore the overlay down at ~96% and the last thing on
+ *  screen was the wrong number. The count's own duration is the floor now, plus a beat to
+ *  read the landed figure. Change DURATION_MS.hero and this follows; a test asserts it. */
+export const VERDICT_MS = { hit: 420, count: 700 };
+export const VERDICT_HOLD_MS = 260;
+export const VERDICT_DONE_MS = VERDICT_MS.count + DURATION_MS.hero + VERDICT_HOLD_MS;
+/** Exchange: contract closes, the two sides cross, the certificate is filed. 3400, not 6400.
+ *  Nothing counts on this branch, so it owes the odometer nothing. */
+export const EXCHANGE_MS = { swap: 620, settled: 1700, file: 2340, done: 3400 };
 
 export function SettleCeremony({ data, onDone }: { data: SettleData; onDone: () => void }) {
-  const [stage, setStage] = useState<Stage>('swing');
+  const isExchange = !!data.exchange;
+  const [stage, setStage] = useState<VerdictStage | ExchangeStage>(isExchange ? 'close' : 'swing');
   const timers = useRef<number[]>([]);
   const done = useRef(false);
 
   useEffect(() => {
     const at = (ms: number, fn: () => void) => timers.current.push(window.setTimeout(fn, ms));
-    at(620, () => setStage('hit'));
-    at(1250, () => setStage('count'));
-    if (data.shares) {
-      at(3800, () => setStage('certificate'));
-      at(5300, () => setStage('file'));
-      at(6400, finish);
+    if (isExchange) {
+      at(EXCHANGE_MS.swap, () => setStage('swap'));
+      at(EXCHANGE_MS.settled, () => setStage('settled'));
+      at(EXCHANGE_MS.file, () => setStage('file'));
+      at(EXCHANGE_MS.done, finish);
     } else {
-      at(3800, finish);
+      at(VERDICT_MS.hit, () => setStage('hit'));
+      at(VERDICT_MS.count, () => setStage('count'));
+      at(VERDICT_DONE_MS, finish);
     }
     const t = timers.current;
     return () => t.forEach(clearTimeout);
@@ -39,25 +82,65 @@ export function SettleCeremony({ data, onDone }: { data: SettleData; onDone: () 
     onDone();
   }
 
+  if (data.exchange) {
+    const x = data.exchange;
+    return (
+      <div className="ceremony settle-ceremony settle-exchange" data-stage={stage} data-tone={data.tone} onClick={finish}>
+        <div className="exchange-stage">
+          {/* The contract that was sold is finished. It says so first, and gets out of the
+              way — the space it vacates is where the verdict is written. */}
+          <div className="xc-contract">
+            <div className="xc-contract-head">CURIA · {data.symbol}</div>
+            <div className="xc-contract-body">{data.word}</div>
+            <div className="xc-strike" aria-hidden="true" />
+          </div>
+          <div className="xc-verdict">{x.verdict}</div>
+          {/* The filing window. Its floor is the sleeve's mouth, so a card travelling down is
+              cut off AT the sleeve and is gone behind it — never faded out in front of it,
+              which is what the old ceremony did, and why nothing ever looked filed. */}
+          <div className="xc-window">
+            <div className="xc-filing">
+              <div className="xc-swap">
+                <div className="xc-side xc-gone">
+                  <div className="xc-cap">{x.goneLabel}</div>
+                  <div className="xc-fig">{x.goneFigure}</div>
+                </div>
+                <div className="xc-side xc-got">
+                  <div className="xc-frame" aria-hidden="true" />
+                  <div className="xc-cap">{x.gotLabel}</div>
+                  <div className="xc-fig" data-testid="settle-got">{x.gotFigure}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="xc-sleeve" aria-hidden="true" />
+          {/* The premium kept. SettleSheet builds `amount` for every outcome, but the
+              exchange had no place for it, so an assignment was the one settle that never
+              told you what the contract earned. */}
+          <div className="xc-filed">
+            {x.filedTo} · kept <span className="xc-kept" data-testid="settle-amount">{data.amount}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="ceremony settle-ceremony" data-stage={stage} data-tone={data.tone} onClick={finish}>
+    <div className="ceremony settle-ceremony settle-verdict" data-stage={stage} data-tone={data.tone} onClick={finish}>
       <div className="ceremony-scene">
         <div className="ticket settle-ticket">
           <div className="ticket-head">CURIA · {data.symbol}</div>
-          <div className="settle-stamp">{data.word}</div>
+          {/* Fixed-height berth. A 220px word rotated -12deg needs ~93px of vertical room;
+              giving it that in flow is what keeps it off the figure below for good. */}
+          <div className="settle-stamp-berth">
+            <div className="settle-stamp">{data.word}</div>
+          </div>
           <div className="settle-amount">
             {/* The stage named 'count' has to actually count: the amount holds at zero
-                behind the stamp and winds up the moment it rises into view. */}
-            <Odometer value={data.amount} speed="hero" run={stage !== 'swing' && stage !== 'hit'} dataTestid="settle-amount" />
+                until the stamp has landed, then winds up. */}
+            <Odometer value={data.amount} speed="hero" run={stage === 'count'} dataTestid="settle-amount" />
           </div>
-          {(stage === 'certificate' || stage === 'file') && data.shares && (
-            <>
-              <div className="cert-frame" aria-hidden="true" />
-              <div className="settle-cert">{data.shares}</div>
-            </>
-          )}
         </div>
-        {stage === 'file' && <div className="settle-file" aria-hidden="true" />}
       </div>
     </div>
   );

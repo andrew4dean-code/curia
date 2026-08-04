@@ -62,12 +62,31 @@ describe('OptionsTab board', () => {
     expect(onSettle).toHaveBeenCalledWith(base);
   });
 
-  it('settled option prints kept amount and opens its record on tap', () => {
+  it('settled option prints its realized amount and opens its record on tap', () => {
     const settled = { ...base, id: 3, status: 'EXPIRED' as const, closed_at: '2026-08-07', expiration: '2026-08-07' };
     const onViewRecord = vi.fn();
-    render(<OptionsTab snap={snapWith([settled])} {...cbs} onSellWeek={vi.fn()} onViewRecord={onViewRecord} />);
-    fireEvent.click(screen.getByText(/kept \+\$146\.70/));
+    const { container } = render(<OptionsTab snap={snapWith([settled])} {...cbs} onSellWeek={vi.fn()} onViewRecord={onViewRecord} />);
+    expect(container.querySelector('.wk-row.settled .wk-row-amt')).toHaveTextContent('+$146.70');
+    // The outcome is on the row now — the board used to say only "kept", losing the
+    // difference between an expiry, a buy-back and an assignment.
+    expect(container.querySelector('.wk-row.settled .wk-tag')).toHaveTextContent('expired');
+    fireEvent.click(screen.getByText(/\+\$146\.70/));
     expect(onViewRecord).toHaveBeenCalledWith(settled);
+  });
+
+  /* The premium used to orphan itself onto a second line whenever the symbol ran long,
+     because a 34px seal disc restating CALL/PUT ate the width. Open and settled must
+     share one grid so the figure sits in the same column on every row of the month. */
+  it('puts open and settled amounts in the same column of the same row skeleton', () => {
+    const settled = { ...base, id: 3, status: 'EXPIRED' as const, closed_at: '2026-08-07', expiration: '2026-08-07' };
+    const { container } = render(<OptionsTab snap={snapWith([base, settled])} {...cbs} onSellWeek={vi.fn()} />);
+    const rows = container.querySelectorAll('.wk-row');
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.querySelector('.wk-row-what')).not.toBeNull();
+      expect(row.querySelector('.wk-row-amt')).not.toBeNull();
+    }
+    expect(container.querySelectorAll('.wk-seal')).toHaveLength(0);
   });
 
   it('logs into past weeks as readily as future ones', () => {

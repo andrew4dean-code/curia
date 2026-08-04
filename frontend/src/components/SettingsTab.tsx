@@ -105,7 +105,10 @@ export function SettingsTab({ snap, onRefresh }: TabProps) {
       <h2 className="section-title">The Press</h2>
       <div className="version-line" data-testid="app-version">Curia v{__APP_VERSION__}</div>
       <div className="row-sub" style={{ padding: '2px 0 8px' }}>Pressed {fmtStamp(__BUILD_STAMP__)}</div>
-      <button className="btn" onClick={() => void updateNow()} disabled={busy}>
+      {/* Ghost, not solid: this purges the service worker and every cache, and it used to
+          wear the same full-width maroon as Save while sitting above it — the maintenance
+          action reading as the page's primary one. Save is the only filled button here. */}
+      <button className="btn btn-ghost" onClick={() => void updateNow()} disabled={busy}>
         {busy ? 'Updating…' : 'Update now'}
       </button>
       <div className="row-sub" style={{ padding: '8px 0 0' }}>
@@ -117,21 +120,21 @@ export function SettingsTab({ snap, onRefresh }: TabProps) {
         Deliberately pessimistic. A fee set too high makes every figure understate what you kept,
         which is the safe direction to be wrong in.
       </div>
-      <div className="field">
+      <div className="field field-inline">
         <label htmlFor="fee-contract">Worst-case fee per option contract</label>
         <input
           id="fee-contract" type="number" inputMode="decimal" step="0.01" min="0"
           value={feeContract} onChange={(e) => { setFeeContract(e.target.value); setSaved(false); }}
         />
       </div>
-      <div className="field">
+      <div className="field field-inline">
         <label htmlFor="fee-stock">Worst-case fee per stock fill</label>
         <input
           id="fee-stock" type="number" inputMode="decimal" step="0.01" min="0"
           value={feeStock} onChange={(e) => { setFeeStock(e.target.value); setSaved(false); }}
         />
       </div>
-      <div className="field">
+      <div className="field field-inline">
         <label htmlFor="tax-rate">Estimated tax rate (%)</label>
         <input
           id="tax-rate" type="number" inputMode="decimal" step="1" min="0" max="100"

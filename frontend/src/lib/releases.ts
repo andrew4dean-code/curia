@@ -16,6 +16,19 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.8.0',
+    date: '2026-08-03',
+    notes: [
+      'Assignment has a new ceremony. It is not a verdict on a trade — it is a conversion — so instead of a word stamped across the page, what left and what arrived now cross each other, and the certificate is filed behind its sleeve rather than fading out on top of it. It takes 3.4 seconds instead of 6.4, and the figure is no longer printed through.',
+      'The amount you kept is legible when a contract settles. The outcome word and the figure used to be laid over one another with nothing holding them apart, so on a short ticket the number was struck through by the word.',
+      'The month board fits on one screen. Weeks with nothing in them are a line rather than a card, the premium sits in a column you can read down, and a settled contract now says how it settled — expired, bought back or assigned — where it only ever said "kept" before.',
+      'Wheels start folded, showing the symbol, the week and what you would take closing today. Tap one to open the dial. Your book value is at the top of the Portfolio again instead of below two full screens of instrument. A wheel that just moved opens itself.',
+      'The ＋ button no longer sits on top of the last row. At the bottom of the Portfolio and the Ledger it was covering the last holding\'s profit, and no amount of scrolling would move it.',
+      'Every date reads the same way. The Ledger printed 2026-04-15 where the board said Apr 15, and the pair of them was long enough to wrap onto a second line.',
+      'Logging a trade now leaves you on the Portfolio, watching the totals roll, instead of on whichever tab you started from. Settings gives Save the weight and Update now the outline, rather than the other way round.',
+    ],
+  },
+  {
     version: '2.7.0',
     date: '2026-07-31',
     notes: [

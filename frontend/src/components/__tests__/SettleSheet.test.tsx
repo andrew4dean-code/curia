@@ -72,7 +72,11 @@ describe('SettleSheet', () => {
     fireEvent.click(screen.getByRole('button', { name: /Assigned/ }));
     fireEvent.click(screen.getByRole('button', { name: /^Settle$/ }));
     await waitFor(() => expect(onDone).toHaveBeenCalledOnce());
-    expect(onDone.mock.calls[0][0].shares).toMatch(/^ACQUIRED /);
+    // A put assigned takes cash and hands back shares.
+    const x = onDone.mock.calls[0][0].exchange;
+    expect(x.goneLabel).toBe('cash committed');
+    expect(x.gotLabel).toBe('shares received');
+    expect(x.verdict).toMatch(/you own the shares/);
   });
 
   it('assigning a call books shares as called away', async () => {
@@ -84,7 +88,11 @@ describe('SettleSheet', () => {
     fireEvent.click(screen.getByRole('button', { name: /Assigned/ }));
     fireEvent.click(screen.getByRole('button', { name: /^Settle$/ }));
     await waitFor(() => expect(onDone).toHaveBeenCalledOnce());
-    expect(onDone.mock.calls[0][0].shares).toMatch(/^CALLED AWAY /);
+    // A call assigned takes the shares and hands back cash — the other direction.
+    const x = onDone.mock.calls[0][0].exchange;
+    expect(x.goneLabel).toBe('shares called away');
+    expect(x.gotLabel).toBe('cash received');
+    expect(x.verdict).toMatch(/the shares are gone/);
   });
 
   it('deletes an open option after confirm, passing its id to onDeleted', async () => {
