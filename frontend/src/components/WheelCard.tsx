@@ -3,7 +3,7 @@ import { WheelDial } from './WheelDial';
 import { CardFiligree } from './CardFiligree';
 import { Odometer } from './Odometer';
 import { useFlash } from '../hooks/useFlash';
-import { expiryLabel } from '../lib/time';
+import { expiryLabel, fmtShortDate } from '../lib/time';
 import { formatMoney, formatSignedMoney, plColor } from '../lib/format';
 import type { Mark, OptionPosition, WheelSummary } from '../lib/types';
 
@@ -13,10 +13,12 @@ import type { Mark, OptionPosition, WheelSummary } from '../lib/types';
 export const FILIGREE_HOLD_MS = 900;
 export const FILIGREE_FADE_MS = 5000;
 
-function fmtShort(dateStr: string): string {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
+const STAGE_WORDS: Record<string, string> = {
+  SELL_PUT: 'selling puts',
+  ASSIGNED: 'assigned',
+  SELLING_CALLS: 'selling calls',
+  CALLED_AWAY: 'called away',
+};
 
 export function WheelCard({
   summary,
@@ -24,12 +26,16 @@ export function WheelCard({
   openCall,
   onComplete,
   onAbandon,
+  expanded,
+  onToggle,
 }: {
   summary: WheelSummary;
   mark: Mark | null;
   openCall: OptionPosition | null;
   onComplete: () => void;
   onAbandon: () => void;
+  expanded: boolean;
+  onToggle: () => void;
 }) {
   const { wheel, stage, sharesHeld, rawBasis, premiumBanked, trueBasis, closeToday, markMissing } = summary;
   const flat = sharesHeld <= 0;
@@ -60,24 +66,39 @@ export function WheelCard({
   const pct = (v: number) => Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100));
 
   return (
-    <div className="wheel-card" data-stage={stage}>
+    <div className={`wheel-card${expanded ? '' : ' folded'}`} data-stage={stage}>
       {run && (
         <CardFiligree key={run.id} drawMs={run.draw} holdMs={FILIGREE_HOLD_MS} fadeMs={FILIGREE_FADE_MS} />
       )}
-      <div className="wheel-card-head">
-        <div className="wheel-card-title">
-          {wheel.symbol}
-          {!flat && rawBasis != null && <span className="wheel-card-sh"> · {sharesHeld} sh</span>}
+      {/* The head is the toggle in both states. It cannot wrap the whole card — the expanded
+          card holds its own buttons, and a button inside a button is not a thing. */}
+      <button className="wheel-card-toggle" onClick={onToggle} aria-expanded={expanded}
+        aria-label={`${expanded ? 'Collapse' : 'Expand'} the ${wheel.symbol} wheel`}>
+        <div className="wheel-card-head">
+          <div className="wheel-card-title">
+            {wheel.symbol}
+            {!flat && rawBasis != null && <span className="wheel-card-sh"> · {sharesHeld} sh</span>}
+          </div>
+          {expanded && openCall && (
+            <span className="wheel-card-tag">
+              CC ${openCall.strike} · exp {expiryLabel(openCall.expiration)}
+            </span>
+          )}
+          {/* Folded, the card is a one-line summary: the figure the wheel exists to produce
+              sits on the title line, because that is the whole reason to glance at it. */}
+          {!expanded && (
+            <span className={`wheel-fold-amount ${flash}`} style={{ color: plColor(closeToday) }}>
+              <Odometer value={formatSignedMoney(closeToday)} speed="detail" dataTestid={`wheel-total-${wheel.id}`} />
+            </span>
+          )}
         </div>
-        {openCall && (
-          <span className="wheel-card-tag">
-            CC ${openCall.strike} · exp {expiryLabel(openCall.expiration)}
-          </span>
-        )}
-      </div>
-      <div className="wheel-card-sub">
-        Wheel Nº {wheel.no} · started {fmtShort(wheel.opened_at)} · week {summary.weeks}
-      </div>
+        <div className="wheel-card-sub">
+          Wheel Nº {wheel.no} · {expanded ? `started ${fmtShortDate(wheel.opened_at)} · ` : ''}week {summary.weeks}
+          {!expanded && ` · ${STAGE_WORDS[stage] ?? stage.toLowerCase().replace('_', ' ')}`}
+        </div>
+      </button>
+      {!expanded ? null : (
+      <>
       <div className="wheel-dial-wrap">
         <WheelDial stage={stage} callsSold={summary.callsSold} no={wheel.no} weeks={summary.weeks} wheelId={wheel.id} onSweepStart={onSweepStart} />
       </div>
@@ -139,6 +160,8 @@ export function WheelCard({
       <div className="link-row" style={{ margin: '8px 0 0' }}>
         <button onClick={onAbandon}>abandon wheel</button>
       </div>
+      </>
+      )}
     </div>
   );
 }

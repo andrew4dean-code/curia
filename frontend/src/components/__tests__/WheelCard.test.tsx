@@ -74,7 +74,7 @@ describe('WheelDial', () => {
 describe('WheelCard', () => {
   it('shows the basis tiles and the close-today total', () => {
     render(
-      <WheelCard summary={base} mark={{ symbol: 'TQQQ', price: 64, marked_at: new Date().toISOString(), source: 'auto' }} openCall={null} onComplete={vi.fn()} onAbandon={vi.fn()} />,
+      <WheelCard summary={base} mark={{ symbol: 'TQQQ', price: 64, marked_at: new Date().toISOString(), source: 'auto' }} openCall={null} onComplete={vi.fn()} onAbandon={vi.fn()} expanded onToggle={vi.fn()} />,
     );
     expect(screen.getByText('$72.00')).toBeInTheDocument();
     expect(screen.getByText('$412.00')).toBeInTheDocument();
@@ -92,6 +92,8 @@ describe('WheelCard', () => {
         openCall={null}
         onComplete={onComplete}
         onAbandon={vi.fn()}
+        expanded
+        onToggle={vi.fn()}
       />,
     );
     expect(screen.getByText('Banked this wheel')).toBeInTheDocument();
@@ -105,7 +107,7 @@ describe('WheelCard', () => {
    attempt to ornament it read as dirt. These pin the wiring: the dial tells the card a
    sweep has begun, and only then. */
 describe('card filigree', () => {
-  const props = { mark: null, openCall: null, onComplete: vi.fn(), onAbandon: vi.fn() };
+  const props = { mark: null, openCall: null, onComplete: vi.fn(), onAbandon: vi.fn(), expanded: true, onToggle: vi.fn() };
   const fil = () => document.querySelector('[data-testid="card-filigree"]');
 
   it('is absent on a card that has not moved', () => {

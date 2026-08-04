@@ -822,54 +822,134 @@
   100% { transform: translateY(200px); opacity: 0; }
 }
 
-/* ---- the settle stamp: outcome slams diagonally across the ticket, amount counts up beneath it ---- */
+/* ============================ SETTLING A CONTRACT ============================
+   Two shapes, because two different things happen.
+
+   EXPIRED / BOUGHT BACK is a verdict, and keeps the stamp. What it loses is the collision.
+   The stamp used to be position:absolute at top 46% while the amount sat in normal flow —
+   nothing coordinated them, and on a card this short they always met: 228x45px of measured
+   overlap, the figure struck through by the word. Both sit in flow now, the stamp in a
+   berth tall enough to hold it at its angle, and they cannot reach each other again.
+
+   ASSIGNED is a conversion, not a verdict, and gets the exchange further down: what left
+   goes one way, what arrived comes the other, and the certificate is filed behind a sleeve
+   rather than faded out in front of one.
+   ========================================================================= */
 .settle-ceremony[data-tone='up'] { --stamp: var(--pl-green); }
 .settle-ceremony[data-tone='down'] { --stamp: var(--pl-red); }
 .settle-ceremony[data-tone='assign'] { --stamp: var(--maroon); }
-.settle-stamp { position: absolute; left: 50%; top: 46%; margin-left: -110px; width: 220px; text-align: center; font-family: var(--font-display); font-weight: 800; font-size: 30px; letter-spacing: .05em; color: var(--stamp); border: 3px solid var(--stamp); border-radius: 6px; padding: 6px 0; opacity: 0; transform: rotate(-12deg); }
-.settle-ceremony[data-stage='swing'] .settle-stamp { animation: stamp-swing .62s cubic-bezier(.4,0,.25,1) both; }
-.settle-ceremony:not([data-stage='swing']) .settle-stamp { opacity: .92; }
-@keyframes stamp-swing { 0% { opacity: 0; transform: rotate(-40deg) scale(2.4) translateY(-90px); } 70% { opacity: 1; transform: rotate(-9deg) scale(.94); } 100% { opacity: .92; transform: rotate(-12deg) scale(1); } }
-.settle-ceremony[data-stage='hit'] .settle-ticket { animation: ticket-jolt .3s cubic-bezier(.36,.07,.19,.97) both; }
+
+/* ---- the verdict: expired, or bought back ---- */
+/* A 220px word at -12deg needs 220*sin12 + 48*cos12 = 93px of vertical room. The berth is
+   that room, reserved in flow, which is the whole reason the figure below is now safe. */
+.settle-stamp-berth { height: 96px; display: grid; place-items: center; }
+.settle-stamp { width: 220px; text-align: center; font-family: var(--font-display); font-weight: 800;
+  font-size: 30px; letter-spacing: .05em; color: var(--stamp); border: 3px solid var(--stamp);
+  border-radius: 6px; padding: 6px 0; opacity: .92; transform: rotate(-12deg);
+  animation: stamp-swing .42s cubic-bezier(.4,0,.25,1) both; }
+/* Enters at scale 1.4, not 2.4: on a 220px word that was 528px across a 375px screen, so the
+   stamp was clipped by both edges at once on its way in. 1.4 keeps its widest moment at
+   ~306px, inside the phone. */
+@keyframes stamp-swing {
+  0%   { opacity: 0; transform: rotate(-26deg) scale(1.4) translateY(-70px); }
+  70%  { opacity: 1; transform: rotate(-9deg) scale(.96); }
+  100% { opacity: .92; transform: rotate(-12deg) scale(1); }
+}
+/* On the blow, not 186ms after it: the swing bottoms out at 420, so the paper answers at 420. */
+.settle-verdict .settle-ticket { animation: ticket-jolt .3s .42s cubic-bezier(.36,.07,.19,.97) both; }
 @keyframes ticket-jolt { 0%, 100% { transform: translateY(0); } 22% { transform: translateY(7px) rotate(.6deg); } 55% { transform: translateY(-3px) rotate(-.3deg); } }
-.settle-amount { margin-top: 74px; text-align: center; font-size: 30px; color: var(--stamp); opacity: 0; transform: translateY(10px); }
-.settle-ceremony[data-stage='count'] .settle-amount,
-.settle-ceremony[data-stage='certificate'] .settle-amount { animation: amount-rise .4s cubic-bezier(.3,1.4,.5,1) both; }
+.settle-amount { margin-top: 10px; text-align: center; font-size: 30px; color: var(--stamp);
+  animation: amount-rise .4s .58s cubic-bezier(.3,1.4,.5,1) both; }
 @keyframes amount-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-.settle-cert { margin-top: 14px; text-align: center; font-family: var(--font-mono); font-size: 14px; letter-spacing: .08em; color: var(--ink); }
 
-/* ---- stage: certificate — the option terms dissolve, the share line forms, an ornate border draws in ----
-   the stamp-dissolve and cert-settle rules themselves live below, under
-   "stage: file" — they are shared with that stage too, see the note there. */
-@keyframes stamp-dissolve { to { opacity: 0; transform: rotate(-12deg) scale(1.25); filter: blur(3px); } }
-/* animation is a shorthand: this rule replaces amount-rise's animation
-   outright (same specificity, later in the file wins), so opacity must be
-   re-asserted here too, or it falls back to .settle-amount's base opacity: 0
-   and the figure blanks out for the whole certificate stage. */
-@keyframes cert-settle { from { opacity: 1; transform: translateY(0); } to { opacity: 1; transform: translateY(-10px); } }
-.cert-frame { position: absolute; inset: 6px; border: 2px solid var(--gold); border-radius: 3px; box-shadow: 0 0 0 3px var(--parchment-card) inset, 0 0 0 4px rgba(169,136,66,.55) inset; clip-path: inset(0 100% 100% 0); animation: cert-draw 1.5s .35s cubic-bezier(.3,.8,.3,1) both; }
-@keyframes cert-draw { 0% { clip-path: inset(0 100% 100% 0); } 50% { clip-path: inset(0 0 100% 0); } 100% { clip-path: inset(0 0 0 0); } }
-.settle-ceremony[data-stage='certificate'] .settle-cert,
-.settle-ceremony[data-stage='file'] .settle-cert { animation: cert-text .7s .9s ease-out both; }
-@keyframes cert-text { from { opacity: 0; letter-spacing: .3em; } to { opacity: 1; letter-spacing: .08em; } }
+/* ---- the exchange: assigned ---- */
+.settle-exchange { display: grid; place-items: center; }
+.exchange-stage { position: relative; width: 315px; height: 330px; }
 
-/* ---- stage: file — the certificate stays fully drawn while it is put away ----
-   stamp-dissolve and cert-settle are written to hold their finished state only
-   while their selector matches. Scoping both to 'certificate' alone meant the
-   instant the stage advanced to 'file' the selector stopped matching, the held
-   'both' state was dropped, and the ASSIGNED stamp and dollar amount snapped
-   back to their pre-certificate look for the whole filing beat. Carrying the
-   same selector (and therefore the same computed animation value, so nothing
-   restarts) through 'file' keeps the certificate intact as it is filed away. */
-.settle-ceremony[data-stage='certificate'] .settle-stamp,
-.settle-ceremony[data-stage='file'] .settle-stamp { animation: stamp-dissolve .6s ease-in both; }
-.settle-ceremony[data-stage='certificate'] .settle-amount,
-.settle-ceremony[data-stage='file'] .settle-amount { animation: cert-settle .6s ease-out both; }
+/* the contract that was sold — struck, then out of the way */
+.xc-contract { position: absolute; left: 0; right: 0; top: 22px; margin: 0 auto; width: 250px;
+  background: var(--parchment-card); border: 1px solid var(--rule); border-radius: 8px;
+  padding: 12px 14px; box-shadow: 0 10px 24px rgba(0,0,0,.3); transform-origin: 50% 100%;
+  animation: xc-close .62s cubic-bezier(.4,0,.6,1) both; }
+.xc-contract-head { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em;
+  color: var(--gold-label); text-transform: uppercase; }
+.xc-contract-body { font-family: var(--font-mono); font-size: 14px; margin-top: 6px; color: var(--ink); }
+.xc-strike { position: absolute; left: 14px; right: 14px; top: 62%; height: 2px; background: var(--maroon);
+  transform: scaleX(0); transform-origin: 0 50%; animation: xc-strike .34s .18s cubic-bezier(.3,.7,.4,1) both; }
+@keyframes xc-strike { to { transform: scaleX(1); } }
+@keyframes xc-close {
+  0%   { transform: translateY(0) scale(1); opacity: 1; }
+  55%  { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-26px) scale(.93); opacity: 0; }
+}
 
-/* ---- the filing sleeve: a folder lip rises from below, the certificate lifts
-   then slides down behind it and out of sight — the same beat as the trade
-   ceremony's envelope taking the folded ticket. ---- */
-.settle-file { position: absolute; left: -6px; right: -6px; bottom: -10px; height: 62px; border-radius: 6px 6px 3px 3px; background: linear-gradient(var(--parchment) 0%, var(--parchment-card) 55%); border: 1px solid var(--rule); box-shadow: 0 -3px 10px rgba(46,40,32,.18); transform-origin: 50% 100%; animation: sleeve-rise .42s cubic-bezier(.3,.9,.35,1) both; z-index: 4; }
-@keyframes sleeve-rise { from { transform: translateY(46px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-.settle-ceremony[data-stage='file'] .settle-ticket { animation: cert-file 1.1s cubic-bezier(.45,0,.3,1) both; }
-@keyframes cert-file { 0% { transform: translateY(0) scale(1); opacity: 1; } 45% { transform: translateY(-8px) scale(1.02); opacity: 1; } 100% { transform: translateY(74px) scale(.86); opacity: 0; } }
+/* the line naming what happened, written into the space the contract just vacated — NOT
+   below the exchange, where it lay directly in the filing path and the certificate swept
+   down through the words on its way to the sleeve. */
+.xc-verdict { position: absolute; left: 0; right: 0; top: 56px; text-align: center;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--maroon); animation: xc-verdict-in .4s 1.62s ease-out both; }
+@keyframes xc-verdict-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* The filing window. Its floor sits on the sleeve's mouth (stage 266 minus its own top 96 =
+   170 of its 214 height), so a card travelling down is cut off AT the sleeve and is gone
+   behind it. The old ceremony faded the card out at opacity 0 over a sleeve it was never
+   behind, on a card taller than the sleeve — which is why nothing ever read as filed. */
+.xc-window { position: absolute; left: 0; right: 0; top: 96px; height: 214px; z-index: 2;
+  clip-path: inset(0 0 44px 0); }
+.xc-filing { animation: xc-file .62s 2.34s cubic-bezier(.5,0,.4,1) both; }
+@keyframes xc-file { 0% { transform: translateY(0); } 100% { transform: translateY(96px); } }
+
+/* the two sides, in their own columns — they are laid out side by side, so no amount of
+   timing error can ever print one over the other */
+.xc-swap { position: absolute; left: 0; right: 0; top: 0; height: 132px;
+  animation: xc-settle .26s 1.5s cubic-bezier(.36,.07,.19,.97) both; }
+@keyframes xc-settle { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(5px); } }
+.xc-side { position: absolute; top: 0; width: 150px; height: 132px; border-radius: 8px; padding: 12px;
+  display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+.xc-cap { font-family: var(--font-mono); font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--gold-label); }
+.xc-fig { font-family: var(--font-display); font-weight: 800; font-size: 23px; font-variant-numeric: tabular-nums; }
+
+.xc-gone { left: 0; background: var(--parchment-card); border: 1px solid var(--rule);
+  animation: xc-gone-out 1.05s .52s cubic-bezier(.45,0,.3,1) both; }
+.xc-gone .xc-fig { color: var(--ink-soft); text-decoration: line-through; text-decoration-thickness: 2px; }
+@keyframes xc-gone-out {
+  0%   { transform: translateX(0) scale(1); opacity: 0; }
+  18%  { transform: translateX(0) scale(1); opacity: 1; }
+  100% { transform: translateX(-176px) rotate(-5deg) scale(.9); opacity: 0; }
+}
+
+.xc-got { right: 0; background: linear-gradient(180deg, #F4EDDC, var(--parchment-card));
+  border: 1px solid var(--gold); box-shadow: 0 8px 20px rgba(0,0,0,.22);
+  animation: xc-got-in 1.05s .52s cubic-bezier(.3,.9,.32,1) both; }
+.xc-got .xc-fig { color: var(--ink); }
+/* One continuous path: in from the right, through its own column while the other side is
+   still leaving, and on into the middle as the exchange finishes — so what you are left
+   with ends centred rather than stranded in a column whose partner has gone. */
+@keyframes xc-got-in {
+  0%   { transform: translateX(176px) rotate(5deg) scale(.9); opacity: 0; }
+  45%  { opacity: 1; }
+  70%  { transform: translateX(-24px) rotate(0deg) scale(1); }
+  90%  { transform: translateX(-82px) scale(1.03); }
+  100% { transform: translateX(-82px) rotate(0deg) scale(1); opacity: 1; }
+}
+/* Draws on BOTH axes at once. The old cert-draw held its bottom edge at 100% for the whole
+   first half, so a 1.5s animation with a .35s delay rendered nothing at all for 1.1s. */
+.xc-frame { position: absolute; inset: 5px; border: 1.5px solid var(--gold); border-radius: 4px;
+  opacity: .85; clip-path: inset(0 100% 0 0); animation: xc-frame-draw .5s 1.15s cubic-bezier(.35,.8,.3,1) both; }
+@keyframes xc-frame-draw { to { clip-path: inset(0 0 0 0); } }
+
+/* the sleeve reacts to receiving something — the old one never moved at all */
+.xc-sleeve { position: absolute; left: 56px; right: 56px; top: 266px; height: 52px;
+  border-radius: 5px 5px 3px 3px; background: linear-gradient(var(--parchment) 0%, var(--parchment-card) 60%);
+  border: 1px solid var(--rule); box-shadow: 0 -3px 10px rgba(46,40,32,.18); z-index: 3;
+  animation: xc-sleeve-in .34s 1.95s cubic-bezier(.3,.9,.35,1) both, xc-sleeve-take .3s 2.62s ease-out both; }
+@keyframes xc-sleeve-in { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes xc-sleeve-take { 0%, 100% { transform: translateY(0); } 45% { transform: translateY(-3px); } }
+.xc-filed { position: absolute; left: 0; right: 0; top: 326px; text-align: center;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-soft); animation: xc-verdict-in .4s 2.95s ease-out both; }
+
+/* The veil lets go with the ceremony, not 333ms before it. */
+.settle-exchange { animation: xc-veil-out .5s 2.9s ease-out both; }
+@keyframes xc-veil-out { to { background: rgba(31,27,18,0); } }

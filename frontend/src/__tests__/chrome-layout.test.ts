@@ -31,14 +31,39 @@ describe('app chrome layout', () => {
     expect(owners, `.tabbar is declared in ${owners.join(' and ')} — the later import wins silently`).toEqual(['app.css']);
   });
 
+  it('defines --safe-bottom as the home-indicator inset with a floor', () => {
+    // The inset is referenced through this variable now, so the variable is the thing
+    // that has to be right — every assertion below leans on it.
+    expect(rules('app.css')).toMatch(/--safe-bottom:\s*max\(env\(safe-area-inset-bottom\)\s*,\s*\d+px\)/);
+  });
+
   it('reserves bottom space that tracks the tab bar instead of a fixed height', () => {
     const shell = /\.shell\s*\{([^}]*)\}/.exec(rules('app.css'));
     expect(shell, '.shell rule not found').not.toBeNull();
     const decl = shell![1];
-    // The reserved space must move with the same inset the bar itself pads by.
-    expect(decl, '.shell must reserve space using env(safe-area-inset-bottom)').toContain('safe-area-inset-bottom');
+    // The reserved space must move with the same inset the bar itself pads by — directly
+    // or through --safe-bottom, which the test above pins to that inset.
+    expect(decl, '.shell must reserve space using the home-indicator inset').toMatch(
+      /safe-area-inset-bottom|var\(--safe-bottom\)/,
+    );
     // A bare 3-digit px bottom padding is the hardcoded-height bug returning.
     expect(/padding:[^;]*\s\d{3}px\s*;/.test(decl), '.shell bottom padding is a fixed px height again').toBe(false);
+  });
+
+  /* The bottom padding cleared the tab bar and nothing else, but the FAB floats a further
+     92px above the bar. At full scroll the button sat on top of the last row of every
+     scrolling tab — it covered the last holding's P/L by 56x13px, and scrolling could not
+     free it, because that was the end of the document. Both must be derived from the same
+     two variables so the floor cannot be left behind when the button moves. */
+  it('reserves enough bottom space to clear the FAB, not just the tab bar', () => {
+    const app = rules('app.css');
+    const shell = /\.shell\s*\{([^}]*)\}/.exec(app)![1];
+    const fab = /\.fab\s*\{([^}]*)\}/.exec(app)![1];
+    for (const v of ['--fab-lift', '--fab-size']) {
+      expect(shell, `.shell must reserve space in terms of ${v}`).toContain(`var(${v})`);
+    }
+    expect(fab, '.fab must be positioned from --fab-lift').toContain('var(--fab-lift)');
+    expect(fab, '.fab must be sized from --fab-size').toContain('var(--fab-size)');
   });
 
   it('keeps every tab at least a screenful tall', () => {
@@ -70,7 +95,7 @@ describe('app chrome layout', () => {
 
   it('pads the tab bar by the home-indicator inset, with a floor', () => {
     const bar = /\.tabbar\s*\{([^}]*)\}/.exec(rules('app.css'))![1];
-    expect(bar).toContain('max(env(safe-area-inset-bottom)');
+    expect(bar).toMatch(/max\(env\(safe-area-inset-bottom\)|var\(--safe-bottom\)/);
     expect(bar).toContain('position: fixed');
   });
 });

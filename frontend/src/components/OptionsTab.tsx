@@ -2,16 +2,11 @@ import { useState } from 'react';
 import type { TabProps } from './PortfolioTab';
 import { canMarkQuiet, fridaysOfMonth, monthScore, slideDirection, weekFridayFor } from '../lib/board';
 import { needsSettling, optionRealizedPl, premiumCollected } from '../lib/optionsMath';
-import { expiryLabel, nextFriday, todayIso } from '../lib/time';
+import { expiryLabel, fmtShortDate, nextFriday, todayIso } from '../lib/time';
 import { formatMoney, formatSignedMoney } from '../lib/format';
 import { Odometer } from './Odometer';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-
-function fmtShort(dateStr: string): string {
-  const [, m, d] = dateStr.split('-').map(Number);
-  return `${MONTHS[m - 1].slice(0, 3)} ${d}`;
-}
 
 export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onMarkQuiet, onClearQuiet, strikingOptionId, onPasteFill }: TabProps) {
   const now = new Date();
@@ -72,28 +67,45 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onM
               : `${expiryLabel(friday)} left`
             : '';
           return (
-            <div key={friday} className={`wk${isPast ? ' past' : ''}${isLive ? ' live' : ''}`} style={{ ['--wk-i' as string]: Math.min(i, 4) }}>
+            <div key={friday} className={`wk${isPast ? ' past' : ''}${isLive ? ' live' : ''}${rows.length === 0 && !isQuiet && !canQuiet ? ' wk-bare' : ''}`} style={{ ['--wk-i' as string]: Math.min(i, 4) }}>
               <span className="wk-num" aria-hidden="true">{i + 1}</span>
               <div className="wk-label">
-                Week {i + 1} · Fri {fmtShort(friday)}
+                Week {i + 1} · Fri {fmtShortDate(friday)}
                 {isLive ? ` · ${liveNote}` : ''}
               </div>
               <div className="wk-rule" />
-              {rows.map((o) =>
-                o.status === 'OPEN' ? (
-                  <button key={o.id} className={o.id === strikingOptionId ? 'wk-chip striking' : 'wk-chip'} onClick={() => onSettleOption(o)}>
-                    <span className="wk-seal">{o.opt_type === 'PUT' ? 'P' : 'C'}</span>
-                    <span className="wk-chip-text">
-                      {o.symbol} ${o.strike} {o.opt_type} · {o.contracts}x · {formatMoney(premiumCollected(o))}
-                      {needsSettling(o, today) && <span className="wk-todo">needs settling</span>}
+              {/* One skeleton for both states. Open and settled used to be two different
+                  rows — a 34px maroon disc reading "C" against a small green tick — so the
+                  settled row, which carries the money actually kept, read lighter than the
+                  open one, and neither amount sat in a column you could scan down. Now the
+                  figure is always the last cell of the same grid, and the state shows in
+                  its sign, its colour and the tag under it. */}
+              {rows.map((o) => {
+                const settled = o.status !== 'OPEN';
+                const pl = optionRealizedPl(o) ?? 0;
+                const unsettled = !settled && needsSettling(o, today);
+                return (
+                  <button
+                    key={o.id}
+                    type="button"
+                    className={`wk-row${settled ? ' settled' : ''}${o.id === strikingOptionId ? ' striking' : ''}`}
+                    onClick={() => (settled ? onViewRecord?.(o) : onSettleOption(o))}
+                  >
+                    <span className="wk-row-what">
+                      {o.symbol} ${o.strike} {o.opt_type} · {o.contracts}x
                     </span>
+                    <span className="wk-row-amt" style={settled ? { color: pl >= 0 ? 'var(--pl-up)' : 'var(--pl-down)' } : undefined}>
+                      {settled ? formatSignedMoney(pl) : formatMoney(premiumCollected(o))}
+                    </span>
+                    {(settled || unsettled) && (
+                      <span className="wk-row-meta">
+                        {settled && <span className="wk-tag">{o.status.replace('_', ' ').toLowerCase()}</span>}
+                        {unsettled && <span className="wk-todo">needs settling</span>}
+                      </span>
+                    )}
                   </button>
-                ) : (
-                  <button key={o.id} type="button" className={o.id === strikingOptionId ? 'wk-settled striking' : 'wk-settled'} style={{ color: (optionRealizedPl(o) ?? 0) >= 0 ? 'var(--pl-up)' : 'var(--pl-down)' }} onClick={() => onViewRecord?.(o)}>
-                    ✓ {o.symbol} ${o.strike} {o.opt_type} — {(optionRealizedPl(o) ?? 0) >= 0 ? 'kept' : 'gave back'} {formatSignedMoney(optionRealizedPl(o) ?? 0)}
-                  </button>
-                ),
-              )}
+                );
+              })}
               {isQuiet && (
                 <div className="wk-quiet">
                   <span>No trades this week.</span>
@@ -101,7 +113,7 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onM
                     <button
                       type="button"
                       className="wk-quiet-undo"
-                      aria-label={`undo the quiet mark on ${fmtShort(friday)}`}
+                      aria-label={`undo the quiet mark on ${fmtShortDate(friday)}`}
                       onClick={() => onClearQuiet(friday)}
                     >
                       undo
@@ -115,25 +127,29 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onM
                     className="wk-pill wk-pill-go"
                     aria-label={
                       isPast
-                        ? `log a trade for the week of ${fmtShort(friday)}`
-                        : `sell the week of ${fmtShort(friday)}`
+                        ? `log a trade for the week of ${fmtShortDate(friday)}`
+                        : `sell the week of ${fmtShortDate(friday)}`
                     }
                     onClick={() => onSellWeek(friday)}
                   >
+                    {/* An empty week puts its label and its button on one line, and the full
+                        phrasing does not fit beside the date — it squeezed the label to 132px
+                        against the ~150px it needs and wrapped it in two. The short form is
+                        for the eye; the aria-label above still names the week in full. */}
                     {isPast
                       ? rows.length > 0
                         ? '＋ log another'
-                        : '＋ log a trade'
+                        : '＋ log'
                       : rows.length > 0
                         ? '＋ sell another'
-                        : '＋ sell this week'}
+                        : '＋ sell'}
                   </button>
                 )}
                 {canQuiet && onMarkQuiet && (
                   <button
                     type="button"
                     className="wk-pill wk-pill-ghost"
-                    aria-label={`didn't trade the week of ${fmtShort(friday)}`}
+                    aria-label={`didn't trade the week of ${fmtShortDate(friday)}`}
                     onClick={() => onMarkQuiet(friday)}
                   >
                     didn't trade

@@ -24,6 +24,7 @@ import type { WheelCeremonyData } from './components/WheelCeremony';
 import { SettleCeremony } from './components/SettleCeremony';
 import type { SettleData } from './components/SettleCeremony';
 import { summarizeWheel } from './lib/wheelMath';
+import { computeOpenPositions } from './lib/positions';
 import { recentSymbols } from './lib/symbols';
 import { matchOpenOption } from './lib/parseConfirmation';
 import type { ParsedConfirmation } from './lib/parseConfirmation';
@@ -65,15 +66,21 @@ export function wheelStages(snap: Snapshot | null): Map<number, string> {
   return stages;
 }
 
-/** The id of a wheel whose stage differs between two snapshots, or null.
- *  A wheel that appears or disappears is not a stage change — opening a fresh wheel has
- *  its own ceremony, and closing one should not yank the tab out from under it. */
-export function movedWheel(before: Map<number, string>, after: Map<number, string>): number | null {
-  for (const [id, stage] of after) {
-    const was = before.get(id);
-    if (was !== undefined && was !== stage) return id;
-  }
-  return null;
+/** Everything the Portfolio tab puts on screen, as one comparable string: the book value,
+ *  what is unrealized against it, and where every wheel stands.
+ *
+ *  The landing used to switch tabs only when a WHEEL moved, which read "nothing changed"
+ *  as "no wheel changed" — so a plain stock buy, which always moves the book value, played
+ *  its whole ceremony and then left you on the board that cannot show you the figure it
+ *  just changed. Compared either side of the ceremony's refresh, this catches that;
+ *  an edit that genuinely alters nothing still leaves you where you are. */
+export function portfolioFigures(snap: Snapshot | null): string {
+  if (!snap) return '';
+  const positions = computeOpenPositions(snap.trades, snap.marks);
+  const book = positions.reduce((s, p) => s + (p.marketValue ?? p.qty * p.avgCost), 0);
+  const unrealized = positions.reduce((s, p) => s + (p.unrealizedPl ?? 0), 0);
+  const stages = [...wheelStages(snap)].map(([id, st]) => `${id}:${st}`).sort().join(',');
+  return `${book.toFixed(2)}|${unrealized.toFixed(2)}|${stages}`;
 }
 
 export default function App() {
@@ -387,15 +394,16 @@ export default function App() {
           onDone={() => {
             setCeremony(null);
             setLanding(true);
-            // Where the wheels stood before this booking was folded in. Captured after
-            // the envelope has closed and before the refresh that may move one along.
-            const before = wheelStages(snap);
+            // Where the portfolio stood before this booking was folded in. Captured after
+            // the envelope has closed and before the refresh that may move it.
+            const before = portfolioFigures(snap);
             void refresh().then((latest) => {
-              // The dial keeps its own memory of where each hand was left, so landing on
-              // Portfolio makes the arm travel to the new stage rather than already be
-              // there. Only switch when a wheel actually moved: being thrown to another
-              // tab for a booking that changed nothing would be worse than staying put.
-              if (movedWheel(before, wheelStages(latest))) setTab('portfolio');
+              // Land where the figures that just changed actually live. The dial keeps its
+              // own memory of where each hand was left, so arriving on Portfolio makes the
+              // arm travel to its new stage rather than already be there — and the book
+              // value rolls on arrival for the far commoner case of a plain stock fill.
+              // A booking that moved nothing still leaves you where you were.
+              if (portfolioFigures(latest) !== before) setTab('portfolio');
               landingTimer.current = window.setTimeout(() => {
                 landingTimer.current = null;
                 setLanding(false);

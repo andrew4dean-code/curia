@@ -1,15 +1,25 @@
-/* The bottom padding has to clear the fixed tab bar, and the bar's height is not fixed:
-   it grows by the home-indicator inset on a phone. A hardcoded 112px therefore left 45px
-   of clearance in a desktop browser and only 21px on an actual iPhone — the one place it
-   could not be checked. Stated instead as the bar's own content height (59px, which
-   counts its 3px double rule) plus the clearance we want (45px) plus the same inset the
-   bar itself pads by, it holds 45px everywhere. Thicken that rule and this moves.
+/* The bottom padding has to clear the fixed furniture, and the TALLEST piece of it is not
+   the tab bar — it is the FAB, which floats a further 92px above the bar. Clearing only the
+   bar (the old 104px + inset) left the last row of every scrolling tab sitting under the
+   button: at full scroll the FAB covered the last holding's P/L by 56x13px, and no amount
+   of scrolling could free it, because that was the end of the document.
+
+   So the floor is stated in terms of the FAB's own geometry — its lift off the inset, its
+   diameter, and the clearance we want under the last row — and the FAB is positioned from
+   the same two variables. Move the button and the floor follows it; they cannot drift apart.
+   This clears the tab bar as a side effect (162px vs the 104px the bar alone needs).
 
    min-height keeps every tab at least a screen tall. Settings is the only tab short
    enough not to scroll, and on iOS Safari a page that cannot scroll never collapses the
    browser toolbar — which changes env(safe-area-inset-bottom) and makes the bar look a
    different height on that tab than on the others. */
-.shell { max-width: 640px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px calc(104px + max(env(safe-area-inset-bottom), 10px)); min-height: 100dvh; }
+:root {
+  --safe-bottom: max(env(safe-area-inset-bottom), 10px);
+  --fab-lift: 92px;
+  --fab-size: 56px;
+  --fab-clearance: 14px;
+}
+.shell { max-width: 640px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px calc(var(--fab-lift) + var(--fab-size) + var(--fab-clearance) + var(--safe-bottom)); min-height: 100dvh; }
 .hero { text-align: center; padding: 24px 0 8px; }
 .hero .odo { font-family: var(--font-display); font-size: 44px; font-weight: 800; }
 .hero-sub { color: var(--ink-soft); margin-top: 4px; font-size: 13px; }
@@ -23,16 +33,27 @@
 .row-pl { font-size: 12px; margin-top: 2px; }
 /* The double rule is the letterpress token curia-tokens.css always meant to apply and
    never did; it is applied here, where it actually wins. */
-.tabbar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: var(--parchment-card); border-top: 3px double var(--rule); box-shadow: 0 -3px 12px rgba(31, 27, 18, 0.08); padding-bottom: max(env(safe-area-inset-bottom), 10px); }
+.tabbar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: var(--parchment-card); border-top: 3px double var(--rule); box-shadow: 0 -3px 12px rgba(31, 27, 18, 0.08); padding-bottom: var(--safe-bottom); }
 .tabbar button { flex: 1; padding: 16px 0 14px; background: none; border: none; border-top: 3px solid transparent; margin-top: -1px; font-family: var(--font-display); font-size: 18px; font-weight: 700; letter-spacing: 0.02em; color: var(--ink-soft); }
 .tabbar button.active { color: var(--maroon); border-top-color: var(--maroon); }
-.fab { position: fixed; right: 20px; bottom: calc(92px + max(env(safe-area-inset-bottom), 10px)); width: 56px; height: 56px; border-radius: 50%; background: var(--maroon); color: var(--parchment); font-size: 30px; line-height: 1; border: none; box-shadow: 0 3px 10px rgba(0,0,0,.25); }
+.fab { position: fixed; right: 20px; bottom: calc(var(--fab-lift) + var(--safe-bottom)); width: var(--fab-size); height: var(--fab-size); border-radius: 50%; background: var(--maroon); color: var(--parchment); font-size: 30px; line-height: 1; border: none; box-shadow: 0 3px 10px rgba(0,0,0,.25); }
 .sheet-backdrop { position: fixed; inset: 0; background: rgba(31,27,18,.45); display: flex; align-items: flex-end; z-index: 20; animation: backdrop-in .22s ease-out both; }
 @keyframes backdrop-in { from { background: rgba(31,27,18,0); } to { background: rgba(31,27,18,.45); } }
 .sheet { background: var(--parchment-card); width: 100%; max-width: 640px; margin: 0 auto; border-radius: 14px 14px 0 0; padding: 20px 20px calc(20px + env(safe-area-inset-bottom)); animation: sheet-up .32s var(--roll-ease) both; max-height: calc(100dvh - 24px); overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 @keyframes sheet-up { from { transform: translateY(64px); opacity: .5; } to { transform: translateY(0); opacity: 1; } }
 .sheet h2 { font-family: var(--font-display); margin-bottom: 12px; }
 .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+/* A fee is one to four characters. Stacked full-width the three of them cost ~220px of
+   Settings to hold "0" three times. Set on one line — label left, figure right — they read
+   like the ledger they feed, and the box is still 44px tall and 16px of type, which is what
+   the tap target and the iOS zoom floor need. */
+.field-inline { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+/* 10px, matching the stat-cell labels: at 11px "worst-case fee per option contract" needs
+   248px of the 251px left beside the box and wrapped, leaving that one row taller than
+   its neighbours. The wording earns its keep — a worst-case fee is not your real one — so
+   the type gives way, not the words. */
+.field-inline label { flex: 1; min-width: 0; font-size: 10px; line-height: 1.35; }
+.field-inline input { flex: none; width: 96px; text-align: right; font-variant-numeric: tabular-nums; }
 .field label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--gold-label); }
 .field input, .field select { font-family: var(--font-mono); font-size: 16px; padding: 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--parchment); color: var(--ink); }
 .btn { width: 100%; padding: 13px; border: none; border-radius: 8px; background: var(--maroon); color: var(--parchment); font-family: var(--font-display); font-size: 16px; font-weight: 700; }
@@ -68,7 +89,11 @@
 .board-score-amount { font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
 .board-weeks { display: flex; flex-direction: column; gap: 14px; }
 .wk { position: relative; overflow: hidden; background: var(--parchment-card); border: 1px solid rgba(201, 182, 135, .55); border-radius: 12px; padding: 14px 16px; min-height: 92px; }
-.wk-num { position: absolute; right: 10px; top: -6px; font-family: var(--font-display); font-weight: 800; font-size: 64px; color: var(--ink); opacity: .07; pointer-events: none; }
+/* The week's numeral is ornament, and it used to sit top-right — which is exactly where the
+   premium column now lands, so every amount was printed over a giant ghost digit. Moved down
+   behind the actions row, where the card is empty on the right whether or not it holds
+   contracts. Still clipped by .wk's overflow, which is what keeps it feeling stamped on. */
+.wk-num { position: absolute; right: 10px; bottom: -14px; font-family: var(--font-display); font-weight: 800; font-size: 64px; line-height: 1; color: var(--ink); opacity: .07; pointer-events: none; }
 .wk-label { font-size: 12px; letter-spacing: .07em; color: var(--ink-soft); text-transform: uppercase; }
 .wk.live .wk-label { color: var(--maroon); font-weight: 700; }
 .wk-rule { border-top: 2px solid var(--rule); margin: 8px 0 4px; }
@@ -84,15 +109,43 @@
 .wk.past .wk-num { opacity: .05; }
 .wk.past .wk-rule { opacity: .55; }
 .wk-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+/* A week with nothing in it spends its height saying so: 114px — the same footprint as a
+   week holding two contracts — for a label and one button. Emptied of content there is no
+   column to preserve, so the label and its single action sit on one line and the card
+   drops to 60px. The 44px tap target is untouched; it is the stacking that goes.
+   Only when the week has exactly ONE action, which is why canQuiet rules it out: a past
+   empty week also offers "didn't trade", and two pills plus a date do not fit on one
+   375px line — the second was clipped by the card edge.
+   A quiet week keeps the tall form too: its "no trades this week" line is content.
+
+   NOT called .empty: that name is already taken by the app's empty-state message
+   (centred, italic, 40px of padding), and a week card wearing it silently inherited
+   the italics. Modifiers on .wk carry the wk- prefix. */
+.wk.wk-bare { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 0; padding: 8px 16px; }
+.wk.wk-bare .wk-rule { display: none; }
+.wk.wk-bare .wk-actions { margin-top: 0; flex: none; }
+.wk.wk-bare .wk-label { white-space: nowrap; }
+/* No room for the ornament in 62px with a button already on the right — and a bare week
+   reading quieter than a worked one is the correct hierarchy anyway. */
+.wk.wk-bare .wk-num { display: none; }
 .wk-pill { min-height: 44px; padding: 0 16px; border-radius: 999px; font-family: var(--font-mono); font-size: 13px; background: none; }
 .wk-pill-go { border: 1px solid var(--gold); color: var(--gold-label); }
 .wk-pill-ghost { border: 1px solid rgba(201, 182, 135, .5); color: var(--ink-soft); }
 .wk-pill:active { transform: scale(.97); }
-.wk-chip { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: none; padding: 8px 0; font-family: var(--font-mono); font-size: 15px; color: var(--ink); text-align: left; }
-.wk-chip:active .wk-seal { transform: scale(.92); }
-.wk-chip-text { min-width: 0; }
-.wk-seal { background: var(--maroon); color: var(--parchment); border-radius: 50%; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 16px; flex: none; box-shadow: 0 0 0 3px rgba(140, 43, 38, .16), 0 1px 3px rgba(0, 0, 0, .25); transition: transform .12s ease-out; }
-.wk-settled { display: block; width: 100%; min-height: 44px; text-align: left; background: none; border: none; font-family: var(--font-mono); font-size: 14px; padding: 12px 0 10px; }
+/* The board row, in the same two-column grid the Ledger's .row uses, so a contract reads
+   the same on both surfaces. minmax(0,1fr) is what lets the description ellipsize instead
+   of pushing the figure onto a line of its own: the premium used to orphan itself under
+   the text whenever the symbol ran two characters long, which put the money at a different
+   place on every row. The amount column is auto and nowrap — it always wins. */
+.wk-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "what amt" "meta meta"; column-gap: 12px; align-items: baseline; width: 100%; min-height: 44px; padding: 9px 0; background: none; border: none; font-family: var(--font-mono); font-size: 15px; color: var(--ink); text-align: left; }
+.wk-row-what { grid-area: what; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-row-amt { grid-area: amt; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.wk-row-meta { grid-area: meta; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 3px; }
+.wk-row:active { background: rgba(140, 43, 38, .05); }
+/* A settled contract is history: the description recedes and the figure carries the colour,
+   rather than the whole line turning green and outshouting the live one above it. */
+.wk-row.settled .wk-row-what { color: var(--ink-soft); }
+.wk-tag { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--gold-label); }
 .wk-todo { display: inline-block; margin-left: 8px; padding: 2px 7px; border: 1px solid var(--maroon); border-radius: 999px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; color: var(--maroon); white-space: nowrap; }
 .wk-quiet { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft); font-style: italic; }
 .wk-quiet-undo { min-height: 44px; padding: 0 6px; background: none; border: none; font-family: var(--font-mono); font-size: 13px; color: var(--gold-label); text-decoration: underline; }
@@ -106,6 +159,11 @@
 .row-tap { background: none; border: none; border-bottom: 1px solid var(--rule); font: inherit; color: inherit; text-align: left; width: 100%; }
 .row-action { background: none; border: none; color: var(--maroon); text-decoration: underline; font-family: var(--font-mono); font-size: 13px; padding: 2px 0 2px 12px; }
 .wheel-card { background: var(--parchment-card); border: 1px solid var(--maroon); border-radius: 12px; padding: 16px 14px 14px; margin: 10px 0 14px; }
+/* The toggle is a bare button wrapping the head — it must not look like one. */
+.wheel-card-toggle { display: block; width: 100%; background: none; border: none; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; }
+.wheel-card-toggle:active { opacity: .7; }
+.wheel-card.folded { padding: 12px 14px; }
+.wheel-fold-amount { font-family: var(--font-display); font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .wheel-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .wheel-card-title { font-family: var(--font-display); font-size: 20px; font-weight: 800; }
 .wheel-card-sh { font-family: var(--font-mono); font-size: 13px; font-weight: 400; color: var(--ink-soft); white-space: nowrap; }
@@ -221,8 +279,8 @@
 .row.striking::after { content: ''; position: absolute; left: 0; top: 50%; height: 2px; width: 100%; background: var(--ink); transform-origin: 0 50%; transform: scaleX(0); animation: strike .34s cubic-bezier(.3,.7,.4,1) both; }
 @keyframes strike { to { transform: scaleX(1); } }
 @keyframes row-fold { to { transform: scaleY(0); opacity: 0; } }
-.wk-chip.striking, .wk-settled.striking { position: relative; animation: row-fold .3s .4s cubic-bezier(.5,0,.75,0) both; }
-.wk-chip.striking::after, .wk-settled.striking::after { content: ''; position: absolute; left: 0; top: 50%; height: 2px; width: 100%; background: var(--ink); transform-origin: 0 50%; transform: scaleX(0); animation: strike .34s cubic-bezier(.3,.7,.4,1) both; }
+.wk-row.striking { position: relative; animation: row-fold .3s .4s cubic-bezier(.5,0,.75,0) both; }
+.wk-row.striking::after { content: ''; position: absolute; left: 0; top: 50%; height: 2px; width: 100%; background: var(--ink); transform-origin: 0 50%; transform: scaleX(0); animation: strike .34s cubic-bezier(.3,.7,.4,1) both; }
 
 .book-cover { position: fixed; inset: 0; z-index: 60; pointer-events: none; background: linear-gradient(120deg, #6B2320, var(--maroon) 45%, #521a17); transform-origin: 0% 50%; animation: cover-open .9s cubic-bezier(.5,0,.2,1) both; }
 .book-cover::after { content: 'C'; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); font-family: var(--font-display); font-weight: 800; font-size: 64px; color: var(--gold); opacity: .85; }

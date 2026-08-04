@@ -6,8 +6,31 @@ import { settleDateDefault, todayIso } from '../lib/time';
 import { optionRealizedPl, premiumCollected } from '../lib/optionsMath';
 import { formatMoney, formatSignedMoney } from '../lib/format';
 import { stampFor } from '../lib/settleStamp';
-import type { SettleData } from './SettleCeremony';
+import type { SettleData, SettleExchange } from './SettleCeremony';
 import type { OptionPosition, OptionStatus } from '../lib/types';
+
+/** The two halves of an assignment, named from your side of it.
+ *
+ *  A put assigned takes cash and hands back shares; a call assigned takes the shares and
+ *  hands back cash. The cash figure is the strike times the shares booked — what the
+ *  assignment itself moved, not the premium, which is already counted in the P/L. */
+export function exchangeFor(option: OptionPosition, bookSide: 'BUY' | 'SELL', bookQty: number): SettleExchange {
+  const cash = formatMoney(option.strike * bookQty);
+  const shares = `${bookQty} sh`;
+  return bookSide === 'BUY'
+    ? {
+        goneLabel: 'cash committed', goneFigure: `−${cash}`,
+        gotLabel: 'shares received', gotFigure: shares,
+        verdict: 'put assigned · you own the shares',
+        filedTo: `filed to ${option.symbol}`,
+      }
+    : {
+        goneLabel: 'shares called away', goneFigure: shares,
+        gotLabel: 'cash received', gotFigure: `+${cash}`,
+        verdict: 'called away · the shares are gone',
+        filedTo: `filed to ${option.symbol}`,
+      };
+}
 
 export function SettleSheet({
   option,
@@ -65,7 +88,7 @@ export function SettleSheet({
         ...stampFor(outcome, realised),
         amount: formatSignedMoney(realised),
         symbol: option.symbol,
-        ...(outcome === 'ASSIGNED' ? { shares: `${bookSide === 'BUY' ? 'ACQUIRED' : 'CALLED AWAY'} ${bookQty} SHARES · ${option.symbol} @ ${formatMoney(option.strike)}` } : {}),
+        ...(outcome === 'ASSIGNED' ? { exchange: exchangeFor(option, bookSide, bookQty) } : {}),
       });
     } catch {
       setError('Could not settle — check your connection.');

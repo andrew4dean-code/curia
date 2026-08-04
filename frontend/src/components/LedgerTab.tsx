@@ -5,6 +5,7 @@ import { computeClosedTrades } from '../lib/fifo';
 import { computeStats } from '../lib/stats';
 import { computeOptionStats, optionRealizedPl } from '../lib/optionsMath';
 import { formatMoney, formatPct, formatSignedMoney, formatSignedPct, plColor } from '../lib/format';
+import { fmtDateSpan, fmtShortDate } from '../lib/time';
 import { Odometer } from './Odometer';
 import { estimateTax } from '../lib/tax';
 import { DEFAULT_SETTINGS } from '../lib/api';
@@ -33,7 +34,7 @@ export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord, striking
             <div className="row-sym">{t.symbol}</div>
             <div className="row-sub">
               {t.qty} sh · {formatMoney(t.buyPrice)} → {formatMoney(t.sellPrice)} ·{' '}
-              <span className="nb">{t.openedAt}</span> → <span className="nb">{t.closedAt}</span>
+              <span className="nb">{fmtDateSpan(t.openedAt, t.closedAt)}</span>
             </div>
           </div>
           <div className="row-right">
@@ -98,8 +99,7 @@ export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord, striking
                   <span className="chip">{o.status.replace('_', ' ')}</span>
                 </div>
                 <div className="row-sub">
-                  {o.contracts}x · <span className="nb">{o.opened_at}</span> →{' '}
-                  <span className="nb">{o.closed_at}</span>
+                  {o.contracts}x · <span className="nb">{fmtDateSpan(o.opened_at, o.closed_at ?? '')}</span>
                   {o.status === 'ASSIGNED' ? ' · shares booked' : ''}
                 </div>
               </div>
@@ -131,7 +131,7 @@ export function LedgerTab({ snap, onEditTrade, onRefresh, onViewRecord, striking
             <div className={t.id === strikingTradeId ? 'row striking' : 'row'} key={t.id}>
               <div className="row-main">
                 <div className="row-sym">{t.symbol} <span style={{ color: t.side === 'BUY' ? 'var(--pl-up)' : 'var(--maroon)', fontSize: 12 }}>{t.side}</span></div>
-                <div className="row-sub">{t.qty} sh @ {formatMoney(t.price)} · {t.executed_at}{t.note ? ` · ${t.note}` : ''}</div>
+                <div className="row-sub">{t.qty} sh @ {formatMoney(t.price)} · {fmtShortDate(t.executed_at)}{t.note ? ` · ${t.note}` : ''}</div>
               </div>
               <div className="row-right">
                 <button className="row-action" onClick={() => onEditTrade(t)}>

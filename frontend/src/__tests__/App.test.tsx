@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import App, { LANDING_MS, movedWheel, wheelStages } from '../App';
+import App, { LANDING_MS, portfolioFigures, wheelStages } from '../App';
 import { DURATION_MS } from '../components/Odometer';
 // @ts-expect-error -- no @types/node in this project.
 import { readFileSync } from 'node:fs';
@@ -456,31 +456,44 @@ describe('App strike timer race across kinds', () => {
   });
 });
 
-/* Booking an option that assigns you shares moves a wheel from SELL PUT to ASSIGNED.
-   That happens on the Options tab; the wheel is drawn on Portfolio. These decide whether
-   the app should carry you there to watch the hand travel. */
-describe('wheel stage change detection', () => {
-  const stages = (m: Record<number, string>) => new Map<number, string>(Object.entries(m).map(([k, v]) => [Number(k), v]));
-
-  it('finds the wheel whose stage moved', () => {
-    expect(movedWheel(stages({ 1: 'SELL_PUT', 2: 'ASSIGNED' }), stages({ 1: 'ASSIGNED', 2: 'ASSIGNED' }))).toBe(1);
+/* Where a ceremony puts you down. Booking anything that moves a figure the Portfolio tab
+   draws — the book value, what is unrealized against it, or a wheel's stage — should carry
+   you there to watch it roll. This used to ask only whether a WHEEL moved, which left a
+   plain stock buy playing its whole ceremony and then landing you on a tab that cannot
+   show the figure it just changed. */
+describe('ceremony landing', () => {
+  const snap = (over: Record<string, unknown> = {}) => ({
+    trades: [], marks: [], options: [], wheels: [], quietWeeks: [],
+    fetchedAt: '2026-01-01T00:00:00.000Z', ...over,
+  }) as never;
+  const buy = (qty: number, price: number) => ({
+    id: 1, symbol: 'TQQQ', side: 'BUY' as const, qty, price, fees: 0,
+    executed_at: '2026-01-02', note: '',
   });
 
-  it('reports nothing when every wheel stands still', () => {
-    expect(movedWheel(stages({ 1: 'SELL_PUT' }), stages({ 1: 'SELL_PUT' }))).toBeNull();
+  it('notices a stock fill that moved the book value, with no wheel in sight', () => {
+    const before = portfolioFigures(snap());
+    const after = portfolioFigures(snap({ trades: [buy(100, 60)] }));
+    expect(after).not.toBe(before);
   });
 
-  it('does not count a wheel that only just appeared', () => {
-    // Opening a fresh wheel has its own ceremony; it must not also throw the tab across.
-    expect(movedWheel(stages({}), stages({ 3: 'SELL_PUT' }))).toBeNull();
+  it('notices the book value moving on a fresh mark alone', () => {
+    const held = { trades: [buy(100, 60)] };
+    const before = portfolioFigures(snap(held));
+    const after = portfolioFigures(snap({
+      ...held,
+      marks: [{ symbol: 'TQQQ', price: 71, marked_at: '2026-01-03T00:00:00.000Z', source: 'manual' as const }],
+    }));
+    expect(after).not.toBe(before);
   });
 
-  it('does not count a wheel that went away', () => {
-    // Completing a wheel should not yank the tab out from under the sheet doing it.
-    expect(movedWheel(stages({ 4: 'CALLED_AWAY' }), stages({}))).toBeNull();
+  it('stays put when the booking changed nothing', () => {
+    const same = { trades: [buy(100, 60)] };
+    expect(portfolioFigures(snap(same))).toBe(portfolioFigures(snap(same)));
   });
 
-  it('reads no stages at all from a missing snapshot', () => {
+  it('reads nothing at all from a missing snapshot', () => {
+    expect(portfolioFigures(null)).toBe('');
     expect(wheelStages(null).size).toBe(0);
   });
 });
