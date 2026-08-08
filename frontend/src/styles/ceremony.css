@@ -2,8 +2,14 @@
    .ceremony-scene -- an element with no 3D transform of its own -- and therefore
    reached nothing that actually rotates. The two things that rotate in 3D each own
    their perspective now: .fold (the tri-fold panels) and .envelope-stack (the flap). */
-.ceremony { position: fixed; inset: 0; z-index: 40; background: rgba(31, 27, 18, 0.55); display: flex; align-items: center; justify-content: center; animation: ceremony-in 0.3s ease-out both; }
-@keyframes ceremony-in { from { background: rgba(31, 27, 18, 0); } to { background: rgba(31, 27, 18, 0.55); } }
+/* A ceremony's own figure is not part of the landing wind. `.roll-slow` sits on the shell
+   and every ceremony renders INSIDE it, so settling a contract within the landing window of
+   a booking ran the verdict's 2200ms hero count at 2200 x 1.8 = 3960ms inside a 3160ms
+   overlay: the figure reached about 62% of the premium and the ceremony tore it down, so the
+   last number you saw was simply wrong. VERDICT_DONE_MS is derived from DURATION_MS.hero in
+   JS and cannot see a CSS variable, so the scale is pinned here rather than guessed there. */
+.ceremony { --roll-scale: 1; position: fixed; inset: 0; z-index: 40; background: var(--veil); display: flex; align-items: center; justify-content: center; animation: ceremony-in 0.3s ease-out both; }
+@keyframes ceremony-in { from { background: var(--veil-0); } to { background: var(--veil); } }
 .ceremony-scene { position: relative; width: 290px; }
 
 /* ---- the ticket ---- */
@@ -225,6 +231,16 @@
    the platen. It used to start at translateY(110vh) and fly in from off-screen, which is not
    a thing paper does in a typewriter. .6s, so the sheet is seated at the instant typing
    starts (TYPE_START_MS = 600). */
+/* THE MACHINE IS NOT TALL ENOUGH TO HIDE THE SHEET IT IS FEEDING, so the scene clips instead.
+   Measured at the first frame of the load: .press covers scene 170..380, and the sheet paints
+   231..519 plus a 42px drop shadow. The ceremony therefore opened on a slab of blank parchment
+   hanging under the typewriter, which slid up and disappeared into it over the first ~450ms —
+   the paper read as arriving from below the machine rather than out of the platen.
+   The scene is 288 tall and the machine's foot is at 380, so a -92px bottom inset puts the
+   clip exactly on the foot; -100vw on the other three sides means only the floor cuts.
+   Scoped to the print stage ON PURPOSE: the envelope approaches from calc(50vh + 64px) below
+   during the fold, and a clip that outlived this stage would swallow its entire run-up. */
+.ceremony[data-stage='print'] .ceremony-scene { clip-path: inset(-100vw -100vw -92px -100vw); }
 .ceremony[data-stage='print'] .ticket-wrap { animation: sheet-load .6s cubic-bezier(.45, .06, .3, 1) both; }
 @keyframes sheet-load {
   0% { transform: translateY(150px); }
@@ -353,8 +369,19 @@
    Local -2 / -4 land at global +2 / +4, so the stack from the back is
    p1 (0) < contact shadow (1) < p2 (2) < p0 (4), which is the order paper folds in:
    bottom panel up first, top panel down over it, top panel outermost. */
-@keyframes fold-up { 0% { transform: rotateX(0deg); box-shadow: 0 0 0 rgba(0,0,0,0); } 60% { box-shadow: 0 -8px 16px rgba(46,40,32,.34); } 100% { transform: rotateX(-180deg) translateZ(-2px); box-shadow: 0 -3px 9px rgba(46,40,32,.26); } }
-@keyframes fold-down { 0% { transform: rotateX(0deg); } 60% { box-shadow: 0 8px 16px rgba(46,40,32,.34); } 100% { transform: rotateX(180deg) translateZ(-4px); box-shadow: 0 3px 9px rgba(46,40,32,.26); } }
+/* THE SIGNS DECIDE WHICH WAY THE PAPER TRAVELS, and both were inverted.
+   In CSS a positive rotateX carries whatever lies BELOW the origin toward the viewer.
+   .fold-p2 hinges at its top edge (origin 50% 0%) with its body below it, so folding up
+   toward you is +180; it had -180 and swung away, behind the sheet. .fold-p0 hinges at its
+   bottom edge with its body above, so the same journey is -180; it had +180. Each panel
+   therefore spent the middle ~52% of its 620ms swing hidden behind the panel it was folding
+   over, and then wiped into place out of the crease instead of sweeping over the top — the
+   bottom third of the ticket simply vanished for a third of a second, leaving a hole.
+   The 180° END STATE is identical either way (cos180 = -1, sin(±180) = 0), so the local
+   translateZ values still land at global +2 / +4 and the stacking comment above still
+   holds. Only the path through the swing changes. */
+@keyframes fold-up { 0% { transform: rotateX(0deg); box-shadow: 0 0 0 rgba(0,0,0,0); } 60% { box-shadow: 0 -8px 16px rgba(46,40,32,.34); } 100% { transform: rotateX(180deg) translateZ(-2px); box-shadow: 0 -3px 9px rgba(46,40,32,.26); } }
+@keyframes fold-down { 0% { transform: rotateX(0deg); } 60% { box-shadow: 0 8px 16px rgba(46,40,32,.34); } 100% { transform: rotateX(-180deg) translateZ(-4px); box-shadow: 0 3px 9px rgba(46,40,32,.26); } }
 /* the crease highlight. translateZ(.6px) puts it just in FRONT of the front face
    (.5px) instead of on the panel's own plane, where the opaque face would bury it;
    backface-visibility culls it the moment its panel turns over, so it can never bleed
@@ -594,8 +621,16 @@
    opacity is 1 at every step and never moves. Paper does not fade in. An earlier build
    opened this at opacity 0, which meant the first frame of the envelope stage had no
    envelope in it at all -- and then the frame after it had a whole one. */
+/* The 0% is VIEWPORT-RELATIVE, and has to be. A flat 420px was measured against a 667px-tall
+   phone; the scene is vertically centred, so being off-frame costs about H/2 + 62, which is
+   395px at 667 and 468px at 812. On every phone taller than ~716 the envelope therefore
+   STARTED on screen: a strip of it appeared out of nothing at the print-to-fold seam, sat
+   perfectly still for 1150ms while the letter folded above it, and only then began to rise.
+   50vh + 64px clears it at any height. Only the start moves — the waypoints below stay in
+   scene pixels, so a taller screen just means a slightly faster run-up (14.8px/frame at 852,
+   well under where the eye starts to see a jump). */
 @keyframes env-arrive {
-  0% { opacity: 1; transform: translateY(420px); animation-timing-function: linear; }
+  0% { opacity: 1; transform: translateY(calc(50vh + 64px)); animation-timing-function: linear; }
   42.574% { opacity: 1; transform: translateY(106px); animation-timing-function: cubic-bezier(.42,.42,.85,1); }
   58.416% { opacity: 1; transform: translateY(0); animation-timing-function: linear; }
   97.030% { transform: translateY(0); animation-timing-function: cubic-bezier(.3,0,.4,1); }
@@ -663,7 +698,7 @@
   22% { transform: translateY(16px) rotate(-3deg) scale(0.99); }
   100% { transform: translateY(-125vh) rotate(9deg) scale(0.82); }
 }
-@keyframes dim-out { from { background: rgba(31,27,18,.55); } to { background: rgba(31,27,18,0); } }
+@keyframes dim-out { from { background: var(--veil); } to { background: var(--veil-0); } }
 
 /* ---- stamp-in on the list + slow roll ---- */
 .stamp-in { animation: stamp-in 0.5s var(--roll-ease) both; }
@@ -677,7 +712,14 @@
 .wheel-ceremony { flex-direction: column; }
 .wheel-crest-scene { display: flex; flex-direction: column; align-items: center; gap: 18px; }
 .wheel-crest { overflow: visible; }
-.crest-rim, .crest-inner { stroke-dasharray: 520; stroke-dashoffset: 520; }
+/* Each ring gets its OWN circumference. One shared 520 flattered the smaller circle: with
+   dashoffset running 520 -> 0, a ring of length L is fully drawn once the offset passes
+   520 - L, so the r=62 inner (389.6) closed at 75% of its run while the r=80 rim (502.7)
+   needed 96.7% of its. The inner therefore finished at 924ms and the rim it started 250ms
+   AFTER finished at 967ms — the engraving did not read as one hand working outward, it read
+   as the inside racing the outside and stopping dead. 2*pi*r, rounded up. */
+.crest-rim { stroke-dasharray: 503; stroke-dashoffset: 503; }
+.crest-inner { stroke-dasharray: 390; stroke-dashoffset: 390; }
 .crest-spokes line { stroke-dasharray: 44; stroke-dashoffset: 44; }
 .crest-hub { transform-origin: 90px 90px; transform: scale(0); }
 .wheel-ceremony[data-phase='draw'] .crest-rim { animation: crest-draw 1.0s ease-out forwards; }
@@ -705,8 +747,16 @@
 .wheel-ceremony[data-phase='stamp'] .crest-hub { transform: scale(1); }
 .wheel-ceremony[data-phase='stamp'] .wheel-crest { animation: crest-stamp 0.5s cubic-bezier(.3,1.4,.5,1) both; }
 @keyframes crest-stamp { 0% { transform: scale(1.25); opacity: .7; } 60% { transform: scale(.96); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
-.crest-caption { font-family: var(--font-mono); font-size: 14px; letter-spacing: .12em; color: var(--parchment); min-height: 1.4em; text-align: center; padding: 0 20px; }
-.crest-banner { position: absolute; top: 46%; left: 50%; transform: translate(-50%, -50%) rotate(-8deg); border: 3px solid var(--parchment); color: var(--parchment); font-family: var(--font-display); font-weight: 800; font-size: 26px; letter-spacing: .18em; padding: 4px 14px; opacity: 0; }
+/* TWO lines reserved, not one. The caption types itself out and a completion caption
+   ("TQQQ · WHEEL Nº 1 · +$429.00 · 5 WEEKS · 2 CALLS") wraps partway through, so the flex
+   column grew by a line mid-type and the whole crest jumped upward while you were watching
+   it. Reserving the second line up front means the wrap costs nothing. */
+.crest-caption { font-family: var(--font-mono); font-size: 14px; letter-spacing: .12em; color: var(--parchment); min-height: 2.8em; text-align: center; padding: 0 20px; }
+/* Anchored to the CREST, in px, not to 46% of a box whose height depends on how long the
+   P/L string is: the scene is crest + gap + caption, so a one-line caption put the stamp at
+   100px and a two-line one at 109px. 83px is 46% of the 180px crest, which is what the
+   percentage was always reaching for. */
+.crest-banner { position: absolute; top: 83px; left: 50%; transform: translate(-50%, -50%) rotate(-8deg); border: 3px solid var(--parchment); color: var(--parchment); font-family: var(--font-display); font-weight: 800; font-size: 26px; letter-spacing: .18em; padding: 4px 14px; opacity: 0; }
 .wheel-crest-scene { position: relative; }
 .wheel-ceremony[data-phase='stamp'] .crest-banner { animation: banner-press 0.45s 0.15s cubic-bezier(.3,1.4,.5,1) forwards; }
 @keyframes banner-press { 0% { opacity: 0; transform: translate(-50%,-50%) rotate(-8deg) scale(1.6); } 100% { opacity: 1; transform: translate(-50%,-50%) rotate(-8deg) scale(1); } }
@@ -840,11 +890,23 @@
 .settle-ceremony[data-tone='assign'] { --stamp: var(--maroon); }
 
 /* ---- the verdict: expired, or bought back ---- */
-/* A 220px word at -12deg needs 220*sin12 + 48*cos12 = 93px of vertical room. The berth is
-   that room, reserved in flow, which is the whole reason the figure below is now safe. */
+/* THE BERTH IS ONLY SAFE IF THE WORD STAYS ON ONE LINE, and it did not.
+   The old sums here assumed a 48px box: a 30px word at line-height 1. Nothing overrode
+   index.css's `line-height: 1.5` on this branch, so a one-line box was really 45 + 12
+   padding + 6 border = 63px and needed 220*sin12 + 63*cos12 = 107px, already 11px over the
+   berth. Worse, the content box is 214px (220 minus two 3px borders, no side padding) and
+   "BOUGHT BACK" measures 260px in Georgia Bold at 30px/.05em — Georgia being what paints on
+   every cold start of this offline-first PWA, per the note at the top of this file. So it
+   wrapped: a 108px box, 151px rotated, in a 96px berth, and the overflow spilled DOWNWARD
+   out of `place-items: center` and struck through the P/L figure — the exact collision the
+   berth exists to prevent. It survived because every comment and the one guarding test
+   measured "EXPIRED", which fits on one line at any size.
+   24px with line-height 1: the widest word is 208px inside 214px, the box is 42px, the
+   rotated height is 45.74 + 41.08 = 86.8px with 9px to spare, and `nowrap` is the
+   structural guarantee behind that arithmetic rather than a hope about font metrics. */
 .settle-stamp-berth { height: 96px; display: grid; place-items: center; }
 .settle-stamp { width: 220px; text-align: center; font-family: var(--font-display); font-weight: 800;
-  font-size: 30px; letter-spacing: .05em; color: var(--stamp); border: 3px solid var(--stamp);
+  font-size: 24px; line-height: 1; white-space: nowrap; letter-spacing: .05em; color: var(--stamp); border: 3px solid var(--stamp);
   border-radius: 6px; padding: 6px 0; opacity: .92; transform: rotate(-12deg);
   animation: stamp-swing .42s cubic-bezier(.4,0,.25,1) both; }
 /* Enters at scale 1.4, not 2.4: on a 220px word that was 528px across a 375px screen, so the
@@ -891,19 +953,33 @@
 /* the line naming what happened, written into the space the contract just vacated — NOT
    below the exchange, where it lay directly in the filing path and the certificate swept
    down through the words on its way to the sleeve. */
+/* Coloured for the SCRIM, not for paper. Both lines this ceremony writes straight onto the
+   veil used surface inks — maroon here, --ink-soft on .xc-filed — which are chosen to sit on
+   parchment. On the scrim they measured 1.77:1 and 1.37:1: the sentence naming the outcome
+   and the figure saying what the contract earned were the two least legible things in the
+   app, on the one screen that exists to report them. */
 .xc-verdict { position: absolute; left: 0; right: 0; top: 56px; text-align: center;
   font-family: var(--font-mono); font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
-  color: var(--maroon); animation: xc-verdict-in .4s 1.62s ease-out both; }
+  color: var(--parchment); animation: xc-verdict-in .4s 1.62s ease-out both; }
 @keyframes xc-verdict-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* The filing window. Its floor sits on the sleeve's mouth (stage 266 minus its own top 96 =
    170 of its 214 height), so a card travelling down is cut off AT the sleeve and is gone
    behind it. The old ceremony faded the card out at opacity 0 over a sleeve it was never
-   behind, on a card taller than the sleeve — which is why nothing ever read as filed. */
+   behind, on a card taller than the sleeve — which is why nothing ever read as filed.
+   The horizontal offsets are NEGATIVE on purpose. clip-path clips to the border box on
+   every side, including the ones inset by 0, so the departing card — which travels 176px
+   left, well outside this box — was guillotined by a hard vertical edge 30px short of the
+   screen instead of sliding away. Only the floor should cut anything. */
 .xc-window { position: absolute; left: 0; right: 0; top: 96px; height: 214px; z-index: 2;
-  clip-path: inset(0 0 44px 0); }
+  clip-path: inset(0 -100vw 44px -100vw); }
 .xc-filing { animation: xc-file .62s 2.34s cubic-bezier(.5,0,.4,1) both; }
-@keyframes xc-file { 0% { transform: translateY(0); } 100% { transform: translateY(96px); } }
+/* 170px, which is the distance to that floor — the card's TOP has to reach it. At 96px the
+   card stopped with 74 of its 132px still standing above the sleeve: the comment above
+   worked out the 170 correctly and then the keyframe travelled a different number, so the
+   certificate hung half in and never actually filed. The test that guards this checked the
+   window's geometry but never the travel, so it passed throughout. */
+@keyframes xc-file { 0% { transform: translateY(0); } 100% { transform: translateY(170px); } }
 
 /* the two sides, in their own columns — they are laid out side by side, so no amount of
    timing error can ever print one over the other */
@@ -964,12 +1040,28 @@
   83%  { transform: translateY(-3px); animation-timing-function: ease-out; }
   100% { transform: translateY(0); }
 }
+/* Lands at 3.10s, not 3.35s. This line is the only place an assignment ever says what the
+   contract earned, and it used to reach full opacity 50ms before the component unmounted —
+   about three frames — having faded in the whole way against a scrim that was already
+   dissolving out from under it. It now arrives once the certificate is behind the sleeve
+   and holds at full strength for 300ms before anything starts to leave. */
 .xc-filed { position: absolute; left: 0; right: 0; top: 326px; text-align: center;
   font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
-  color: var(--ink-soft); animation: xc-verdict-in .4s 2.95s ease-out both; }
-/* --stamp is maroon on tone 'assign'; before this the variable was set for a branch that
-   rendered nothing reading it. */
-.xc-kept { color: var(--stamp); font-weight: 700; }
+  color: var(--parchment); animation: xc-verdict-in .4s 2.7s ease-out both; }
+/* Light gold, not var(--stamp). --stamp is maroon on the assign tone, which is a paper ink:
+   on the scrim it measured 1.77:1, so the figure was the least readable thing on screen. */
+.xc-kept { color: #D8BE7A; font-weight: 700; }
+
+/* THE CONTENT LEAVES WITH THE SCRIM.
+   xc-veil faded the backdrop to nothing over the last 510ms while every card, the verdict,
+   the sleeve and the filed line held at opacity 1 on their `both` fill until the component
+   unmounted. So the ceremony spent its final ~300ms fully drawn over the LIVE app: the
+   filed line printed across the options row underneath it, both illegible, and then the
+   whole thing vanished in one frame. It was the only ceremony that did this — the trade
+   ceremony flies its envelope off screen as it dims, and the verdict and the crest never
+   dim at all. Now the stage fades on exactly the veil's schedule. */
+.exchange-stage { animation: xc-exit .4s 3.4s ease-in both; }
+@keyframes xc-exit { from { opacity: 1; } to { opacity: 0; } }
 
 /* The veil, whole: in at the start, out with the ceremony rather than 333ms before it.
    `animation` is a SHORTHAND — this rule sits on the same element as .ceremony (line 5) at
@@ -977,11 +1069,15 @@
    ceremony-in wholesale and the assign backdrop slammed straight to 55% while every other
    ceremony faded up. Adding it back as a second name in the list would not have worked
    either: both animate `background`, and the later one's backwards fill wins through its own
-   delay. One keyframe owns the property for the whole 3.4s. 8.8% = 300ms in, 85% = 2.9s. */
-.settle-exchange { animation: xc-veil 3.4s both; }
+   delay. One keyframe owns the property for the whole run.
+   Over 3.8s now: 7.9% = 300ms in, 89.5% = 3.4s, which is where .exchange-stage's xc-exit
+   also begins. Those two must stay equal — the scrim leaving on its own is what printed the
+   ceremony over the live app. The extra 400ms over the old 3.4s buys the filed line a
+   readable hold; it is still 2.6s shorter than the 6.4s ceremony this replaced. */
+.settle-exchange { animation: xc-veil 3.8s both; }
 @keyframes xc-veil {
-  0%    { background: rgba(31,27,18,0); animation-timing-function: ease-out; }
-  8.8%  { background: rgba(31,27,18,.55); animation-timing-function: linear; }
-  85%   { background: rgba(31,27,18,.55); animation-timing-function: ease-out; }
-  100%  { background: rgba(31,27,18,0); }
+  0%    { background: var(--veil-0); animation-timing-function: ease-out; }
+  7.9%  { background: var(--veil); animation-timing-function: linear; }
+  89.5% { background: var(--veil); animation-timing-function: ease-out; }
+  100%  { background: var(--veil-0); }
 }

@@ -45,12 +45,28 @@ type ExchangeStage = 'close' | 'swap' | 'settled' | 'file';
  *  needs, so every expiry and buyback tore the overlay down at ~96% and the last thing on
  *  screen was the wrong number. The count's own duration is the floor now, plus a beat to
  *  read the landed figure. Change DURATION_MS.hero and this follows; a test asserts it. */
-export const VERDICT_MS = { hit: 420, count: 700 };
+/** `stamp-swing` runs .42s and bottoms out at its 70% keyframe, so the blow lands at 294ms.
+ *  `hit` was 420 — the moment the swing FINISHED — so the paper kicked 126ms after the
+ *  stamp had visibly squashed and started relaxing, which is the precise defect the comment
+ *  beside .settle-verdict[data-stage='hit'] says it fixed. Derived, so retiming the swing
+ *  carries the jolt with it. */
+export const STAMP_SWING_MS = 420;
+export const STAMP_IMPACT = 0.7;
+export const VERDICT_MS = { hit: Math.round(STAMP_SWING_MS * STAMP_IMPACT), count: 700 };
 export const VERDICT_HOLD_MS = 260;
 export const VERDICT_DONE_MS = VERDICT_MS.count + DURATION_MS.hero + VERDICT_HOLD_MS;
-/** Exchange: contract closes, the two sides cross, the certificate is filed. 3400, not 6400.
- *  Nothing counts on this branch, so it owes the odometer nothing. */
-export const EXCHANGE_MS = { swap: 620, settled: 1700, file: 2340, done: 3400 };
+/** Exchange: contract closes, the two sides cross, the certificate is filed.
+ *
+ *  These name moments in ceremony.css and TWO OF THEM NAMED THE WRONG ONE: `swap` was 620
+ *  against a .52s delay and `settled` was 1700 against 1.5s. No selector on this branch
+ *  reads data-stage — the whole exchange is one CSS timeline — so the drift was invisible
+ *  and only `done`, which really does end the ceremony, was load-bearing. Corrected rather
+ *  than deleted: a test asserts the stage, and a clock that lies is worse than no clock.
+ *
+ *  `done` is 3800 to match xc-veil's 3.8s and the xc-exit that leaves with it. Still 2.6s
+ *  under the 6.4s ceremony this replaced. Nothing counts on this branch, so it owes the
+ *  odometer nothing. */
+export const EXCHANGE_MS = { swap: 520, settled: 1500, file: 2340, done: 3800 };
 
 export function SettleCeremony({ data, onDone }: { data: SettleData; onDone: () => void }) {
   const isExchange = !!data.exchange;

@@ -16,6 +16,22 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.12.0',
+    date: '2026-08-07',
+    notes: [
+      'A pass over every ceremony, frame by frame. The big one: settling an assignment used to spend its last third of a second drawn on top of the app underneath it, with the line saying what you kept printed across whatever row happened to be there. The scrim and the ceremony now leave together, and that line — which reached full strength fifty milliseconds before the whole thing vanished — is readable for the better part of a second.',
+      'The certificate now actually goes into its sleeve. It was stopping with more than half of itself still standing above it.',
+      'Settling a contract as bought back no longer stamps BOUGHT BACK across your own P/L. The word was too wide for its box, wrapped onto a second line, and the overflow landed on the figure.',
+      'Selling a put after being called away winds the dial forward a quarter turn to close the wheel, instead of unwinding three quarters of a turn backwards through every stage it had just earned.',
+      'Text sitting on a ceremony scrim is coloured for the scrim now. Two lines in the assignment ceremony were dark ink on dark wash and effectively invisible.',
+      'The green and pink wash behind a figure that just moved lasts the three quarters of a second it was always meant to, rather than one or two frames.',
+      'The Portfolio hero stops printing your unrealized P/L at the same size as your book value.',
+      'Deleting an entry no longer makes the row spring back to full size for a beat before it goes, which read as the delete having failed.',
+      'The trade ceremony: both folds now turn toward you instead of hiding behind the page, the envelope starts off screen on a modern phone instead of appearing from nothing and waiting, and the ceremony no longer opens on a slab of blank paper hanging under the typewriter.',
+      'Smaller things: the month board no longer drags the page sideways, the month header stops parking under the status bar, the ticker no longer opens a gap when you hold fewer than three things, the delete action in the Ledger is a real tap target, the "needs settling" pill stays readable while it breathes, and the passcode screen sits where it should.',
+    ],
+  },
+  {
     version: '2.11.0',
     date: '2026-08-07',
     notes: [

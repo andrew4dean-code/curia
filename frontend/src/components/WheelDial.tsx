@@ -57,6 +57,26 @@ export function resetDialMemory(): void {
   STAGE_MEMORY.clear();
 }
 
+/** The next angle clockwise of `from` that stands at station `to`.
+ *
+ *  HAND_ANGLE is absolute, so the one move the whole instrument is named after — called
+ *  away, then sell the next put — asked the hand to go from 270° to 0° and it unwound three
+ *  quarters of a turn ANTICLOCKWISE, back through SELLING CALLS and ASSIGNED, dragging its
+ *  gold trail the wrong way round the face and reading as the wheel reversing through every
+ *  stage it had just earned. The comment above HAND_ANGLE always claimed the angles were
+ *  cumulative so the sweep "never snaps back"; that only held while a wheel moved one
+ *  station at a time and never closed its circle.
+ *
+ *  The zero-delta case is not a no-op when the target is a larger absolute angle: COMPLETED
+ *  is 360° precisely to sit one whole turn beyond SELL PUT at 0°, and plain modular
+ *  arithmetic collapses the two onto each other.
+ */
+export function forwardTo(from: number, to: number): number {
+  const delta = (((to - from) % 360) + 360) % 360;
+  if (delta === 0) return to > from ? from + 360 : from;
+  return from + delta;
+}
+
 const rad = (deg: number) => (deg * Math.PI) / 180;
 const px = (r: number, deg: number) => +(r * Math.sin(rad(deg))).toFixed(2);
 const py = (r: number, deg: number) => +(-r * Math.cos(rad(deg))).toFixed(2);
@@ -135,14 +155,15 @@ export function WheelDial({
     }
 
     const from = live.current;
-    if (from === target) return;
+    const dest = forwardTo(from, target);
+    if (from === dest) return;
     onSweepStart?.(SWEEP_MS);
     const start = performance.now();
     const trail: Ghost[] = [];
 
     const step = (now: number) => {
       const t = Math.min(1, (now - start) / SWEEP_MS);
-      const deg = from + (target - from) * sweepEase(t);
+      const deg = from + (dest - from) * sweepEase(t);
       live.current = deg;
       if (!trail.length || Math.abs(trail[trail.length - 1].deg - deg) > TRAIL_STEP_DEG) {
         trail.push({ deg, born: now });
@@ -172,7 +193,7 @@ export function WheelDial({
       className="wheel-dial"
       viewBox="0 0 390 252"
       role="img"
-      aria-label={`Wheel ${no}, week ${weeks}, stage ${stage.replace('_', ' ').toLowerCase()}, ${callsSold} calls sold`}
+      aria-label={`Wheel ${no}, week ${weeks}, stage ${stage.replace('_', ' ').toLowerCase()}, ${callsSold} call${callsSold === 1 ? '' : 's'} sold`}
     >
       <defs>
         <filter id={`dial-glow-${no}`} x="-60%" y="-60%" width="220%" height="220%">

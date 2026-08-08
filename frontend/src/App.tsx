@@ -102,6 +102,8 @@ export default function App() {
   const [landing, setLanding] = useState(false);
   const [cover, setCover] = useState(false);
   const landingTimer = useRef<number | null>(null);
+  /** The stamp waiting for the ceremony to get out of its way. See onTicket. */
+  const pendingStamp = useRef<{ kind: 'trade' | 'option'; id: number; symbol: string } | null>(null);
   const strikeTimer = useRef<number | null>(null);
   const coverTimer = useRef<number | null>(null);
 
@@ -200,10 +202,17 @@ export default function App() {
     // refresh before its 700ms is up), so drop it and start the new one clean.
     clearStrikeTimer();
     setStrikingTradeId(id);
+    /* Clear the strike AFTER the row is actually gone, not alongside the fetch.
+     *
+     *  Dropping the id and firing refresh() in the same tick raced them: the id went
+     *  first, `row-fold`'s `both` fill was released, and the row sprang back to full
+     *  height for a beat before the new snapshot removed it — which reads as the delete
+     *  having failed and then worked. Holding the id until the read settles keeps it
+     *  folded the whole way out. `.finally` and not `.then`, or a failed read would leave
+     *  a row folded shut forever with no way to open it. */
     strikeTimer.current = window.setTimeout(() => {
       strikeTimer.current = null;
-      setStrikingTradeId(null);
-      void refresh();
+      void refresh().finally(() => setStrikingTradeId(null));
     }, 700);
   };
 
@@ -214,10 +223,10 @@ export default function App() {
     if (id == null) { await refresh(); return; }
     clearStrikeTimer();
     setStrikingOptionId(id);
+    // Same race, same fix as the trade path above.
     strikeTimer.current = window.setTimeout(() => {
       strikeTimer.current = null;
-      setStrikingOptionId(null);
-      void refresh();
+      void refresh().finally(() => setStrikingOptionId(null));
     }, 700);
   };
 
@@ -250,12 +259,20 @@ export default function App() {
 
   const onTicket = async (ticket: TicketData) => {
     setSheet(null);
-    setJustAdded({ kind: ticket.title === 'OPTION TICKET' ? 'option' : 'trade', id: ticket.no, symbol: ticket.symbol });
+    /* The stamp is armed here and applied when the ceremony ENDS, not now.
+     *
+     *  Setting justAdded before the overlay went up meant the row was already wearing
+     *  .stamp-in, and its 0.5s ran and finished behind a veil that stays up for eight
+     *  seconds. A brand new holding got away with it, because its row does not exist until
+     *  the post-ceremony refresh mounts it fresh; buying more of something you ALREADY hold
+     *  has a row on screen the whole time, so that one silently never stamped. */
+    pendingStamp.current = { kind: ticket.title === 'OPTION TICKET' ? 'option' : 'trade', id: ticket.no, symbol: ticket.symbol };
     // A new ceremony is starting: any pending landing-reset timer from a prior
     // ceremony is now stale (it would clear this ceremony's landing/justAdded
     // mid-animation), so drop it and start the new landing clean.
     clearLandingTimer();
     setLanding(false);
+    setJustAdded(null);
     setCeremony(ticket);
   };
 
@@ -398,6 +415,9 @@ export default function App() {
           onDone={() => {
             setCeremony(null);
             setLanding(true);
+            // The veil is down, so the row can be seen being stamped.
+            setJustAdded(pendingStamp.current);
+            pendingStamp.current = null;
             // Where the portfolio stood before this booking was folded in. Captured after
             // the envelope has closed and before the refresh that may move it.
             const before = portfolioFigures(snap);

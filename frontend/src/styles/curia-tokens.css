@@ -13,6 +13,16 @@
   --font-display: 'Playfair Display', Georgia, serif;
   --font-mono: 'Space Mono', ui-monospace, monospace;
 
+  /* The scrim behind every ceremony, in ONE place — it was written out four times as a
+     literal, in .ceremony and in the ceremony-in / dim-out / xc-veil keyframes, so any
+     change had to be made in four and stayed right only by luck.
+     .66, not the old .55: over parchment that composited to rgb(121,114,98), a mid grey on
+     which NOTHING reads. Parchment text on it was 3.5:1 and the ink-coloured lines the
+     assignment ceremony puts straight on the scrim were 1.37:1 and 1.77:1 — invisible. At
+     .66 the composite is rgb(99,93,79) and parchment reads 4.85:1. */
+  --veil: rgba(31, 27, 18, .66);
+  --veil-0: rgba(31, 27, 18, 0);
+
   --roll-scale: 1;
   --flash: .75s;
   --roll-ease: cubic-bezier(.18,.71,.21,1);
@@ -23,7 +33,10 @@
    value counts. Nothing is keyed per character, so a carry that shifts a comma
    ($980 -> $1,240) can no longer remount an element and hard-snap the number.
    inline-block (not inline) so flash-up/flash-dn still paint a full background box;
-   min-width is set in ch by the component so a centred figure never jumps width. */
+   min-width is MEASURED IN PX off a canvas by the component, in the element's own font.
+   It is not reserved in ch, and a test forbids ch here: `ch` is the width of a zero, and
+   in Playfair a zero is full-width while $ , . + are narrow, so a ch reservation drew
+   +$176,863.28 into 348px of space it needed 262px for. */
 .odo { display: inline-block; line-height: 1.24; font-variant-numeric: tabular-nums; text-align: center; white-space: nowrap; }
 
 .ticker { overflow: hidden; white-space: nowrap; background: #1F1B12; }

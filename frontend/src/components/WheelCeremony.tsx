@@ -94,10 +94,16 @@ export function WheelCeremony({ data, onDone }: { data: WheelCeremonyData; onDon
               );
             })}
           </g>
-          <circle className="crest-hub" cx="90" cy="90" r="20" fill="var(--maroon)" />
-          <text x="90" y="96" fontFamily="var(--font-display)" fontSize="18" fontWeight="800" fill="var(--parchment)" textAnchor="middle">
-            C
-          </text>
+          {/* The letter is INSIDE the hub group, so it scales in with its disc. As a
+              sibling it had no animation of its own and simply existed from the first
+              frame, which meant the ceremony opened on a lone "C" floating in the dark and
+              the maroon disc arrived under it 900ms later. */}
+          <g className="crest-hub">
+            <circle cx="90" cy="90" r="20" fill="var(--maroon)" />
+            <text x="90" y="96" fontFamily="var(--font-display)" fontSize="18" fontWeight="800" fill="var(--parchment)" textAnchor="middle">
+              C
+            </text>
+          </g>
         </svg>
         {data.mode === 'complete' && <div className="crest-banner">COMPLETED</div>}
         <div className="crest-caption">

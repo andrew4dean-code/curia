@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 // @ts-expect-error -- no @types/node in this project.
 import { dirname, join } from 'node:path';
-import { SettleCeremony, VERDICT_DONE_MS } from '../SettleCeremony';
+import { EXCHANGE_MS, SettleCeremony, VERDICT_DONE_MS } from '../SettleCeremony';
 import type { SettleExchange } from '../SettleCeremony';
 
 /** The ceremony's behaviour lives in CSS that jsdom will never compute. Read it off disk and
@@ -199,15 +199,41 @@ describe('SettleCeremony — the exchange (assigned)', () => {
 
     const top = Number(/top:\s*(\d+)px/.exec(win!)![1]);
     const height = Number(/height:\s*(\d+)px/.exec(win!)![1]);
-    const inset = /clip-path:\s*inset\(\s*0\s+0\s+(\d+)px/.exec(win!);
+    // Only the FLOOR may cut. The side offsets are negative on purpose: clip-path clips to
+    // the border box on every edge, including ones inset by 0, so a `0 0 Xpx 0` shape also
+    // guillotined the departing card — which travels 176px left, well outside this box —
+    // with a hard vertical edge 30px short of the screen instead of letting it slide away.
+    const inset = /clip-path:\s*inset\(\s*0\s+(-?[\d.]+\w*)\s+(\d+)px\s+(-?[\d.]+\w*)\s*\)/.exec(win!);
     expect(inset, '.xc-window must clip its bottom, or the card files in front of nothing').not.toBeNull();
+    for (const side of [inset![1], inset![3]]) {
+      expect(
+        parseFloat(side),
+        'the sides must not clip, or the card leaving is guillotined in mid-air',
+      ).toBeLessThanOrEqual(0);
+    }
     const sleeveTop = Number(/top:\s*(\d+)px/.exec(sleeve!)![1]);
+    const floor = top + height - Number(inset![2]);
 
     expect(
-      top + height - Number(inset![1]),
+      floor,
       'the clipped floor must sit on the sleeve mouth, or the certificate is cut off in mid-air ' +
         'or slides visibly past the sleeve instead of behind it',
     ).toBe(sleeveTop);
+
+    /* AND THE CARD HAS TO TRAVEL FAR ENOUGH TO GET BEHIND IT.
+       This is the half the geometry check above was missing, and it passed throughout while
+       the certificate never actually filed: the window's floor sat exactly on the sleeve, and
+       then xc-file translated 96px when reaching that floor takes 170, so the card stopped
+       with 74 of its 132px still standing above the sleeve. The card's TOP starts at the
+       window's own top and has to reach the floor. */
+    // `top: 0` carries no unit, so the px is optional here.
+    const swapTop = Number(/top:\s*(\d+)(?:px)?/.exec(rule('.xc-swap')!)![1]);
+    // [\s\S]*? and not [^}]*: the 0% block closes with a brace the search has to cross.
+    const travel = Number(/@keyframes xc-file[\s\S]*?100%\s*\{\s*transform:\s*translateY\((\d+)px\)/.exec(ceremonyCss())![1]);
+    expect(
+      swapTop + travel,
+      'the certificate must travel all the way to the clipped floor, or it hangs half out of the sleeve',
+    ).toBe(floor - top);
   });
 
   it('puts the travelling card inside that window and the sleeve outside it', () => {
@@ -217,24 +243,55 @@ describe('SettleCeremony — the exchange (assigned)', () => {
     expect(win!.contains(container.querySelector('.xc-sleeve'))).toBe(false);
   });
 
+  /* Off the constants, not off literals. These read 2500/500/600 and a flat 3400, so
+     retiming the tail meant editing numbers in two files and hoping they still described the
+     same moments. */
   it('runs longer than a verdict, and finishes', () => {
     vi.useFakeTimers();
     const onDone = vi.fn();
     const { container } = render(<SettleCeremony data={assigned} onDone={onDone} />);
-    act(() => { vi.advanceTimersByTime(2500); });
-    expect(onDone).not.toHaveBeenCalled(); // a verdict would already be done
-    act(() => { vi.advanceTimersByTime(500); });
+    act(() => { vi.advanceTimersByTime(VERDICT_DONE_MS); });
+    expect(onDone, 'a verdict would already be done').not.toHaveBeenCalled();
+    // The filing stage opens at 2340, comfortably before a verdict would have ended.
     expect(container.querySelector('.settle-ceremony')?.getAttribute('data-stage')).toBe('file');
-    act(() => { vi.advanceTimersByTime(600); });
+    act(() => { vi.advanceTimersByTime(EXCHANGE_MS.done - VERDICT_DONE_MS); });
     expect(onDone).toHaveBeenCalledOnce();
   });
 
-  /* It used to run 6.4s with ~2.25s of byte-identical frames in it. */
+  /* It used to run 6.4s with ~2.25s of byte-identical frames in it. The bound is what
+     matters, not the exact figure — the tail grew by 400ms to give the filed line a
+     readable hold, and pinning 3400 would have made that a test edit rather than a
+     decision. */
   it('is shorter than the ceremony it replaced', () => {
+    expect(EXCHANGE_MS.done).toBeLessThan(6400);
     vi.useFakeTimers();
     const onDone = vi.fn();
     render(<SettleCeremony data={assigned} onDone={onDone} />);
-    act(() => { vi.advanceTimersByTime(3400); });
+    act(() => { vi.advanceTimersByTime(EXCHANGE_MS.done); });
     expect(onDone).toHaveBeenCalledOnce();
+  });
+
+  /* The scrim and the content have to leave TOGETHER. xc-veil faded the backdrop to nothing
+     over the last 510ms while every card held opacity 1 on its `both` fill until unmount, so
+     the ceremony spent its final ~300ms fully drawn over the LIVE app — the filed line
+     printing across the options row underneath it, both illegible, then gone in one frame. */
+  it('fades its content out on exactly the veil\'s schedule', () => {
+    const css = ceremonyCss();
+    const veilDur = Number(/\.settle-exchange\s*\{\s*animation:\s*xc-veil\s+([\d.]+)s/.exec(css)![1]) * 1000;
+    const holdPct = Number(/([\d.]+)%\s*\{\s*background:\s*var\(--veil\);\s*animation-timing-function:\s*ease-out/.exec(css)![1]);
+    const exit = /\.exchange-stage\s*\{\s*animation:\s*xc-exit\s+([\d.]+)s\s+([\d.]+)s/.exec(css);
+    expect(exit, 'the stage must fade out, or the ceremony is drawn over the live app').not.toBeNull();
+
+    const veilFadeStarts = (holdPct / 100) * veilDur;
+    const exitStarts = Number(exit![2]) * 1000;
+    const exitEnds = exitStarts + Number(exit![1]) * 1000;
+    // Within a frame. A keyframe percentage to one decimal cannot land exactly on 3400 of
+    // 3800, and a 1ms disagreement is not a defect — a 500ms one is.
+    expect(
+      Math.abs(exitStarts - veilFadeStarts),
+      'content must start leaving when the scrim does',
+    ).toBeLessThanOrEqual(17);
+    expect(exitEnds, 'and must be gone when the scrim is').toBeCloseTo(veilDur, 0);
+    expect(veilDur, 'the veil must last exactly as long as the ceremony').toBe(EXCHANGE_MS.done);
   });
 });

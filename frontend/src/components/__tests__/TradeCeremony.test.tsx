@@ -1062,7 +1062,16 @@ describe('TradeCeremony', () => {
 
     const arrive = steps(kf('env-arrive'));
     const insert = steps(kf('packet-insert'));
-    const start = yOf(arrive[0].body);                                        // off-frame
+    /* The arrival's start is VIEWPORT-RELATIVE, so it has no px value until you name a
+     *  screen. It used to be a flat 420px, measured against the 667 below — and being
+     *  off-frame costs about H/2 + 62, so on every phone taller than ~716 the envelope
+     *  started ON SCREEN: a strip of it appeared out of nothing at the print-to-fold seam
+     *  and sat motionless for 1150ms. Checked at three heights now, not one. */
+    const startAt = (H: number) => {
+      const m = arrive[0].body.match(/translateY\(calc\(([\d.]+)vh\s*\+\s*([\d.]+)px\)\)/);
+      expect(m, 'the arrival has to start off-frame at ANY height, so its start must be in vh').not.toBeNull();
+      return (Number(m![1]) / 100) * H + Number(m![2]);
+    };
     const meetStep = arrive.slice(1).find((s) => yOf(s.body) > 0)!;           // the hand-over
     const meet = yOf(meetStep.body);
     const homeStep = arrive.slice(1).find((s) => /translateY\(0\)/.test(s.body))!;
@@ -1075,21 +1084,28 @@ describe('TradeCeremony', () => {
     //    boundary, and 54841 on the frame after it). The viewport height is the one number here
     //    that is not in the stylesheet: 375x667 is the target device, and headless Chrome puts
     //    the 288-tall scene's top edge at 189.5 in it, which is (667-288)/2.
-    const VIEWPORT_H = 667;
-    const bottomOfPicture = VIEWPORT_H - (VIEWPORT_H - sceneH) / 2; // 477.5, in scene coordinates
     const artTop = Number(css.match(/\n\.env-art\s*\{[^}]*top:\s*(\d+)px/)![1]);
-    expect(artTop + start).toBeGreaterThanOrEqual(bottomOfPicture);
     // and the drop-shadow travels with it: a 28px blur offset 14px down reaches 14px ABOVE the
     // element's own top edge, so the start has to clear the picture by that much as well.
     const shadow = css.match(/\n\.env-back\s*\{[^}]*drop-shadow\(0 (\d+)px (\d+)px/)!;
-    expect(artTop + start + Number(shadow[1]) - Number(shadow[2])).toBeGreaterThanOrEqual(bottomOfPicture);
+    // 667 is the old target device; 852 and 932 are the phones this actually shipped to.
+    for (const VIEWPORT_H of [667, 852, 932]) {
+      const bottomOfPicture = VIEWPORT_H - (VIEWPORT_H - sceneH) / 2; // in scene coordinates
+      const start = startAt(VIEWPORT_H);
+      expect(artTop + start, `envelope must start off-frame at ${VIEWPORT_H}px tall`).toBeGreaterThanOrEqual(bottomOfPicture);
+      expect(
+        artTop + start + Number(shadow[1]) - Number(shadow[2]),
+        `its shadow must start off-frame too at ${VIEWPORT_H}px tall`,
+      ).toBeGreaterThanOrEqual(bottomOfPicture);
+      // 2. THE RUN-UP CANNOT REACH THE LETTER, at any of them.
+      expect(apex + start - packetBottom, `run-up clears the letter at ${VIEWPORT_H}px tall`).toBeGreaterThan(0);
+    }
 
     // 2. THE RUN-UP CANNOT REACH THE LETTER. The letter does not move at all until the envelope
     //    has come up to `meet`, so this whole segment is one object moving under one monotone
-    //    (linear) easing and the two endpoints settle it: the flap's apex starts 316px below the
-    //    letter's bottom edge and ends 2px below it.
+    //    (linear) easing and the two endpoints settle it: the flap's apex ends 2px below the
+    //    letter's bottom edge.
     expect(ease(arrive[0].body)).toBe('linear');
-    expect(apex + start - packetBottom).toBeGreaterThan(0);
     expect(apex + meet - packetBottom).toBeGreaterThan(0);
     expect(at('packet-insert', 0)).toBeCloseTo(at('env-arrive', meetStep.pct), 0);
 

@@ -19,9 +19,17 @@
   --fab-size: 56px;
   --fab-clearance: 14px;
 }
-.shell { max-width: 640px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px calc(var(--fab-lift) + var(--fab-size) + var(--fab-clearance) + var(--safe-bottom)); min-height: 100dvh; }
+/* overflow-x: clip, not hidden. The month board slides in from translateX(26%), which
+   pushes it past the right edge and made the whole page draggable sideways for 340ms — a
+   finger still moving could drag the app off-centre. `clip` does NOT create a scroll
+   container, so .board-head-sticky below still sticks to the viewport; `hidden` would
+   have made it stick to .shell and quietly stopped working. */
+.shell { max-width: 640px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px calc(var(--fab-lift) + var(--fab-size) + var(--fab-clearance) + var(--safe-bottom)); min-height: 100dvh; overflow-x: clip; }
 .hero { text-align: center; padding: 24px 0 8px; }
-.hero .odo { font-family: var(--font-display); font-size: 44px; font-weight: 800; }
+/* DIRECT child. As a descendant selector this also caught the unrealized figure on the
+   sub-line, so the hero printed two 44px Playfair 800 numbers stacked, and "unrealized"
+   was pushed onto a line of its own beneath them. */
+.hero > .odo { font-family: var(--font-display); font-size: 44px; font-weight: 800; }
 .hero-sub { color: var(--ink-soft); margin-top: 4px; font-size: 13px; }
 .section-title { font-family: var(--font-display); font-size: 20px; font-weight: 700; margin: 20px 0 8px; border-bottom: 1px solid var(--rule); padding-bottom: 6px; }
 .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "sym right" "sub sub"; column-gap: 12px; align-items: baseline; padding: 10px 0; border-bottom: 1px solid var(--rule); }
@@ -65,8 +73,14 @@
    "Fill the ticket" sat at full strength under an error saying it could not be filled. */
 .btn:disabled { opacity: .38; }
 .btn-row { display: flex; gap: 10px; margin-top: 6px; }
-.offline { background: var(--gold); color: var(--ink); text-align: center; font-size: 12px; padding: 6px; border-radius: 6px; margin-bottom: 10px; }
-.gate { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 32px; max-width: 400px; margin: 0 auto; text-align: center; }
+/* Not var(--gold): #A98842 behind --ink is 4.37:1, the only pair in the app under AA, and
+   it carries the one message saying the figures on screen are stale. #BE9A4E is the same
+   hue two steps lighter and reads 5.50:1. */
+.offline { background: #BE9A4E; color: var(--ink); text-align: center; font-size: 12px; padding: 6px; border-radius: 6px; margin-bottom: 10px; }
+/* dvh, like every other full-height box here. 100vh on an iPhone counts the browser
+   chrome, so the passcode form sat below the optical centre with 86px of dead parchment
+   scrollable beneath it — on the app's very first screen. */
+.gate { min-height: 100dvh; display: flex; flex-direction: column; justify-content: center; padding: 32px; max-width: 400px; margin: 0 auto; text-align: center; }
 .gate h1 { font-family: var(--font-display); font-size: 40px; margin-bottom: 6px; }
 .gate .error { color: var(--pl-red); font-size: 13px; margin-top: 10px; }
 .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
@@ -167,7 +181,11 @@
 .tab-fade { animation: tab-in .25s ease-out both; }
 @keyframes tab-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .row-tap { background: none; border: none; border-bottom: 1px solid var(--rule); font: inherit; color: inherit; text-align: left; width: 100%; }
-.row-action { background: none; border: none; color: var(--maroon); text-decoration: underline; font-family: var(--font-mono); font-size: 13px; padding: 2px 0 2px 12px; }
+/* 44px like the other seven tap targets in this app. These two were 23.5px tall, sitting
+   side by side, and one of them deletes a ledger entry — the smallest target in the app
+   was the destructive one. The height is padding, not a min-height, so the underline stays
+   on the word rather than stretching a box around it. */
+.row-action { background: none; border: none; color: var(--maroon); text-decoration: underline; font-family: var(--font-mono); font-size: 13px; padding: 13px 0 13px 12px; }
 .wheel-card { background: var(--parchment-card); border: 1px solid var(--maroon); border-radius: 12px; padding: 16px 14px 14px; margin: 10px 0 14px; }
 /* The toggle is a bare button wrapping the head — it must not look like one. */
 .wheel-card-toggle { display: block; width: 100%; background: none; border: none; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; }
@@ -179,14 +197,18 @@
 .wheel-card-sh { font-family: var(--font-mono); font-size: 13px; font-weight: 400; color: var(--ink-soft); white-space: nowrap; }
 .wheel-card-tag { font-size: 10px; letter-spacing: .08em; color: var(--gold-label); text-transform: uppercase; white-space: nowrap; }
 .wheel-card-sub { font-size: 11px; letter-spacing: .07em; color: var(--ink-soft); text-transform: uppercase; margin-top: 2px; }
-/* Corner scrollwork on the wheel card, drawn in as the dial's hand travels.
-   preserveAspectRatio="none" stretches the 100x100 authoring box to the card, so the
-   corners sit in the corners whatever the card's proportions; vector-effect keeps the
-   stroke weight honest under that stretch, which is the whole reason it can be stretched
-   at all. It sits above the card's own background and below everything else, and never
-   takes a pointer event — it is decoration, and the buttons underneath still work. */
+/* Corner scrollwork on the wheel card, drawn in as the dial's hand travels. It sits above
+   the card's own background and below everything else, and never takes a pointer event —
+   it is decoration, and the buttons underneath still work.
+   NO preserveAspectRatio="none" and no vector-effect: this comment used to describe both,
+   and a test now forbids the first. Each corner is a fixed square (see .fil-corner) for
+   exactly the reason that stretching would have caused. */
 .wheel-card { position: relative; }
 .card-filigree { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+/* A folded card is ~72.5px tall and the four corners are 78px square, so on a fold they
+   stop being corners and become one overlapping tangle across the symbol and the figure.
+   The ornament belongs to the open card; folding is itself the end of it. */
+.wheel-card.folded .card-filigree { display: none; }
 /* A fixed square per corner. One stretched box across a tall card inflates the scrolls
    into arcs that run the length of the card — they have to keep their own proportions. */
 .fil-corner { position: absolute; width: 78px; height: 78px; overflow: visible; }
@@ -284,7 +306,11 @@
 .wk, .sheet, .card { background-image: radial-gradient(rgba(46,40,32,.030) .5px, transparent .5px), radial-gradient(rgba(46,40,32,.022) .5px, transparent .5px); background-size: 7px 7px, 11px 11px; background-position: 0 0, 3px 4px; }
 .wk { box-shadow: 0 1px 0 rgba(255,255,255,.45) inset, 0 2px 5px rgba(46,40,32,.07); }
 .wk-todo { animation: todo-breathe 3.6s ease-in-out infinite; }
-@keyframes todo-breathe { 0%, 100% { opacity: 1; border-color: var(--maroon); } 50% { opacity: .62; border-color: rgba(140,43,38,.45); } }
+/* The BORDER breathes, the text does not. Fading the whole pill to .62 took maroon-on-
+   parchment from 6.2:1 to 3.4:1 for about half of every cycle, so the one label in the app
+   that says money is sitting unclaimed was regularly the one you could not read. Same
+   pulse to the eye, since the ring is what carries it. */
+@keyframes todo-breathe { 0%, 100% { border-color: var(--maroon); } 50% { border-color: rgba(140,43,38,.45); } }
 .board-weeks[data-slide='left'] { animation: board-in-left .34s cubic-bezier(.22,.9,.28,1) both; }
 .board-weeks[data-slide='right'] { animation: board-in-right .34s cubic-bezier(.22,.9,.28,1) both; }
 @keyframes board-in-left { from { transform: translateX(26%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
@@ -303,4 +329,7 @@
 .book-cover::after { content: 'C'; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); font-family: var(--font-display); font-weight: 800; font-size: 64px; color: var(--gold); opacity: .85; }
 @keyframes cover-open { 0% { transform: perspective(1200px) rotateY(0deg); } 100% { transform: perspective(1200px) rotateY(-105deg); opacity: 0; } }
 
-.board-head-sticky { position: sticky; top: 0; z-index: 12; margin: 0 -16px 4px; padding: 0 16px 10px; background: var(--parchment); box-shadow: 0 6px 10px -8px rgba(46,40,32,.45); }
+/* Sticks BELOW the status bar. At top:0 the month and its chevrons parked under the
+   clock and battery and stayed there — the shell already reserves that strip in its own
+   padding-top, and this was the one thing that ignored it. */
+.board-head-sticky { position: sticky; top: env(safe-area-inset-top); z-index: 12; margin: 0 -16px 4px; padding: 0 16px 10px; background: var(--parchment); box-shadow: 0 6px 10px -8px rgba(46,40,32,.45); }
