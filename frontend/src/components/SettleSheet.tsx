@@ -13,7 +13,12 @@ import type { OptionPosition, OptionStatus } from '../lib/types';
  *
  *  A put assigned takes cash and hands back shares; a call assigned takes the shares and
  *  hands back cash. The cash figure is the strike times the shares booked — what the
- *  assignment itself moved, not the premium, which is already counted in the P/L. */
+ *  assignment itself moved, not the premium, which is already counted in the P/L.
+ *
+ *  The verdict names only the CONSEQUENCE. It used to lead with the outcome word again
+ *  ("called away · the shares are gone"), which was fine while the contract card above it
+ *  said ASSIGNED for both sides — now that the card says CALLED AWAY the two lines would
+ *  simply be saying it twice. */
 export function exchangeFor(option: OptionPosition, bookSide: 'BUY' | 'SELL', bookQty: number): SettleExchange {
   const cash = formatMoney(option.strike * bookQty);
   const shares = `${bookQty} sh`;
@@ -21,13 +26,13 @@ export function exchangeFor(option: OptionPosition, bookSide: 'BUY' | 'SELL', bo
     ? {
         goneLabel: 'cash committed', goneFigure: `−${cash}`,
         gotLabel: 'shares received', gotFigure: shares,
-        verdict: 'put assigned · you own the shares',
+        verdict: 'the shares are yours',
         filedTo: `filed to ${option.symbol}`,
       }
     : {
         goneLabel: 'shares called away', goneFigure: shares,
         gotLabel: 'cash received', gotFigure: `+${cash}`,
-        verdict: 'called away · the shares are gone',
+        verdict: 'the shares are gone',
         filedTo: `filed to ${option.symbol}`,
       };
 }
@@ -85,7 +90,7 @@ export function SettleSheet({
       };
       const realised = optionRealizedPl(settled) ?? 0;
       await onDone({
-        ...stampFor(outcome, realised),
+        ...stampFor(outcome, realised, option.opt_type),
         amount: formatSignedMoney(realised),
         symbol: option.symbol,
         ...(outcome === 'ASSIGNED' ? { exchange: exchangeFor(option, bookSide, bookQty) } : {}),
@@ -124,8 +129,11 @@ export function SettleSheet({
           <button type="button" className={outcome === 'BOUGHT_BACK' ? 'active' : ''} onClick={() => setOutcome('BOUGHT_BACK')}>
             Bought back
           </button>
+          {/* Named for the side you are on. Picking an outcome is the one moment the word
+              has to be unambiguous, and "Assigned" on a covered call is not the word for
+              what is about to happen to your shares. */}
           <button type="button" className={outcome === 'ASSIGNED' ? 'active' : ''} onClick={() => setOutcome('ASSIGNED')}>
-            Assigned
+            {option.opt_type === 'CALL' ? 'Called away — the shares go' : 'Assigned — you buy the shares'}
           </button>
         </div>
         {outcome === 'BOUGHT_BACK' && (

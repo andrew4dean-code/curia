@@ -154,6 +154,94 @@ describe('closeToday', () => {
   });
 });
 
+/* What the shares that have already left did for you.
+
+   This was read only on a COMPLETED wheel, so the figure jumped the moment a call was
+   assigned and stayed wrong until Complete was pressed — the same class of error as the
+   ceiling, one stage later. The through-line these cases exist to hold is that the number
+   does not move when nothing about the position has: it is the same at every stage of the
+   walk below. */
+describe('a wheel called away below its basis', () => {
+  // Andrew's real TQQQ Nº 1, closed 2026-08-07. 500 sh at raw basis 71.60 (400 @ 72 and
+  // 100 @ 70), $1,991 of premium banked, calls struck at 69 — BELOW the basis, so being
+  // called away costs 2.60/sh and the honest total is 1991 - 1300 = +691.
+  const buys = [
+    t({ symbol: 'TQQQ', side: 'BUY', qty: 400, price: 72, executed_at: '2026-07-17' }),
+    t({ symbol: 'TQQQ', side: 'BUY', qty: 100, price: 70, executed_at: '2026-07-24' }),
+  ];
+  const calledAway = t({ symbol: 'TQQQ', side: 'SELL', qty: 500, price: 69, executed_at: '2026-08-07' });
+  // 1591 already settled, plus 400 on the call below = the 1991 he actually banked.
+  const banked = opt({
+    symbol: 'TQQQ', opt_type: 'PUT', opened_at: '2026-07-07', strike: 72,
+    contracts: 10, premium: 1.591, status: 'EXPIRED', closed_at: '2026-07-24',
+  });
+  const liveCall = opt({
+    symbol: 'TQQQ', opt_type: 'CALL', opened_at: '2026-07-31', strike: 69,
+    contracts: 5, premium: 0.8, status: 'OPEN',
+  });
+  const settledCall = { ...liveCall, status: 'ASSIGNED' as const, closed_at: '2026-08-07' };
+  const marks = [mark('TQQQ', 74.47)];
+
+  it('is capped at the strike while the call is still open', () => {
+    const w = wheel({ symbol: 'TQQQ', opened_at: '2026-07-07' });
+    const s = summarizeWheel(w, buys, [banked, liveCall], marks);
+    expect(s.stage).toBe('SELLING_CALLS');
+    expect(s.premiumBanked).toBeCloseTo(1991, 2);
+    // (74.47 - 71.60) * 500 + 1991 - (74.47 - 69) * 500
+    expect(s.closeToday).toBeCloseTo(691, 2);
+  });
+
+  it('holds that figure once the shares actually go, before the wheel is completed', () => {
+    const w = wheel({ symbol: 'TQQQ', opened_at: '2026-07-07' });
+    const s = summarizeWheel(w, [...buys, calledAway], [banked, settledCall], marks);
+    expect(s.stage).toBe('CALLED_AWAY');
+    expect(s.sharesHeld).toBe(0);
+    // The regression: this read 1991 — the whole premium, with the 1300 stock loss dropped
+    // on the floor and labelled "Banked this wheel".
+    expect(s.closeToday).toBeCloseTo(691, 2);
+  });
+
+  it('holds it again through completion, so nothing moves when you press Complete', () => {
+    const w = wheel({ symbol: 'TQQQ', opened_at: '2026-07-07', closed_at: '2026-08-07' });
+    const s = summarizeWheel(w, [...buys, calledAway], [banked, settledCall], marks);
+    expect(s.stage).toBe('COMPLETED');
+    expect(s.closeToday).toBeCloseTo(691, 2);
+  });
+
+  it('does not need a mark to know what the departed shares realized', () => {
+    const w = wheel({ symbol: 'TQQQ', opened_at: '2026-07-07' });
+    const s = summarizeWheel(w, [...buys, calledAway], [banked, settledCall], []);
+    expect(s.stage).toBe('CALLED_AWAY');
+    // A price only prices what you still HOLD, and this wheel holds nothing.
+    expect(s.markMissing).toBe(false);
+    expect(s.closeToday).toBeCloseTo(691, 2);
+  });
+});
+
+describe('a wheel that sold part of its position and still holds the rest', () => {
+  // The same hole in miniature: openLots reports what is LEFT, so before this fix the
+  // realized half of a partial sale was invisible on a wheel that had not gone flat.
+  it('counts the realized half alongside the unrealized half', () => {
+    const w = wheel({ symbol: 'MSFT', opened_at: '2026-07-01' });
+    const trades = [
+      t({ symbol: 'MSFT', side: 'BUY', qty: 200, price: 100, executed_at: '2026-07-02' }),
+      // 100 called away at 90, a realized loss of 1000 on the FIFO-first lot.
+      t({ symbol: 'MSFT', side: 'SELL', qty: 100, price: 90, executed_at: '2026-07-20' }),
+    ];
+    const premium = opt({
+      symbol: 'MSFT', opt_type: 'CALL', opened_at: '2026-07-05', strike: 90,
+      contracts: 1, premium: 5, status: 'ASSIGNED', closed_at: '2026-07-20',
+    });
+    const s = summarizeWheel(w, trades, [premium], [mark('MSFT', 105)]);
+    expect(s.stage).toBe('ASSIGNED'); // holds shares, no open call
+    expect(s.sharesHeld).toBe(100);
+    expect(s.rawBasis).toBeCloseTo(100); // the lot that is LEFT
+    expect(s.premiumBanked).toBeCloseTo(500);
+    // realized -1000 + unrealized (105 - 100) * 100 + premium 500 = 0
+    expect(s.closeToday).toBeCloseTo(0);
+  });
+});
+
 /* A sold call is a promise to deliver shares at the strike. Valuing those shares at
    today's price while also banking the whole premium spends the same money twice, and
    the figure only lies once the stock is above the strike — which is exactly when you

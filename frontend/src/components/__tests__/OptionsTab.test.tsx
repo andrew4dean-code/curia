@@ -74,6 +74,32 @@ describe('OptionsTab board', () => {
     expect(onViewRecord).toHaveBeenCalledWith(settled);
   });
 
+  /* This tag was the raw status with its underscore swapped for a space, which is how a
+     called-away call came to be labelled "assigned" on the board. */
+  it('tags a called-away call as called away, and an assigned put as assigned', () => {
+    const call = {
+      ...base, id: 4, opt_type: 'CALL' as const, status: 'ASSIGNED' as const,
+      closed_at: '2026-08-07', expiration: '2026-08-07',
+    };
+    const put = { ...call, id: 5, opt_type: 'PUT' as const };
+
+    const callBoard = render(<OptionsTab snap={snapWith([call])} {...cbs} onSellWeek={vi.fn()} />);
+    expect(callBoard.container.querySelector('.wk-row.settled .wk-tag')).toHaveTextContent('called away');
+    callBoard.unmount();
+
+    const putBoard = render(<OptionsTab snap={snapWith([put])} {...cbs} onSellWeek={vi.fn()} />);
+    expect(putBoard.container.querySelector('.wk-row.settled .wk-tag')).toHaveTextContent('assigned');
+  });
+
+  it('still tags a bought-back contract the same on both sides', () => {
+    const boughtBack = {
+      ...base, id: 6, status: 'BOUGHT_BACK' as const, buyback_price: 0.2,
+      closed_at: '2026-08-07', expiration: '2026-08-07',
+    };
+    const { container } = render(<OptionsTab snap={snapWith([boughtBack])} {...cbs} onSellWeek={vi.fn()} />);
+    expect(container.querySelector('.wk-row.settled .wk-tag')).toHaveTextContent('bought back');
+  });
+
   /* The premium used to orphan itself onto a second line whenever the symbol ran long,
      because a 34px seal disc restating CALL/PUT ate the width. Open and settled must
      share one grid so the figure sits in the same column on every row of the month. */

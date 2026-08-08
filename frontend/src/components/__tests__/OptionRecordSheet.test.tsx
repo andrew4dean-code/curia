@@ -34,6 +34,28 @@ describe('OptionRecordSheet', () => {
     expect(screen.getByText(/booked share trade stays/)).toBeInTheDocument();
   });
 
+  it('files an assigned call under "Called away"', () => {
+    render(
+      <OptionRecordSheet
+        option={{ ...settled, opt_type: 'CALL', status: 'ASSIGNED', assigned_trade_id: 3 }}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/Called away/)).toBeInTheDocument();
+    expect(screen.queryByText(/Assigned/)).toBeNull();
+  });
+
+  it('files an assigned put under "Assigned", which is right on that side', () => {
+    render(
+      <OptionRecordSheet
+        option={{ ...settled, status: 'ASSIGNED', assigned_trade_id: 3 }}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/Assigned/)).toBeInTheDocument();
+    expect(screen.queryByText(/Called away/)).toBeNull();
+  });
+
   it('deletes after confirm and refuses without it', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetchMock);

@@ -16,6 +16,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.11.0',
+    date: '2026-08-07',
+    notes: [
+      'A wheel keeps its figure when the shares go. Being called away used to make the total jump UP by whatever the stock had lost, because the moment the shares left, what they sold for stopped being counted and only the premium was left — so a wheel called away below its basis read as pure profit until you pressed Complete, and then dropped. It reads the same before, during and after now.',
+      'The same gap, smaller, on a wheel that sold only part of its position: what those shares realized is in the figure now instead of waiting for the rest to go.',
+      'Your shares being taken is called being called away, not being assigned. The settle screen offers "Called away" on a call, and the ceremony, the week row and the record all say it. A put still says assigned, because on that side it is the right word.',
+    ],
+  },
+  {
     version: '2.10.0',
     date: '2026-08-04',
     notes: [

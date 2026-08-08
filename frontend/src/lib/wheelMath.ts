@@ -169,13 +169,28 @@ export function summarizeWheel(
   const weeks = weeksSince(w.opened_at, new Date());
   const stage = deriveStage(w, sharesHeld, members.length, memberOpts);
 
+  /* What the shares that have ALREADY left did for you.
+   *
+   *  This used to be read only in the COMPLETED branch, and that was the same class of
+   *  error as the call ceiling: a wheel banked its premium while ignoring what the stock
+   *  actually did. The moment a call was assigned the shares went, `sharesHeld` fell to
+   *  zero, the unrealized leg vanished with it, and the card jumped UP by the whole loss
+   *  and labelled it "Banked this wheel" — final-sounding, and wrong until you happened to
+   *  press Complete. On a wheel called away below its basis the two are the same figure at
+   *  every stage now.
+   *
+   *  It belongs in the has-shares branch too, for the same reason: `openLots` reports what
+   *  is LEFT, so a wheel that sold part of its position and still holds the rest was
+   *  carrying the same hole in miniature. Realized and unrealized are complements — each
+   *  covers exactly the shares the other does not. */
+  const realizedPl = computeClosedTrades(members).reduce((s, c) => s + c.realizedPl, 0);
+
   let closeToday: number;
   let markMissing = false;
   let cap: WheelCap | null = null;
   let putExposure: WheelPutExposure | null = null;
   if (stage === 'COMPLETED') {
     // All member options are settled by now (open ones still count their collected premium).
-    const realizedPl = computeClosedTrades(members).reduce((s, c) => s + c.realizedPl, 0);
     closeToday = realizedPl + premiumBanked;
   } else {
     const mark = marks.find((m) => m.symbol === w.symbol) ?? null;
@@ -191,16 +206,18 @@ export function summarizeWheel(
         // of the ceiling as one number the card can show on its own.
         cap = computeCap(openCalls(memberOpts), sharesHeld, mark.price);
         closeToday =
+          realizedPl +
           (mark.price - (rawBasis as number)) * sharesHeld +
           premiumBanked -
           (cap?.giveUp ?? 0) -
           underwater;
       } else {
         markMissing = true;
-        closeToday = premiumBanked; // share leg valued at rawBasis -> contributes 0
+        // Only the OPEN leg is unpriceable without a mark; what already sold has a price.
+        closeToday = realizedPl + premiumBanked; // open shares valued at rawBasis -> contribute 0
       }
     } else {
-      closeToday = premiumBanked - underwater;
+      closeToday = realizedPl + premiumBanked - underwater;
     }
   }
 

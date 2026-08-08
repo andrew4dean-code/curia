@@ -76,7 +76,9 @@ describe('SettleSheet', () => {
     const x = onDone.mock.calls[0][0].exchange;
     expect(x.goneLabel).toBe('cash committed');
     expect(x.gotLabel).toBe('shares received');
-    expect(x.verdict).toMatch(/you own the shares/);
+    // The consequence alone. The contract card above it already says ASSIGNED.
+    expect(x.verdict).toBe('the shares are yours');
+    expect(onDone.mock.calls[0][0].word).toBe('ASSIGNED');
   });
 
   it('assigning a call books shares as called away', async () => {
@@ -85,14 +87,44 @@ describe('SettleSheet', () => {
     vi.stubGlobal('fetch', fetchMock);
     const onDone = vi.fn().mockResolvedValue(undefined);
     render(<SettleSheet option={csc} onDone={onDone} onEdit={vi.fn()} onCancel={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: /Assigned/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Called away/ }));
     fireEvent.click(screen.getByRole('button', { name: /^Settle$/ }));
     await waitFor(() => expect(onDone).toHaveBeenCalledOnce());
     // A call assigned takes the shares and hands back cash — the other direction.
     const x = onDone.mock.calls[0][0].exchange;
     expect(x.goneLabel).toBe('shares called away');
     expect(x.gotLabel).toBe('cash received');
-    expect(x.verdict).toMatch(/the shares are gone/);
+    expect(x.verdict).toBe('the shares are gone');
+    // The stamp carries the word now, so the ceremony says it once and says it right.
+    expect(onDone.mock.calls[0][0].word).toBe('CALLED AWAY');
+  });
+
+  /* The outcome has to be named correctly at the moment you PICK it, not only afterwards
+     in the ceremony and the record. "Assigned" on a covered call is not what anyone calls
+     having their shares taken. */
+  it('offers a call the "called away" outcome, and never the word assigned', () => {
+    const csc: OptionPosition = { ...csp, opt_type: 'CALL' };
+    render(<SettleSheet option={csc} onDone={vi.fn()} onEdit={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.getByRole('button', { name: /Called away/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Assigned/ })).toBeNull();
+  });
+
+  it('still offers a put the assigned outcome, which is the right word on that side', () => {
+    render(<SettleSheet option={csp} onDone={vi.fn()} onEdit={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.getByRole('button', { name: /Assigned/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Called away/ })).toBeNull();
+  });
+
+  it('books the same ASSIGNED status either way — the rename is wording, not data', async () => {
+    const csc: OptionPosition = { ...csp, opt_type: 'CALL' };
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const onDone = vi.fn().mockResolvedValue(undefined);
+    render(<SettleSheet option={csc} onDone={onDone} onEdit={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /Called away/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Settle$/ }));
+    await waitFor(() => expect(onDone).toHaveBeenCalledOnce());
+    expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string).outcome).toBe('ASSIGNED');
   });
 
   it('deletes an open option after confirm, passing its id to onDeleted', async () => {

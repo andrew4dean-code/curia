@@ -3,13 +3,17 @@ import { deleteOption } from '../lib/api';
 import { optionRealizedPl, premiumCollected } from '../lib/optionsMath';
 import { formatMoney, formatSignedMoney, plColor } from '../lib/format';
 import { Odometer } from './Odometer';
+import { outcomeWord } from '../lib/settleStamp';
 import type { OptionPosition } from '../lib/types';
 
-const OUTCOME_LABELS: Record<string, string> = {
-  EXPIRED: 'Expired worthless',
-  BOUGHT_BACK: 'Bought back',
-  ASSIGNED: 'Assigned',
-};
+/** Sentence case, off the one shared word. Only EXPIRED reads better with its qualifier
+ *  than on its own, so only EXPIRED carries one. */
+function outcomeLabel(option: OptionPosition): string {
+  if (option.status === 'OPEN') return 'Open';
+  if (option.status === 'EXPIRED') return 'Expired worthless';
+  const word = outcomeWord(option.status, option.opt_type);
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
 
 export function OptionRecordSheet({
   option,
@@ -44,7 +48,7 @@ export function OptionRecordSheet({
           {option.symbol} ${option.strike} {option.opt_type}
         </h2>
         <div className="row-sub" style={{ marginBottom: 6 }}>
-          {OUTCOME_LABELS[option.status] ?? option.status} · {option.contracts}x ·{' '}
+          {outcomeLabel(option)} · {option.contracts}x ·{' '}
           {formatMoney(premiumCollected(option))} collected
         </div>
         <div className="row-sub" style={{ marginBottom: 6 }}>

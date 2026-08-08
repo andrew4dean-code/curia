@@ -4,6 +4,7 @@ import { canMarkQuiet, fridaysOfMonth, monthScore, slideDirection, weekFridayFor
 import { needsSettling, optionRealizedPl, premiumCollected } from '../lib/optionsMath';
 import { expiryLabel, fmtShortDate, nextFriday, todayIso } from '../lib/time';
 import { formatMoney, formatSignedMoney } from '../lib/format';
+import { outcomeWord } from '../lib/settleStamp';
 import { Odometer } from './Odometer';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -81,7 +82,10 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onM
                   figure is always the last cell of the same grid, and the state shows in
                   its sign, its colour and the tag under it. */}
               {rows.map((o) => {
-                const settled = o.status !== 'OPEN';
+                // Narrowed off the status itself rather than off `settled`, so outcomeWord
+                // gets a status it can trust without a cast.
+                const settledWord = o.status === 'OPEN' ? null : outcomeWord(o.status, o.opt_type);
+                const settled = settledWord !== null;
                 const pl = optionRealizedPl(o) ?? 0;
                 const unsettled = !settled && needsSettling(o, today);
                 return (
@@ -99,7 +103,9 @@ export function OptionsTab({ snap, onSettleOption, onSellWeek, onViewRecord, onM
                     </span>
                     {(settled || unsettled) && (
                       <span className="wk-row-meta">
-                        {settled && <span className="wk-tag">{o.status.replace('_', ' ').toLowerCase()}</span>}
+                        {/* Was the raw status with its underscore swapped out, which is how
+                            a called-away call came to be labelled "assigned" here. */}
+                        {settledWord && <span className="wk-tag">{settledWord}</span>}
                         {unsettled && <span className="wk-todo">needs settling</span>}
                       </span>
                     )}
